@@ -1,0 +1,6 @@
+*.swp
+Gemfile.lock
+_site
+vendor
+.bundle
+.jekyll-cache

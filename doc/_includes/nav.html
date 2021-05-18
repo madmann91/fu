@@ -1,0 +1,15 @@
+<nav>
+    {% assign grouped_pages = site.pages | group_by: 'category' %}
+    {% for group in grouped_pages %}
+        {% if group.name %}
+            <h3>{{ group.name }}</h3>
+        {% endif %}
+        <ul>
+            {% for item in group.items %}
+                {% if item.title %}
+                <li><a href="{{ site.baseurl }}/{{ item.url }}">{{ item.title }}</a></li>
+                {% endif %}
+            {% endfor %}
+        </ul>
+    {% endfor %}
+</nav>

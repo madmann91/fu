@@ -19,12 +19,12 @@ $navbar-background-color: $page-background-color;
 }
 
 @font-face {
-    font-family: Libertine;
-    src:url("../fonts/LinLibertine_Rah.ttf");
+    font-family: Fira;
+    src:url("../fonts/FiraSans-Regular.ttf");
 }
 
 body {
-    font-family: Libertine;
+    font-family: Fira;
     color: $page-text-color;
     background-color: $page-background-color;
     margin: 0em;

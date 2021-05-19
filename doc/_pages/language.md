@@ -376,35 +376,38 @@ fun fact(mem0: Mem, n: Int32) =
     control return: fun(Mem, Int32) -> ! in {
         attr(no_implicit_mem, no_implicit_control)
         fun while_head(mem5: Mem) -> ! =>
-            match i@mem5 {
-                (mem6, i_) => select(i_ < n, while_body, while_break)(mem6)
-            }
+            let mem6_i_ = i@mem5 in
+            let mem6 = extract(mem6_i_, 0) in
+            let i_ = extract(mem6_i_, 1) in
+            select(i_ < n, while_body, while_break)(mem6)
 
         attr(no_implicit_mem, no_implicit_control)
         fun while_body(mem7: Mem) -> ! =>
-            match p@mem7 {
-                (mem8, p_) => match i@mem8 {
-                    (mem9, i_) => 
-                        let mem10 = (p = p_ * i_)@mem9 in
-                        let mem11 = (i = i_ + 1)@mem10 in
-                        while_head(mem11)
-                }
-            }
+            let mem8_p_ = p@mem7 in
+            let mem8 = extract(mem8_p_, 0) in
+            let p_ = extract(mem8_p_, 1) in
+            let mem9_i_ = i@mem8 in
+            let mem9 = extract(mem9_i_, 0) in
+            let i_ = extract(mem9_i_, 1) in
+            let mem10 = (p = p_ * i_)@mem9 in
+            let mem11 = (i = i_ + 1)@mem10 in
+            while_head(mem11)
 
         attr(no_implicit_mem, no_implicit_control)
         fun while_break(mem12: Mem) -> ! =>
-            match p@mem12 {
-                (mem13, p_) => return(mem13, p_)
-            }
+            let mem13_p_ = p@mem12 in
+            let mem13 = extract(mem13_p_, 0) in
+            let p_ = extract(mem13_p_, 1) in
+            return(mem13, p_)
 
-        match ref[Int32](mem0) {
-            (mem1, i) =>
-                let mem2 = (i = 2)@mem1 in
-                match ref[Int32](mem2) {
-                    (mem3, p) => 
-                        let mem4 = (p = 1)@mem3 in
-                        while_head(mem4)
-                }
-        }
+        let mem1_i = ref[Int32](mem0) in
+        let mem1 = extract(mem1_i, 0) in
+        let i = extract(mem1_i, 1) in
+        let mem2 = (i = 2)@mem1 in
+        let mem3_p = ref[Int32](mem2) in
+        let mem3 = extract(mem3_p, 0) in
+        let p = extract(mem3_p, 1) in
+        let mem4 = (p = 1)@mem3 in
+        while_head(mem4)
     }
 ```

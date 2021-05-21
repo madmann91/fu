@@ -50,7 +50,9 @@ extension (node: Node) def print(p: Printer): Unit = {
     case app: App => {
       app.left.print(p)
       p.print(" ")
+      if (app.right.isInstanceOf[App]) p.print("(")
       app.right.print(p)
+      if (app.right.isInstanceOf[App]) p.print(")")
     }
   }
 }

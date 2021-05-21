@@ -14,7 +14,7 @@ class Loc(val file: String, val begin: Pos, val end: Pos) {
 }
 
 /** Debug information for a node */
-class Debug(val name: String = "", val loc : Option[Loc] = None) {
+class Debug(val name: String = "", val loc: Option[Loc] = None) {
   def join(other: Debug) = Debug(
     if name.isEmpty then other.name else name,
     if loc.isDefined then loc else other.loc)

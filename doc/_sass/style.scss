@@ -5,13 +5,15 @@ $quaternary-color: #eeeeee;
 
 $page-background-color: #222831;
 $code-background-color: #393e46;
+$section-border-color: #666666;
 $code-border-color: #666666;
 $page-text-color: #cccccc;
 $quote-background-color: #4f5165;
-$hover-navbar-color: #3e4959;
-$visited-link-color: #754043;
-$link-color: #5464B6;
+$hover-topbar-color: #3e4959;
+$visited-link-color: #b06d70;
+$link-color: #697acf;
 $navbar-background-color: $page-background-color;
+$topbar-background-color: #15191f;
 
 @font-face {
     font-family: Inconsolata;
@@ -27,8 +29,9 @@ body {
     font-family: Fira;
     color: $page-text-color;
     background-color: $page-background-color;
-    margin: 0em;
     line-height: 1.3;
+    max-width: 1080px;
+    margin: auto;
 }
 
 a {
@@ -37,11 +40,11 @@ a {
 }
 
 a:visited {
-    color: $visited-link-color;
+    /*color: $visited-link-color;*/
 }
 
 section h1 {
-    border-bottom: 1px solid $page-text-color;
+    border-bottom: 1px solid $section-border-color;
 }
 
 blockquote {
@@ -72,44 +75,64 @@ pre code {
     margin: 0em;
 }
 
+#hamburger {
+    font-size: 1.5em;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    right: 0;
+    padding: 1em;
+    width: 1.5em;
+    text-align: center;
+    transition: .3s ease all;
+    cursor: pointer;
+    user-select: none;
+
+    &:hover {
+        background: $hover-topbar-color;
+    }
+}
+
 #content {
     color: $page-text-color;
     background-color: $page-background-color;
     padding: 0em 1em;
-    margin-top: 4em;
+}
+
+#topbar {
+    position: relative;
+    background-color: $topbar-background-color;
+    padding: 0 1em;
+    overflow: hidden;
 }
 
 #navbar {
-    border-bottom: 2px solid $page-text-color;
-    background-color: $navbar-background-color;
-    width: 100%;
-    height: 4em;
-    position: fixed;
-    top: 0;
-    display: inline;
+    display: none;
+    padding-left: 1em;
+    padding-top: 1em;
 }
 
-#navbar h2 { 
-    text-align: center;
+#navbar nav {
+    column-count: 3;
 }
 
 #navbar nav ul {
-    list-style-type: none;
-    overflow: hidden;
-    display: none;
-    height: 100%;
+    margin: 0.5em -1em;
+    list-style-type: '·  ';
+    list-style-position: outside;
 }
 
-#navbar nav ul li a {
-    text-decoration-style: solid;
-    text-decoration: none;
-    color: $page-text-color;
-    float: left;
+#navbar nav h3 {
+    margin: 0;
+}
+
+#navbar.expanded {
     display: block;
 }
 
-#navbar nav ul li a:hover {
-    background-color: $hover-navbar-color;
+#navbar nav .category {
+    page-break-inside: avoid;
+    margin-bottom: 1.5em;
 }
 
 @media only screen and (min-width: 1080px) {
@@ -118,23 +141,18 @@ pre code {
         margin-top: 0em;
     }
     #navbar {
-        border: none;
+        display: inline;
+        position: sticky;
+        overflow: hidden;
         width: 14em;
         height: 100%;
+        float: left;
+        top: 0;
     }
-    #navbar nav ul {
-        list-style-type: none;
-        display: inline;
-        margin: 0em;
-        padding: 0em;
+    #navbar nav {
+        column-count: 1;
     }
-    #navbar nav ul li a {
-        float: none;
-        display: block;
-        padding: 0.2em 0.2em;
-    }
-    #navbar h2 { 
-        padding-bottom: 1em;
-        border-bottom: 2px solid $page-text-color;
+    #hamburger {
+        display: none;
     }
 }

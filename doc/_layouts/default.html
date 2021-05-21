@@ -8,15 +8,18 @@
     </head>
     <body>
         <div id="page">
+            <div id="topbar">
+                <div id="hamburger" onclick="document.getElementById('navbar').classList.toggle('expanded');">☰</div>
+                <h2>Eta Docs</h2>
+            </div>
+            <div id="navbar">
+                {% include nav.html %}
+            </div>
             <div id="content">
                 <h1>{{ page.title }}</h1>
                 <section>
                     {{ content }}
                 </section>
-            </div>
-            <div id="navbar">
-                <h2>Eta</h2>
-                {% include nav.html %}
             </div>
         </div>
     </body>

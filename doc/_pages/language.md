@@ -2,6 +2,7 @@
 layout: default
 title: Language Description
 permalink: language.html
+category: Introduction
 ---
 
 Eta has a type system that supports modules, kinds, and polymorphism (HM-style).
@@ -275,7 +276,7 @@ Patterns can be made of:
 - `true`, `false`: Boolean values. Those are also non-trivial.
 - `S { a = 1, b = 2 }`: Structure values. Those are trivial if all of the patterns they contain are trivial.
 - `E { a = 1 }`: Enumeration values.
-  Those are trivial if all of the patterns they contain are trivial _and_ the enumeration has only one possible option. 
+  Those are trivial if all of the patterns they contain are trivial _and_ the enumeration has only one possible option.
 
 # Partial Evaluation
 

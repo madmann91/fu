@@ -12,7 +12,7 @@ $hover-topbar-color: #3e4959;
 $visited-link-color: #b06d70;
 $link-color: #697acf;
 $navbar-background-color: $page-background-color;
-$navbar-column-width: 14em;
+$navbar-column-width: 13em;
 $topbar-background-color: #15191f;
 
 @font-face {
@@ -40,7 +40,7 @@ body {
     text-decoration: none;
     color: $page-text-color;
     position: absolute;
-    left: -1.15em;
+    left: -1.4em;
     bottom: 0.3em;
     opacity: 0;
     transition: .3s ease all;
@@ -115,7 +115,7 @@ pre code {
 #content {
     color: $page-text-color;
     background-color: $page-background-color;
-    padding: 0em 1.2em;
+    padding: 0em 1.6em;
 }
 
 #topbar {

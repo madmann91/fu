@@ -13,6 +13,7 @@ $hover-topbar-color: #3e4959;
 $visited-link-color: #b06d70;
 $link-color: #697acf;
 $navbar-background-color: $page-background-color;
+$navbar-column-width: 14em;
 $topbar-background-color: #15191f;
 
 @font-face {
@@ -40,7 +41,7 @@ a {
 }
 
 a:visited {
-    /*color: $visited-link-color;*/
+    color: $visited-link-color;
 }
 
 section h1 {
@@ -113,7 +114,8 @@ pre code {
 }
 
 #navbar nav {
-    column-count: 3;
+    column-width: $navbar-column-width;
+    column-count: auto;
 }
 
 #navbar nav ul {
@@ -131,26 +133,23 @@ pre code {
 }
 
 #navbar nav .category {
-    page-break-inside: avoid;
+    display: table;
     margin-bottom: 1.5em;
 }
 
 @media only screen and (min-width: 1080px) {
     #content {
-        margin-left: 14em;
+        margin-left: $navbar-column-width;
         margin-top: 0em;
     }
     #navbar {
         display: inline;
         position: sticky;
         overflow: hidden;
-        width: 14em;
+        width: $navbar-column-width;
         height: 100%;
         float: left;
         top: 0;
-    }
-    #navbar nav {
-        column-count: 1;
     }
     #hamburger {
         display: none;

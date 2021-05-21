@@ -14,6 +14,14 @@ class Printer {
     builder.append(s)
     nl()
   }
+  def printMany[T](elems: IterableOnce[T], sep: String, f: T => Unit) = {
+    val it = elems.iterator
+    while (it.hasNext) {
+      f(it.next())
+      if (it.hasNext)
+        builder.append(sep)
+    }
+  }
 
   def nl() = builder.append(tab * indent)
   def shift(i: Int = 1) = indent += i
@@ -53,6 +61,16 @@ extension (node: Node) def print(p: Printer): Unit = {
       if (app.right.isInstanceOf[App]) p.print("(")
       app.right.print(p)
       if (app.right.isInstanceOf[App]) p.print(")")
+    }
+    case let: Let => {
+      p.print("let ")
+      p.printMany(let.binders.zip(let.values), ", ", (b, v) => {
+        printVar(b)
+        p.print(" = ")
+        v.print(p)
+      })
+      p.print(" in ")
+      let.body.print(p)
     }
   }
 }

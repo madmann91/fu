@@ -16,8 +16,8 @@ class Loc(val file: String, val begin: Pos, val end: Pos) {
 /** Debug information for a node */
 class Debug(val name: String = "", val loc: Option[Loc] = None) {
   def join(other: Debug) = Debug(
-    if name.isEmpty then other.name else name,
-    if loc.isDefined then loc else other.loc)
+    if (name.isEmpty) other.name else name,
+    if (loc.isDefined) loc else other.loc)
 }
 
 object Debug {
@@ -147,10 +147,18 @@ class Var(varType: Node, val id: Int, debug: Option[Debug])
 {
   override def rebuild(module: Module, newTy: Node, newOps: ArraySeq[Node], debug: Option[Debug]) =
     module.createVar(newTy, id, Debug.join(this.debug, debug))
+
+  override def compare(other: Node) =
+    super.compare(other) && (other match {
+      case other: Var => other.id == id
+      case _ => false
+    })
+
+  override def hash = MurmurHash3.mix(super.hash, id)
 }
 
-class Let(letType: Node, binders: ArraySeq[Node], values: ArraySeq[Node], body: Node, debug: Option[Debug])
-  extends Node(binders ++ values ++ ArraySeq(body), Right(letType), debug)
+class Let(letType: Node, _binders: ArraySeq[Node], _values: ArraySeq[Node], _body: Node, debug: Option[Debug])
+  extends Node(_binders ++ _values :+ _body, Right(letType), debug)
 {
   override def rebuild(module: Module, newTy: Node, newOps: ArraySeq[Node], debug: Option[Debug]) = {
     val binderCount = (newOps.length - 1) / 2
@@ -160,6 +168,10 @@ class Let(letType: Node, binders: ArraySeq[Node], values: ArraySeq[Node], body: 
       newOps(binderCount * 2),
       Debug.join(this.debug, debug))
   }
+
+  def binders = operands.slice(0, (operands.length - 1) / 2)
+  def values  = operands.slice((operands.length - 1) / 2, operands.length - 1)
+  def body = operands.last
 }
 
 /**

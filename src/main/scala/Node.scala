@@ -165,7 +165,7 @@ class Let(letType: Node, binders: ArraySeq[Node], values: ArraySeq[Node], body: 
 /**
  * A module, holding all the hash-consed nodes in a hash map.
  * Nodes are simplified when created, and then stored into the hash map,
- * so that they are not simplified again when requested.
+ * so that they are not simplified again when requested later on.
  */
 class Module {
   private class HashedNode(val node: Node) {

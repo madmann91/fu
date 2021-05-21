@@ -149,6 +149,19 @@ class Var(varType: Node, val id: Int, debug: Option[Debug])
     module.createVar(newTy, id, Debug.join(this.debug, debug))
 }
 
+class Let(letType: Node, binders: ArraySeq[Node], values: ArraySeq[Node], body: Node, debug: Option[Debug])
+  extends Node(binders ++ values ++ ArraySeq(body), Right(letType), debug)
+{
+  override def rebuild(module: Module, newTy: Node, newOps: ArraySeq[Node], debug: Option[Debug]) = {
+    val binderCount = (newOps.length - 1) / 2
+    module.createLet(
+      newOps.slice(0, binderCount),
+      newOps.slice(binderCount + 1, 2 * binderCount),
+      newOps(binderCount * 2),
+      Debug.join(this.debug, debug))
+  }
+}
+
 /**
  * A module, holding all the hash-consed nodes in a hash map.
  * Nodes are simplified when created, and then stored into the hash map,
@@ -214,6 +227,11 @@ class Module {
   def createApp(left: Node, right: Node, debug: Option[Debug] = None) = {
     val appType = (left.ty: @unchecked) match { case left: Pi => left.codomain.replace(left.param, right) }
     hashCons(App(appType, left, right, debug))
+  }
+
+  def createLet(binders: ArraySeq[Node], values: ArraySeq[Node], body: Node, debug: Option[Debug] = None) = {
+    val letType = body.ty.replaceWith(HashMap() ++= binders.zip(values))
+    hashCons(Let(letType, binders, values, body, debug))
   }
 }
 

@@ -4,11 +4,10 @@ $tertiary-color: #ffd369;
 $quaternary-color: #eeeeee;
 
 $page-background-color: #222831;
-$code-background-color: #393e46;
+$code-background-color: #15191f;
 $section-border-color: #666666;
-$code-border-color: #666666;
 $page-text-color: #cccccc;
-$quote-background-color: #4f5165;
+$quote-background-color: #404152;
 $hover-topbar-color: #3e4959;
 $visited-link-color: #b06d70;
 $link-color: #697acf;
@@ -35,6 +34,26 @@ body {
     margin: auto;
 }
 
+.anchor-link {
+    font-size: 0.6em;
+    float: left;
+    text-decoration: none;
+    color: $page-text-color;
+    position: absolute;
+    left: -1.3em;
+    bottom: 0.3em;
+    opacity: 0;
+    transition: .3s ease all;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    position: relative;
+}
+
+*:hover > .anchor-link {
+    opacity: 1;
+}
+
 a {
     text-decoration-style: dotted;
     color: $link-color;
@@ -57,17 +76,15 @@ blockquote {
 
 pre {
     font-family: Inconsolata;
-    border: 1px solid $code-border-color;
     border-radius: 3px;
     background-color: $code-background-color;
-    padding: 0.1em 0.1em;
+    padding: 0.3em;
 }
 
 code {
-    border: 1px solid $code-border-color;
     border-radius: 4px;
     background-color: $code-background-color;
-    padding: 0.1em 0.1em;
+    padding: 0.2em;
     margin: 0.5em 0em;
 }
 

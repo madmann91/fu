@@ -22,5 +22,15 @@
                 </section>
             </div>
         </div>
+        <script>
+            const headings = document.querySelectorAll('h1[id],h2[id],h3[id]');
+            for (const heading of headings) {
+                const linkIcon = document.createElement('a');
+                linkIcon.setAttribute('href', `#${heading.id}`);
+                linkIcon.innerHTML = '🔗';
+                linkIcon.setAttribute('class', 'anchor-link');
+                heading.appendChild(linkIcon);
+            }
+        </script>
     </body>
 </html>

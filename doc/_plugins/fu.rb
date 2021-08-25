@@ -1,14 +1,14 @@
-# Register a new lexer for Eta
+# Register a new lexer for Fu
 Jekyll::Hooks.register :site, :pre_render do |site|
-  puts "Registering Eta highlighter"
+  puts "Registering Fu highlighter"
   require "rouge"
 
-  class EtaLexer < Rouge::RegexLexer
-	title 'Eta'
-	aliases 'eta'
-    tag 'eta'
-    filenames '*.eta'
-    desc 'The Eta Language'
+  class FuLexer < Rouge::RegexLexer
+	title 'Fu'
+	aliases 'fu'
+    tag 'fu'
+    filenames '*.fu'
+    desc 'The Fu Language'
 
 	KEYWORDS = %w(
       Nat Mem Bool Byte Unit Int Word Float

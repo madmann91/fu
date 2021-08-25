@@ -1,6 +1,6 @@
-# Eta
+# Fu
 
-_Eta_ is a down to earth rewrite of [AnyDSL](https://github.com/AnyDSL), a compiler
+_Fu_ is a down to earth rewrite of [AnyDSL](https://github.com/AnyDSL), a compiler
 framework for high-performance applications.
 
 ## Goals
@@ -12,7 +12,7 @@ by applying simple de-sugaring rules. This means that there is no longer a decou
 of the IR with the front-end of the compiler. In other words, there is no longer an IR
 like [Thorin](https://github.com/AnyDSL/thorin) and a front-end like
 [Artic](https://github.com/AnyDSL/artic) or [Impala](https://github.com/AnyDSL/impala).
-There is only one language/IR: _Eta_. This has the benefit of allowing each transformation
+There is only one language/IR: _Fu_. This has the benefit of allowing each transformation
 to be readable by the programmer, up to the point where the program is translated to
 assembly. Moreover, this allows serialization of the program in a trivial manner: At any
 point during compilation, the program can be stored to disk and parsed again.

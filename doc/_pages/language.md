@@ -5,7 +5,7 @@ permalink: language.html
 category: Introduction
 ---
 
-Eta has a type system that supports modules, kinds, and polymorphism (HM-style).
+Fu has a type system that supports modules, kinds, and polymorphism (HM-style).
 This type system is designed as a compromise between expressivity and simplicity, so that
 performing type inference is still possible.
 
@@ -20,7 +20,7 @@ the given sequences of characters:
 
 # Kinds
 
-Eta has the following kinds:
+Fu has the following kinds:
 
  - The `Type` kind is, as the name suggests, for types. It's the equivalent of Haskell's `*`.
  - The `Nat` kind is for compile-time constants. Such constants can be created using literals,
@@ -40,7 +40,7 @@ Eta has the following kinds:
  - `Float [Binary16 | Binary32 | Binary64]`: Floating-point number following the IEEE754 format with 16, 32, or 64 bits respectively.
  - `Mem`: The memory type. More on this in the syntactic sugar section.
  - Common type aliases:
-   ```eta
+   ```fu
    type Int8 = Int[16];
    type Int16 = Int[16];
    type Int32 = Int[32];
@@ -70,7 +70,7 @@ Eta has the following kinds:
 
 The syntax to declare an alias is:
 
-```eta
+```fu
 type T[T1, T2, ...] = U;
 ```
 
@@ -78,7 +78,7 @@ Where `T` is the name of the alias for the type `U`, with type parameters `T1`, 
 
 > Type parameter lists, as used in the `type` construct above, and in others that have
 > not yet been presented, are of the form:
-> ```eta
+> ```fu
 > [T1: K1, T2: K2, ...]
 > ```
 > All constructs that take type parameter lists can also omit them, in which case the construct
@@ -91,7 +91,7 @@ Where `T` is the name of the alias for the type `U`, with type parameters `T1`, 
 
 Signatures are the types of modules. They are introduced with the keyword `sig`:
 
-```eta
+```fu
 sig Ordered {
     type Key;
     fun leq(Key, Key) -> Bool;
@@ -105,7 +105,7 @@ They essentially represent the types and values that are exposed by a module.
 The module system is designed such that a given module may choose to expose only a subset of its contents.
 
 For instance, consider the following module:
-```eta
+```fu
 mod InsertionSort[T: Ordered] {
     fun sort(array: &mut [T.Key]) = {
         for i in [1..array.length] {
@@ -124,7 +124,7 @@ This default signature matches the `Sort` signature above, so this module can be
 However, if some parts of a module must be kept private (because they should not be exposed to the user), a module
 can be assigned a custom signature, as long as that signature is compatible with the module.
 This is illustrated in the following example:
-```eta
+```fu
 sig HasName {
     val name : [Byte];
 }
@@ -136,7 +136,7 @@ mod ComplexObject : HasName {
 There, the `value` field is hidden from the `ComplexObject` module. Users of that module can therefore only access the `name` field.
 
 Signatures can also be written inline, without a name:
-```eta
+```fu
 mod ComplexObject :
     sig { val name : [Byte] }
 {
@@ -149,7 +149,7 @@ mod ComplexObject :
 
 Structures and enumerations declarations are very similar to Rust:
 
-```eta
+```fu
 struct S[T1, T2, ...] {
     elem1: U1,
     elem2: U2,
@@ -164,7 +164,7 @@ enum E[T1, T2, ...] {
 
 To construct a value for an enumeration or a structure, the syntax is similar:
 
-```eta
+```fu
 struct S[A, B] { a: A, b: B }
 enum E[A, B] { a: A, b: B }
 val s = S[Int8, Word16] { a = 1, b = 3 };
@@ -174,7 +174,7 @@ val e = E[Int8, Word16] { a = 1 };
 It is illegal to specify more than one binding `x = z` inside the braces of an enumeration initializer.
 The following code would for instance be rejected:
 
-```eta
+```fu
 val e = E[Int8, Word16] { a = 1, b = 3 };
 ```
 
@@ -194,20 +194,20 @@ val e = E[Int8, Word16] { a = 1, b = 3 };
 
 Functions can be declared with the following syntax:
 
-```eta
+```fu
 fun foo[T1, T2, ...](x1: U1, x2: U2) = ...
 ```
 
 Anonymous functions use the following syntax:
 
-```eta
+```fu
 fun (x: Int32, y: Float32) => x + (y as Int32)
 ```
 
 In order to help the type inference algorithm (for recursive functions, whose return type cannot be inferred),
 it is possible to annotate the return types of both regular and anonymous functions:
 
-```eta
+```fu
 fun foo[T1, T2, ...](x1: U1, x2: U2) -> Int32 = ...
 fun (x: Int32, y: Float32) -> Int32 => ...
 ```
@@ -216,7 +216,7 @@ fun (x: Int32, y: Float32) -> Int32 => ...
 
 Variables are declared with the keyword `var`, as in the example below:
 
-```eta
+```fu
 var x = 1;
 ```
 
@@ -227,7 +227,7 @@ Therefore, the compiler will emit a warning for every variable left without an i
 
 Constants are declared with the keyword `val`:
 
-```eta
+```fu
 val pi = 3.14159;
 ```
 
@@ -236,14 +236,14 @@ The value of `pi` cannot be changed after that declaration.
 
 Declarations for variables or constants can be chained with the same statement:
 
-```eta
+```fu
 var x = 1, y = 2;
 val pi = 3.14159, e = 2.71828;
 ```
 
 Additionally, the `val` keyword accepts trivial patterns as the left-hand side of `=`,
 in order to deconstruct a value and bind it directly to some identifiers:
-```eta
+```fu
 val (x, y) = (1, 2);
 ```
 
@@ -256,7 +256,7 @@ A non-trivial pattern is a pattern that may not match the object being deconstru
 In Rust terminology, those two terms correspond to "irrefutable" and "refutable" patterns, respectively.
 
 Pattern matching is introduced with the `match` construct:
-```eta
+```fu
 match v {
     0 => 1
     7 => 3
@@ -284,12 +284,12 @@ Functions can be partially evaluated during compilation.
 A partial evaluation _filter_ can be placed either at the call site of a function, or at its declaration site, or both.
 If both are present, the resulting filter is the _logical and_ of both filters.
 Filters are introduced with the following syntax:
-```eta
+```fu
 filter(x == 5) fun foo(x: Int32) = x;
 ```
 
 Effects can be present in the filter expression:
-```eta
+```fu
 filter(some_effectful_function(x) < 100) fun bar(x: Int32) = ...;
 ```
 In that case, they are executed at the call site of the function, when they are instantiated.
@@ -304,12 +304,12 @@ Whenever printing or saving the IR to a file, the compiler will try to reconstru
 
 The `val` syntax is actually syntactic sugar for a more primitive `let x = ... in ...` construct.
 Take the following syntax, for instance:
-```eta
+```fu
 val x = 1, y = x;
 val z = y;
 ```
 This example is in fact desugared into:
-```eta
+```fu
 let x = 1 in
     let y = x in
         let z = y in ()
@@ -322,7 +322,7 @@ For that reason, the `{ ... }` and `var` syntax is actually syntactic sugar.
 Expressions that load or store to a variable are annotated with `@` to indicate the memory object that they take to perform the operation.
 Those expressions also return an additional memory object that corresponds to the state of memory after the operation.
 For instance, assuming `mem0` is the current memory object, the code `{ var x = 1; x = 2; }` translates to:
-```eta
+```fu
 {
     match ref[Int32](mem0) {
         (mem1, x) =>
@@ -334,7 +334,7 @@ For instance, assuming `mem0` is the current memory object, the code `{ var x = 
 
 Every function gets an implicit `mem` parameter that is added automatically by the compiler.
 Pure functions cannot have side-effects, and are declared with the `no_implicit_mem` attribute:
-```eta
+```fu
 attr(no_implicit_mem) fun f() = 1;
 ```
 When pure functions are called from an effect region, they do change the current state of memory.
@@ -346,11 +346,11 @@ Basic-blocks are represented as functions whose return types are `!`: The "no-re
 With this, control flow is direct-style when calling functions, but continuation-passing-style when calling basic-blocks.
 In order for this to work, the `control` operator introduces a return continuation inside the scope of a function.
 For instance, take the following code:
-```eta
+```fu
 attr(no_implicit_mem) fun f() -> Int32 = return(3)
 ```
 This translates to:
-```eta
+```fu
 attr(no_implicit_mem, no_implicit_control)
 fun f() -> Int32 =
     control return: fun (Int32) -> ! in return(3)
@@ -360,7 +360,7 @@ The `no_implicit_control` attribute prevents the compiler from automatically ins
 ## A Simple Example
 
 Consider the following code:
-```eta
+```fu
 fun fact(n: Int32) = {
     var i = 2, p = 1;
     while i < n {
@@ -371,7 +371,7 @@ fun fact(n: Int32) = {
 }
 ```
 This example is actually desugared into:
-```eta
+```fu
 attr(no_implicit_mem, no_implicit_control)
 fun fact(mem0: Mem, n: Int32) =
     control return: fun(Mem, Int32) -> ! in {

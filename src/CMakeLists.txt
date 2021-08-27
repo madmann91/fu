@@ -2,7 +2,10 @@ add_executable(fu
     core/alloc.c
     core/hash.c
     core/format.c
+    core/hash_table.c
     ir/node.c
+    ir/print.c
+    ir/parse.c
     driver/main.c)
 set_target_properties(fu PROPERTIES C_STANDARD 99)
 target_include_directories(fu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

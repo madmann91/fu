@@ -189,14 +189,14 @@ void format(struct format_state* state, const char* format_str, const union form
     }
 }
 
-void print_bufs(const struct format_buf* buf, FILE* out) {
+void print_format_bufs(const struct format_buf* buf, FILE* out) {
     while (buf) {
         fwrite(buf->data, 1, buf->size, out);
         buf = buf->next;
     }
 }
 
-void free_bufs(struct format_buf* buf) {
+void free_format_bufs(struct format_buf* buf) {
     while (buf) {
         struct format_buf* next = buf->next;
         free(buf);

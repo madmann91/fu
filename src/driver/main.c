@@ -7,7 +7,7 @@ int main(int argc, char** argv) {
         { .s = "World" },
         { .style = (struct format_style) { .style = STYLE_NORMAL, .color = COLOR_NORMAL } }
     });
-    print_bufs(state.buf, stdout);
-    free_bufs(state.buf);
+    print_format_bufs(state.buf, stdout);
+    free_format_bufs(state.buf);
     return 0;
 }

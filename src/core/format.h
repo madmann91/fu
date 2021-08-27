@@ -54,8 +54,9 @@ struct format_state {
     const char* tab;
 };
 
-void format(struct format_state*, const char*, const union format_arg*);
-void print_bufs(const struct format_buf*, FILE*);
-void free_bufs(struct format_buf*);
+void format(struct format_state* state, const char* format_str, const union format_arg* args);
+
+void print_format_bufs(const struct format_buf*, FILE*);
+void free_format_bufs(struct format_buf*);
 
 #endif

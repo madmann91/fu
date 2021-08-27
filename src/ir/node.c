@@ -25,8 +25,8 @@ bool are_ir_nodes_equal(const struct ir_node* left, const struct ir_node* right)
 bool is_valid_pattern(const struct ir_node* node) {
     switch (node->tag) {
         case IR_NODE_VAR:
-        case IR_NODE_TUP:
-        case IR_NODE_OPT:
+        case IR_NODE_TUPLE:
+        case IR_NODE_OPTION:
             for (size_t i = 0, n = node->op_count; i < n; ++i) {
                 if (!is_valid_pattern(node->ops[i]))
                     return false;

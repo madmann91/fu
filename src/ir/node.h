@@ -7,23 +7,33 @@
 
 #define IR_NODE_TAGS(f) \
     f(VAR) \
-    f(LIT) \
+    f(LITERAL) \
     f(LET) \
-    f(APP) \
-    f(ABS) \
+    f(APPLY) \
+    f(FUN) \
     f(MATCH) \
-    f(INS) \
-    f(EXT) \
-    f(TUP) \
-    f(OPT) \
-    f(PTR) \
-    f(INT) \
+    f(INSERT) \
+    f(EXTRACT) \
+    f(TUPLE) \
+    f(OPTION) \
+    f(POINTER) \
+    f(INTEGER) \
     f(FLOAT) \
-    f(PROD) \
+    f(PRODUCT) \
     f(SUM) \
     f(PI) \
     f(STAR) \
     f(NAT)
+
+struct position {
+    uint32_t row, col;
+    const char* data_ptr;
+};
+
+struct location {
+    const char* file_name;
+    struct position begin, end;
+};
 
 struct ir_node {
     enum ir_node_tag {
@@ -35,6 +45,7 @@ struct ir_node {
     const struct ir_node* type;
     const struct ir_node** ops;
     size_t op_count;
+    struct location loc;
     union ir_node_data {
         uint64_t int_val;
         double   float_val;

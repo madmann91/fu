@@ -130,19 +130,19 @@ void format(struct format_state* state, const char* format_str, const union form
     size_t index = 0;
     while (*ptr) {
         const char* prev = ptr;
-        ptr += strcspn(ptr, "\n%$");
+        ptr += strcspn(ptr, "\n{");
         write(state, prev, ptr - prev);
         if (*ptr == '\n') {
             ptr++;
             write_char(state, '\n');
             for (size_t i = 0, n = state->indent; i < n; ++i)
                 write_string(state, state->tab);
-        } else if (*ptr == '$') {
+        } else if (*ptr == '{') {
             switch (*(++ptr)) {
-                case '$':
-                    write_char(state, '$');
+                case '{':
+                    write_char(state, '{');
                     ptr++;
-                    break;
+                    continue;
                 case '>':
                     state->indent++;
                     ptr++;
@@ -163,36 +163,20 @@ void format(struct format_state* state, const char* format_str, const union form
                 case '8':
                 case '9':
                     index = strtoull(ptr, (char**)&ptr, 10);
-                    // fallthrough
-                default:
-                    if (!state->ignore_style)
-                        apply_style(state, &args[index++]);
-                    break;
-            }
-        } else if (*ptr == '%') {
-            switch (*(++ptr)) {
-                case '%':
-                    write_char(state, '%');
-                    ptr++;
-                    break;
-                case '0':
-                case '1':
-                case '2':
-                case '3':
-                case '4':
-                case '5':
-                case '6':
-                case '7':
-                case '8':
-                case '9':
-                    index = strtoull(ptr, (char**)&ptr, 10);
-                    assert(*ptr == '$' && "positional separator expected");
+                    assert(*ptr == ':' && "positional separator expected");
                     ptr++;
                     // fallthrough
                 default:
-                    ptr = format_arg(state, ptr, &index, args);
+                    if (*ptr == '$') {
+                        if (!state->ignore_style)
+                            apply_style(state, &args[index++]);
+                        ptr++;
+                    } else
+                        ptr = format_arg(state, ptr, &index, args);
                     break;
             }
+            assert(*ptr == '}' && "argument end marker expected");
+            ptr++;
         }
     }
 }

@@ -64,6 +64,7 @@ struct token {
 };
 
 struct lexer {
+    struct log* log;
     struct hash_table* keywords;
     struct file_pos cur_pos;
     const char* data_end;
@@ -71,11 +72,10 @@ struct lexer {
 };
 
 struct parser {
-    struct log* log;
-    struct lexer lexer;
     struct token ahead;
     struct mem_pool mem_pool;
     struct file_pos prev_end;
+    struct lexer lexer;
 };
 
 static inline bool is_utf8_multibyte_begin(uint8_t first_byte) {
@@ -157,8 +157,8 @@ static inline struct token make_token(const struct lexer* lexer, const struct fi
     };
 }
 
-static inline size_t token_length(const struct token* token) {
-    return token->loc.end.data_ptr - token->loc.begin.data_ptr;
+static inline size_t loc_length(const struct file_loc* loc) {
+    return loc->end.data_ptr - loc->begin.data_ptr;
 }
 
 static struct token advance_lexer(struct lexer* lexer) {
@@ -181,6 +181,15 @@ static struct token advance_lexer(struct lexer* lexer) {
         }
 
         eat_char(lexer);
+        struct file_loc loc = {
+            .file_name = lexer->file_name,
+            .begin = begin,
+            .end = lexer->cur_pos
+        };
+        log_error(lexer->log, &loc, "unknown token '{sl}'", (union format_arg[]) {
+            { .s = begin.data_ptr },
+            { .len = loc_length(&loc) }
+        });
         return make_token(lexer, &begin, TOKEN_ERROR);
     }
 }
@@ -246,9 +255,9 @@ static struct ir_node* parse(struct parser* parser) {
         case TOKEN_IDENT:
             return parse_var(parser);
         default:
-            log_error(parser->log, &parser->ahead.loc, "unknown token '%sl'", (union format_arg[]) {
+            log_error(parser->lexer.log, &parser->ahead.loc, "expected top-level expression, but got '{sl}'", (union format_arg[]) {
                 { .s = parser->ahead.loc.begin.data_ptr },
-                { .len = token_length(&parser->ahead) }
+                { .len = loc_length(&parser->ahead.loc) }
             });
             return parse_error(parser);
     }
@@ -262,11 +271,11 @@ struct ir_node* parse_ir(struct log* log, const char* data_ptr, size_t data_size
     };
     struct parser parser = {
         .lexer = (struct lexer) {
+            .log = log,
             .cur_pos = begin,
             .data_end = data_ptr + data_size,
             .file_name = file_name
         },
-        .log = log
     };
     parser.ahead = advance_lexer(&parser.lexer);
     parser.prev_end = begin;

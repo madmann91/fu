@@ -23,7 +23,7 @@ static void usage() {
 
 static bool check_option(int i, int argc, char** argv) {
     if (i + 1 >= argc) {
-        log_error(&global_log, NULL, "missing argument for option '%s'", (union format_arg[]) { { .s = argv[i] } });
+        log_error(&global_log, NULL, "missing argument for option '{s}'", (union format_arg[]) { { .s = argv[i] } });
         return false;
     }
     return true;
@@ -48,11 +48,11 @@ static bool parse_options(int argc, char** argv, struct options* options) {
                     return false;
                 options->opt_level = strtoul(argv[++i], NULL, 10);
                 if (options->opt_level > 3) {
-                    log_error(&global_log, NULL, "invalid optimization level '%s'", (union format_arg[]) { { .s = argv[i] } });
+                    log_error(&global_log, NULL, "invalid optimization level '{s}'", (union format_arg[]) { { .s = argv[i] } });
                     return false;
                 }
             } else {
-                log_error(&global_log, NULL, "unknown option '%s'", (union format_arg[]) { { .s = argv[i] } });
+                log_error(&global_log, NULL, "unknown option '{s}'", (union format_arg[]) { { .s = argv[i] } });
                 return false;
             }
         } else {
@@ -92,7 +92,7 @@ static bool compile_file(const char* file_name, const struct options* options) {
     char* file_data;
     size_t file_size;
     if (!read_file_with_null_terminator(file, &file_data, &file_size)) {
-        log_error(&global_log, NULL, "cannot read file '%s'", (union format_arg[]) { { .s = file_name } });
+        log_error(&global_log, NULL, "cannot read file '{s}'", (union format_arg[]) { { .s = file_name } });
         return false;
     }
     // TODO

@@ -25,7 +25,7 @@ static void log_msg(
     if (msg_type == LOG_ERROR) log->error_count++;
     else if (msg_type == LOG_WARNING) log->warning_count++;
 
-    format(&log->state, "$%s$: ", (union format_arg[]) {
+    format(&log->state, "{$}{s}{$}: ", (union format_arg[]) {
         { .style = header_styles[msg_type] },
         { .s = headers[msg_type] },
         { .style = reset_style } });
@@ -36,8 +36,8 @@ static void log_msg(
         format(
             &log->state,
             memcmp(&loc->begin, &loc->end, sizeof(loc->begin))
-                ? "  in $%s(%u32, %u32 -- %u32, %u32)$\n"
-                : "  in $%s(%u32, %u32)$\n",
+                ? "  in {$}{s}({u32}, {u32} -- {u32}, {u32}){$}\n"
+                : "  in {$}{s}({u32}, {u32}){$}\n",
             (union format_arg[]) {
                 { .style = loc_style },
                 { .s = loc->file_name ? loc->file_name : "<unknown>" },

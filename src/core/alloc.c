@@ -62,23 +62,22 @@ static size_t align_to(size_t size, size_t align) {
 
 void* alloc_from_mem_pool(struct mem_pool* mem_pool, size_t size) {
     size = align_to(size, sizeof(max_align_t));
-    struct mem_block* block = mem_pool->cur;
-    if (!block) {
+    if (!mem_pool->cur) {
         mem_pool->first = mem_pool->cur = alloc_mem_block(NULL, size);
     } else {
         // Try to re-use the next memory pools if they are appropriately sized
-        while (remaining_mem(block) < size) {
-            if (!block->next) {
-                block = alloc_mem_block(block, size);
+        while (remaining_mem(mem_pool->cur) < size) {
+            if (!mem_pool->cur->next) {
+                mem_pool->cur = alloc_mem_block(mem_pool->cur, size);
                 break;
             }
-            block = block->next;
-            assert(block->size == 0 && "next memory pool block must have been reset");
+            mem_pool->cur = mem_pool->cur->next;
+            assert(mem_pool->cur->size == 0 && "next memory pool block must have been reset");
         }
     }
-    assert(remaining_mem(block) >= size);
-    void* ptr = ((char*)block->data) + block->size;
-    block->size += size;
+    assert(remaining_mem(mem_pool->cur) >= size);
+    void* ptr = ((char*)mem_pool->cur->data) + mem_pool->cur->size;
+    mem_pool->cur->size += size;
     return ptr;
 }
 

@@ -3,6 +3,8 @@
 #include <stdbool.h>
 
 #include "core/log.h"
+#include "core/alloc.h"
+#include "ir/parse.h"
 
 struct options {
     unsigned opt_level;
@@ -64,9 +66,39 @@ static bool parse_options(int argc, char** argv, struct options* options) {
     return true;
 }
 
+static bool read_file_with_null_terminator(FILE* file, char** file_data, size_t* file_size) {
+    size_t chunk_size = 1024 * 256;
+    *file_data = NULL;
+    *file_size = 0;
+    while (true) {
+        if (ferror(file)) {
+            free(*file_data);
+            return false;
+        }
+        *file_data = realloc_or_die(*file_data, (*file_size) + chunk_size);
+        size_t read_count = fread(*file_data + (*file_size), 1, chunk_size, file);
+        *file_size += read_count;
+        if (read_count < chunk_size)
+            break;
+        chunk_size *= 2;
+    }
+    *file_data = realloc_or_die(*file_data, (*file_size) + 1);
+    (*file_data)[*file_size] = 0;
+    return true;
+}
+
 static bool compile_file(const char* file_name, const struct options* options) {
+    FILE* file = fopen(file_name, "rb");
+    char* file_data;
+    size_t file_size;
+    if (!read_file_with_null_terminator(file, &file_data, &file_size)) {
+        log_error(&global_log, NULL, "cannot read file '%s'", (union format_arg[]) { { .s = file_name } });
+        return false;
+    }
     // TODO
-    (void)file_name, (void)options;
+    (void)options;
+    parse_ir(&global_log, file_data, file_size, file_name);
+    free(file_data);
     return true;
 }
 

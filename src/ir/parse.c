@@ -164,6 +164,9 @@ static inline size_t token_length(const struct token* token) {
 static struct token advance_lexer(struct lexer* lexer) {
     while (true) {
         eat_spaces(lexer);
+        if (is_eof_reached(lexer))
+            return make_token(lexer, &lexer->cur_pos, TOKEN_EOF);
+
         if (accept_char(lexer, '#')) {
             eat_single_line_comment(lexer);
             continue;

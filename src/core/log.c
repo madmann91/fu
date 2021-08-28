@@ -36,8 +36,8 @@ static void log_msg(
         format(
             &log->state,
             memcmp(&loc->begin, &loc->end, sizeof(loc->begin))
-                ? "  in %0:$%1:s(%2:u, %3:u -- %4:u, %5:u)%6:$\n"
-                : "  in %0:$%1:s(%2:u, %3:u)%6:$\n",
+                ? "  in $%s(%u32, %u32 -- %u32, %u32)$\n"
+                : "  in $%s(%u32, %u32)$\n",
             (union format_arg[]) {
                 { .style = loc_style },
                 { .s = loc->file_name ? loc->file_name : "<unknown>" },

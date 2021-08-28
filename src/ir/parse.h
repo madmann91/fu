@@ -5,9 +5,11 @@
 
 struct ir_node;
 struct log;
+struct mem_pool;
 
 struct ir_node* parse_ir(
     struct log* log,
+    struct mem_pool* mem_pool,
     const char* data_ptr,
     size_t data_size,
     const char* file_name);

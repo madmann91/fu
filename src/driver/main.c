@@ -5,6 +5,7 @@
 #include "core/log.h"
 #include "core/alloc.h"
 #include "ir/parse.h"
+#include "ir/print.h"
 
 struct options {
     unsigned opt_level;
@@ -67,7 +68,7 @@ static bool parse_options(int argc, char** argv, struct options* options) {
 }
 
 static bool read_file_with_null_terminator(FILE* file, char** file_data, size_t* file_size) {
-    size_t chunk_size = 1024 * 256;
+    size_t chunk_size = 4096;
     *file_data = NULL;
     *file_size = 0;
     while (true) {
@@ -97,7 +98,11 @@ static bool compile_file(const char* file_name, const struct options* options) {
     }
     // TODO
     (void)options;
-    parse_ir(&global_log, file_data, file_size, file_name);
+    struct mem_pool mem_pool = { NULL, NULL };
+    struct ir_node* node = parse_ir(&global_log, &mem_pool, file_data, file_size, file_name);
+    print_ir(&global_log.state, node);
+    format(&global_log.state, "\n", NULL);
+    free_mem_pool(&mem_pool);
     free(file_data);
     return true;
 }

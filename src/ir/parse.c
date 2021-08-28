@@ -73,8 +73,8 @@ struct lexer {
 
 struct parser {
     struct token ahead;
-    struct mem_pool mem_pool;
     struct file_pos prev_end;
+    struct mem_pool* mem_pool;
     struct lexer lexer;
 };
 
@@ -210,7 +210,7 @@ static inline bool accept_token(struct parser* parser, enum token_tag tag) {
 
 static inline const char* copy_string_from_token(struct parser* parser) {
     size_t len = parser->ahead.loc.end.data_ptr - parser->ahead.loc.begin.data_ptr;
-    char* str = alloc_from_mem_pool(&parser->mem_pool, len + 1);
+    char* str = alloc_from_mem_pool(parser->mem_pool, len + 1);
     memcpy(str, parser->ahead.loc.begin.data_ptr, len);
     str[len] = 0;
     return str;
@@ -222,7 +222,7 @@ static inline struct ir_node* make_ir_node(
     enum ir_node_tag tag,
     size_t data_size)
 {
-    struct ir_node* node = alloc_from_mem_pool(&parser->mem_pool, sizeof(struct ir_node) + data_size);
+    struct ir_node* node = alloc_from_mem_pool(parser->mem_pool, sizeof(struct ir_node) + data_size);
     memset(node, 0, sizeof(struct ir_node));
     node->tag = tag;
     node->data_size = data_size;
@@ -239,8 +239,8 @@ static struct ir_node* parse_var(struct parser* parser) {
     const char* name = copy_string_from_token(parser);
     eat_token(parser, TOKEN_IDENT);
     struct ir_node* var = make_ir_node(parser, &begin, IR_NODE_VAR, sizeof(struct var_data));
-    var->data[0].var_data.name = name;
-    var->data[0].var_data.index = 0;
+    var->data->var_data.name = name;
+    var->data->var_data.index = 0;
     return var;
 }
 
@@ -263,13 +263,20 @@ static struct ir_node* parse(struct parser* parser) {
     }
 }
 
-struct ir_node* parse_ir(struct log* log, const char* data_ptr, size_t data_size, const char* file_name) {
+struct ir_node* parse_ir(
+    struct log* log,
+    struct mem_pool* mem_pool,
+    const char* data_ptr,
+    size_t data_size,
+    const char* file_name)
+{
     struct file_pos begin = {
         .row = 1,
         .col = 1,
         .data_ptr = data_ptr
     };
     struct parser parser = {
+        .mem_pool = mem_pool,
         .lexer = (struct lexer) {
             .log = log,
             .cur_pos = begin,

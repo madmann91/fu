@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "core/log.h"
+
 #define IR_NODE_TAGS(f) \
     f(VAR) \
     f(LITERAL) \
@@ -23,16 +25,12 @@
     f(SUM) \
     f(PI) \
     f(STAR) \
-    f(NAT)
+    f(NAT) \
+    f(ERROR)
 
-struct position {
-    uint32_t row, col;
-    const char* data_ptr;
-};
-
-struct location {
-    const char* file_name;
-    struct position begin, end;
+struct var_data {
+    const char* name;
+    size_t index;
 };
 
 struct ir_node {
@@ -45,10 +43,11 @@ struct ir_node {
     const struct ir_node* type;
     const struct ir_node** ops;
     size_t op_count;
-    struct location loc;
+    struct file_loc loc;
     union ir_node_data {
         uint64_t int_val;
-        double   float_val;
+        double float_val;
+        struct var_data var_data;
     } data[];
 };
 

@@ -8,7 +8,7 @@
 #include "core/alloc.h"
 #include "core/format.h"
 
-#define MAX_CHARS 64
+#define MAX_FORMAT_CHARS 64
 #define DEFAULT_BUF_CAPACITY 1024
 
 static struct format_buf* alloc_buf(size_t capacity) {
@@ -20,15 +20,17 @@ static struct format_buf* alloc_buf(size_t capacity) {
 }
 
 static char* reserve_buf(struct format_state* state, size_t size) {
-    if (state->buf && state->buf->size + size <= state->buf->capacity)
-        return state->buf->data + state->buf->size;
-    size_t capacity = state->buf ? state->buf->size : DEFAULT_BUF_CAPACITY;
+    if (state->cur_buf && state->cur_buf->size + size <= state->cur_buf->capacity)
+        return state->cur_buf->data + state->cur_buf->size;
+    size_t capacity = state->cur_buf ? state->cur_buf->size : DEFAULT_BUF_CAPACITY;
     if (capacity < size)
         capacity = size;
     struct format_buf* buf = alloc_buf(capacity);
-    if (state->buf)
-        state->buf->next = buf;
-    state->buf = buf;
+    if (state->cur_buf)
+        state->cur_buf->next = buf;
+    else
+        state->first_buf = buf;
+    state->cur_buf = buf;
     return buf->data;
 }
 
@@ -39,7 +41,7 @@ static void advance_buf(struct format_buf* buf, size_t inc) {
 
 static void write(struct format_state* state, const char* ptr, size_t size) {
     memcpy(reserve_buf(state, size), ptr, size);
-    advance_buf(state->buf, size);
+    advance_buf(state->cur_buf, size);
 }
 
 static void write_char(struct format_state* state, char c) {
@@ -50,40 +52,46 @@ static void write_string(struct format_state* state, const char* s) {
     write(state, s, strlen(s));
 }
 
-static const char* format_arg(struct format_state* state, const char* ptr, const union format_arg* arg) {
-    char* buf_ptr = reserve_buf(state, MAX_CHARS);
+static const char* format_arg(struct format_state* state, const char* ptr, size_t* index, const union format_arg* args) {
+    const union format_arg* arg = &args[(*index)++];
+    char* buf_ptr = reserve_buf(state, MAX_FORMAT_CHARS);
     size_t chars_printed = 0;
     switch (*(ptr++)) {
         case 'u':
             switch (*(ptr++)) {
-                case '8': chars_printed = snprintf(buf_ptr, MAX_CHARS, "%"PRIu8, arg->u8);  break;
-                case '1': assert(*ptr == '6'); ptr++; chars_printed = snprintf(buf_ptr, MAX_CHARS, "%"PRIu16, arg->u16); break;
-                case '3': assert(*ptr == '2'); ptr++; chars_printed = snprintf(buf_ptr, MAX_CHARS, "%"PRIu32, arg->u32); break;
-                case '6': assert(*ptr == '4'); ptr++; chars_printed = snprintf(buf_ptr, MAX_CHARS, "%"PRIu64, arg->u64); break;
+                case '8': chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu8, arg->u8);  break;
+                case '1': assert(*ptr == '6'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu16, arg->u16); break;
+                case '3': assert(*ptr == '2'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu32, arg->u32); break;
+                case '6': assert(*ptr == '4'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu64, arg->u64); break;
             } 
             break;
         case 'i':
             switch (*(ptr++)) {
-                case '8': chars_printed = snprintf(buf_ptr, MAX_CHARS, "%"PRIi8, arg->i8);  break;
-                case '1': assert(*ptr == '6'); ptr++; chars_printed = snprintf(buf_ptr, MAX_CHARS, "%"PRIi16, arg->i16); break;
-                case '3': assert(*ptr == '2'); ptr++; chars_printed = snprintf(buf_ptr, MAX_CHARS, "%"PRIi32, arg->i32); break;
-                case '6': assert(*ptr == '4'); ptr++; chars_printed = snprintf(buf_ptr, MAX_CHARS, "%"PRIi64, arg->i64); break;
+                case '8': chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi8, arg->i8);  break;
+                case '1': assert(*ptr == '6'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi16, arg->i16); break;
+                case '3': assert(*ptr == '2'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi32, arg->i32); break;
+                case '6': assert(*ptr == '4'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi64, arg->i64); break;
             } 
             break;
         case 's':
-            write_string(state, arg->s);
+            if (*ptr == 'l') {
+                ptr++;
+                write(state, arg->s, args[(*index)++].len);
+            } else
+                write_string(state, arg->s);
             break;
         case 'b':
             write_string(state, arg->b ? "true" : "false");
             break;
         case 'p':
-            chars_printed = snprintf(buf_ptr, MAX_CHARS, "%p", arg->p);
+            chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%p", arg->p);
             break;
         default:
             assert(false && "unknown format argument type");
             break;
     }
-    advance_buf(state->buf, chars_printed);
+    assert(chars_printed < MAX_FORMAT_CHARS);
+    advance_buf(state->cur_buf, chars_printed);
     return ptr;
 }
 
@@ -182,7 +190,7 @@ void format(struct format_state* state, const char* format_str, const union form
                     ptr++;
                     // fallthrough
                 default:
-                    ptr = format_arg(state, ptr, &args[index++]);
+                    ptr = format_arg(state, ptr, &index, args);
                     break;
             }
         }

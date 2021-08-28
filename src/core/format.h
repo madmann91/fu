@@ -45,14 +45,18 @@ union format_arg {
     int16_t i16;
     int32_t i32;
     int64_t i64;
+    size_t len;
 };
 
 struct format_state {
-    struct format_buf* buf;
+    struct format_buf* cur_buf;
+    struct format_buf* first_buf;
     bool ignore_style;
     size_t indent;
     const char* tab;
 };
+
+static const struct format_style reset_style = { STYLE_NORMAL, COLOR_NORMAL };
 
 void format(struct format_state* state, const char* format_str, const union format_arg* args);
 

@@ -2,8 +2,11 @@
 #include <stdint.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <string.h>
 #include <ctype.h>
 
+#include "core/alloc.h"
+#include "core/log.h"
 #include "ir/parse.h"
 #include "ir/node.h"
 
@@ -57,33 +60,23 @@ struct token {
 #undef f
     } tag;
     struct literal lit;
-	struct location loc;
+	struct file_loc loc;
 };
 
 struct lexer {
     struct hash_table* keywords;
-    struct position cur_pos;
+    struct file_pos cur_pos;
     const char* data_end;
     const char* file_name;
 };
 
 struct parser {
+    struct log* log;
     struct lexer lexer;
     struct token ahead;
+    struct mem_pool mem_pool;
+    struct file_pos prev_end;
 };
-
-static inline bool is_eof_reached(const struct lexer* lexer) {
-    return lexer->cur_pos.data_ptr >= lexer->data_end;
-}
-
-static inline const char* data_ptr(const struct lexer* lexer) {
-    return lexer->cur_pos.data_ptr;
-}
-
-static inline char next_char(const struct lexer* lexer) {
-    assert(!is_eof_reached(lexer));
-    return *data_ptr(lexer);
-}
 
 static inline bool is_utf8_multibyte_begin(uint8_t first_byte) {
     return first_byte & 0x80;
@@ -110,10 +103,19 @@ static inline size_t eat_utf8_bytes(const uint8_t* ptr, const uint8_t* end) {
     return n <= (end - ptr) && check_utf8_bytes(ptr, n) ? n : 1;
 }
 
-static void advance_lexer(struct lexer* lexer) {
+static inline bool is_eof_reached(const struct lexer* lexer) {
+    return lexer->cur_pos.data_ptr >= lexer->data_end;
+}
+
+static inline char next_char(const struct lexer* lexer) {
+    assert(!is_eof_reached(lexer));
+    return *lexer->cur_pos.data_ptr;
+}
+
+static void eat_char(struct lexer* lexer) {
     assert(!is_eof_reached(lexer));
     if (is_utf8_multibyte_begin(next_char(lexer))) {
-        size_t n = eat_utf8_bytes((uint8_t*)data_ptr(lexer), (uint8_t*)lexer->data_end);
+        size_t n = eat_utf8_bytes((const uint8_t*)lexer->cur_pos.data_ptr, (const uint8_t*)lexer->data_end);
         lexer->cur_pos.data_ptr += n;
         lexer->cur_pos.col++;
     } else if (next_char(lexer) == '\n') {
@@ -128,7 +130,7 @@ static void advance_lexer(struct lexer* lexer) {
 
 static bool accept_char(struct lexer* lexer, char c) {
     if (next_char(lexer) == c) {
-        advance_lexer(lexer);
+        eat_char(lexer);
         return true;
     }
     return false;
@@ -136,18 +138,18 @@ static bool accept_char(struct lexer* lexer, char c) {
 
 static inline void eat_spaces(struct lexer* lexer) {
     while (!is_eof_reached(lexer) && isspace(next_char(lexer)))
-        advance_lexer(lexer);
+        eat_char(lexer);
 }
 
 static inline void eat_single_line_comment(struct lexer* lexer) {
     while (!is_eof_reached(lexer) && next_char(lexer) != '\n')
-        advance_lexer(lexer);
+        eat_char(lexer);
 }
 
-static inline struct token make_token(const struct lexer* lexer, const struct position* begin, enum token_tag tag) {
+static inline struct token make_token(const struct lexer* lexer, const struct file_pos* begin, enum token_tag tag) {
     return (struct token) {
         .tag = tag,
-        .loc = (struct location) {
+        .loc = (struct file_loc) {
             .file_name = lexer->file_name,
             .begin = *begin,
             .end = lexer->cur_pos
@@ -155,7 +157,11 @@ static inline struct token make_token(const struct lexer* lexer, const struct po
     };
 }
 
-static struct token next_token(struct lexer* lexer) {
+static inline size_t token_length(const struct token* token) {
+    return token->loc.end.data_ptr - token->loc.begin.data_ptr;
+}
+
+static struct token advance_lexer(struct lexer* lexer) {
     while (true) {
         eat_spaces(lexer);
         if (accept_char(lexer, '#')) {
@@ -163,36 +169,103 @@ static struct token next_token(struct lexer* lexer) {
             continue;
         }
 
-        struct position last_pos = lexer->cur_pos;
-        advance_lexer(lexer);
-        return make_token(lexer, &last_pos, TOKEN_ERROR);
+        struct file_pos begin = lexer->cur_pos;
+        if (next_char(lexer) == '_' || isalpha(next_char(lexer))) {
+            eat_char(lexer);
+            while (isalnum(next_char(lexer)) || next_char(lexer) == '_')
+                eat_char(lexer);
+            return make_token(lexer, &begin, TOKEN_IDENT);
+        }
+
+        eat_char(lexer);
+        return make_token(lexer, &begin, TOKEN_ERROR);
     }
 }
 
-static inline void eat_token(struct parser* parser) {
-    parser->ahead = next_token(&parser->lexer);
+static inline void eat_token(struct parser* parser, enum token_tag tag) {
+    assert(parser->ahead.tag == tag);
+    parser->prev_end = parser->ahead.loc.end;
+    parser->ahead = advance_lexer(&parser->lexer);
 }
 
 static inline bool accept_token(struct parser* parser, enum token_tag tag) {
     if (parser->ahead.tag == tag) {
-        eat_token(parser);
+        eat_token(parser, tag);
         return true;
     }
     return false;
 }
 
-struct ir_node* parse_ir(const char* data_ptr, size_t data_size, const char* file_name) {
+static inline const char* copy_string_from_token(struct parser* parser) {
+    size_t len = parser->ahead.loc.end.data_ptr - parser->ahead.loc.begin.data_ptr;
+    char* str = alloc_from_mem_pool(&parser->mem_pool, len + 1);
+    memcpy(str, parser->ahead.loc.begin.data_ptr, len);
+    str[len] = 0;
+    return str;
+}
+
+static inline struct ir_node* make_ir_node(
+    struct parser* parser,
+    const struct file_pos* begin,
+    enum ir_node_tag tag,
+    size_t data_size)
+{
+    struct ir_node* node = alloc_from_mem_pool(&parser->mem_pool, sizeof(struct ir_node) + data_size);
+    memset(node, 0, sizeof(struct ir_node));
+    node->tag = tag;
+    node->data_size = data_size;
+    node->loc = (struct file_loc) {
+        .file_name = parser->ahead.loc.file_name,
+        .begin = *begin,
+        .end = parser->prev_end
+    };
+    return node;
+}
+
+static struct ir_node* parse_var(struct parser* parser) {
+    struct file_pos begin = parser->ahead.loc.begin;
+    const char* name = copy_string_from_token(parser);
+    eat_token(parser, TOKEN_IDENT);
+    struct ir_node* var = make_ir_node(parser, &begin, IR_NODE_VAR, sizeof(struct var_data));
+    var->data[0].var_data.name = name;
+    var->data[0].var_data.index = 0;
+    return var;
+}
+
+static struct ir_node* parse_error(struct parser* parser) {
+    struct file_pos begin = parser->ahead.loc.begin;
+    eat_token(parser, parser->ahead.tag);
+    return make_ir_node(parser, &begin, IR_NODE_ERROR, 0);
+}
+
+static struct ir_node* parse(struct parser* parser) {
+    switch (parser->ahead.tag) {
+        case TOKEN_IDENT:
+            return parse_var(parser);
+        default:
+            log_error(parser->log, &parser->ahead.loc, "unknown token '%sl'", (union format_arg[]) {
+                { .s = parser->ahead.loc.begin.data_ptr },
+                { .len = token_length(&parser->ahead) }
+            });
+            return parse_error(parser);
+    }
+}
+
+struct ir_node* parse_ir(struct log* log, const char* data_ptr, size_t data_size, const char* file_name) {
+    struct file_pos begin = {
+        .row = 1,
+        .col = 1,
+        .data_ptr = data_ptr
+    };
     struct parser parser = {
         .lexer = (struct lexer) {
-            .cur_pos = (struct position) {
-                .row = 1,
-                .col = 1,
-                .data_ptr = data_ptr
-            },
+            .cur_pos = begin,
             .data_end = data_ptr + data_size,
             .file_name = file_name
-        }
+        },
+        .log = log
     };
-    eat_token(&parser);
-    return NULL;
+    parser.ahead = advance_lexer(&parser.lexer);
+    parser.prev_end = begin;
+    return parse(&parser);
 }

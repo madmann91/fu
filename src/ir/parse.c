@@ -6,9 +6,11 @@
 #include <ctype.h>
 
 #include "core/alloc.h"
+#include "core/mem_pool.h"
 #include "core/log.h"
 #include "ir/parse.h"
 #include "ir/node.h"
+#include "ir/module.h"
 
 #define SYMBOLS(f) \
     f(LPAREN, "(") \
@@ -74,6 +76,7 @@ struct lexer {
 struct parser {
     struct token ahead;
     struct file_pos prev_end;
+    struct ir_module* module;
     struct mem_pool* mem_pool;
     struct lexer lexer;
 };
@@ -220,17 +223,18 @@ static inline struct ir_node* make_ir_node(
     struct parser* parser,
     const struct file_pos* begin,
     enum ir_node_tag tag,
-    size_t data_size)
+    size_t op_count,
+    const char* name)
 {
-    struct ir_node* node = alloc_from_mem_pool(parser->mem_pool, sizeof(struct ir_node) + data_size);
+    struct ir_node* node = alloc_from_mem_pool(
+        parser->mem_pool, sizeof(struct ir_node) + sizeof(struct ir_node*) * op_count);
     memset(node, 0, sizeof(struct ir_node));
     node->tag = tag;
-    node->data_size = data_size;
-    node->loc = (struct file_loc) {
+    node->debug = make_debug_info(parser->module, &(struct file_loc) {
         .file_name = parser->ahead.loc.file_name,
         .begin = *begin,
         .end = parser->prev_end
-    };
+    }, name);
     return node;
 }
 
@@ -238,16 +242,15 @@ static struct ir_node* parse_var(struct parser* parser) {
     struct file_pos begin = parser->ahead.loc.begin;
     const char* name = copy_string_from_token(parser);
     eat_token(parser, TOKEN_IDENT);
-    struct ir_node* var = make_ir_node(parser, &begin, IR_NODE_VAR, sizeof(struct var_data));
-    var->data->var_data.name = name;
-    var->data->var_data.index = 0;
+    struct ir_node* var = make_ir_node(parser, &begin, IR_NODE_VAR, 0, name);
+    var->data.var_index = 0;
     return var;
 }
 
 static struct ir_node* parse_error(struct parser* parser) {
     struct file_pos begin = parser->ahead.loc.begin;
     eat_token(parser, parser->ahead.tag);
-    return make_ir_node(parser, &begin, IR_NODE_ERROR, 0);
+    return make_ir_node(parser, &begin, IR_NODE_ERROR, 0, NULL);
 }
 
 static struct ir_node* parse(struct parser* parser) {
@@ -255,16 +258,20 @@ static struct ir_node* parse(struct parser* parser) {
         case TOKEN_IDENT:
             return parse_var(parser);
         default:
-            log_error(parser->lexer.log, &parser->ahead.loc, "expected top-level expression, but got '{sl}'", (union format_arg[]) {
-                { .s = parser->ahead.loc.begin.data_ptr },
-                { .len = loc_length(&parser->ahead.loc) }
-            });
+            log_error(
+                parser->lexer.log, &parser->ahead.loc,
+                "expected top-level expression, but got '{sl}'",
+                (union format_arg[]) {
+                    { .s = parser->ahead.loc.begin.data_ptr },
+                    { .len = loc_length(&parser->ahead.loc) }
+                });
             return parse_error(parser);
     }
 }
 
 struct ir_node* parse_ir(
     struct log* log,
+    struct ir_module* module,
     struct mem_pool* mem_pool,
     const char* data_ptr,
     size_t data_size,
@@ -283,6 +290,7 @@ struct ir_node* parse_ir(
             .data_end = data_ptr + data_size,
             .file_name = file_name
         },
+        .module = module
     };
     parser.ahead = advance_lexer(&parser.lexer);
     parser.prev_end = begin;

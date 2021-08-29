@@ -28,31 +28,38 @@
     f(NAT) \
     f(ERROR)
 
-struct var_data {
+struct debug_info {
+    struct file_loc loc;
     const char* name;
-    size_t index;
 };
 
-struct ir_node {
-    enum ir_node_tag {
+enum ir_node_tag {
 #define f(t) IR_NODE_##t,   
-        IR_NODE_TAGS(f)
+    IR_NODE_TAGS(f)
 #undef f
-    } tag : 32;
-    uint32_t data_size;
-    const struct ir_node* type;
-    const struct ir_node** ops;
-    size_t op_count;
-    struct file_loc loc;
-    union ir_node_data {
-        uint64_t int_val;
-        double float_val;
-        struct var_data var_data;
-    } data[];
+};
+
+union ir_node_data {
+    uint64_t int_val;
+    double float_val;
+    size_t var_index;
+};
+
+#define IR_NODE_FIELDS \
+    enum ir_node_tag tag : 32; \
+    uint32_t data_size; \
+    union ir_node_data data; \
+    size_t op_count; \
+    const struct ir_node* type; \
+    const struct debug_info* debug; \
+
+struct ir_node {
+    IR_NODE_FIELDS
+    const struct ir_node* ops[];
 };
 
 uint32_t hash_ir_node(const struct ir_node*);
-bool are_ir_nodes_equal(const struct ir_node*, const struct ir_node*);
+bool is_same_node(const struct ir_node*, const struct ir_node*);
 bool is_valid_pattern(const struct ir_node*);
 
 #endif

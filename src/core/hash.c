@@ -26,6 +26,11 @@ uint32_t hash_uint64(uint32_t h, uint64_t x) {
     return hash_uint32(hash_uint32(h, x), x >> 32);
 }
 
+uint32_t hash_string(uint32_t h, const char* str) {
+    while (*str) h = hash_uint8(h, *(str++));
+    return h;
+}
+
 uint32_t hash_raw_bytes(uint32_t h, const void* ptr, size_t size) {
     for (size_t i = 0; i < size; ++i)
         h = hash_uint8(h, ((char*)ptr)[i]);

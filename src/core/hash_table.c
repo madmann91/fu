@@ -26,9 +26,9 @@ struct hash_table new_hash_table(size_t capacity, size_t elem_size) {
     void* elems = malloc_or_die(capacity * elem_size);
     uint32_t* hashes = calloc_or_die(capacity, sizeof(uint32_t));
     return (struct hash_table) {
-        .elems     = elems,
-        .hashes    = hashes,
-        .capacity  = capacity
+        .elems    = elems,
+        .hashes   = hashes,
+        .capacity = capacity
     };
 }
 
@@ -80,7 +80,7 @@ bool insert_in_hash_table(
     size_t index = mod_prime(hash, hash_table->capacity);
     while (is_bucket_occupied(hash_table->hashes[index])) {
         if (hash_table->hashes[index] == hash &&
-            compare(((char*)hash_table->elems) + elem_size * index, elem))
+            compare(elem_at(hash_table->elems, elem_size, index), elem))
             return false;
         index = increment_wrap(hash_table->capacity, index);
     }

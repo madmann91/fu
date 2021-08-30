@@ -2,12 +2,13 @@
 #include <string.h>
 #include <assert.h>
 
-#include "ir/module.h"
-#include "ir/node.h"
 #include "core/hash_table.h"
 #include "core/hash.h"
 #include "core/alloc.h"
 #include "core/mem_pool.h"
+#include "core/utils.h"
+#include "ir/module.h"
+#include "ir/node.h"
 
 #define DEFAULT_MODULE_CAPACITY 256
 
@@ -43,14 +44,12 @@ static const struct ir_node* insert_ir_node(struct ir_module* module, const stru
     assert(node);
     uint32_t hash = hash_ir_node(node);
     struct ir_node** node_ptr =
-        find_in_hash_table(&module->nodes, node, hash, sizeof(struct ir_node*), compare_ir_nodes);
+        find_in_hash_table(&module->nodes, &node, hash, sizeof(struct ir_node*), compare_ir_nodes);
     if (node_ptr)
         return *node_ptr;
     struct ir_node* new_node = alloc_from_mem_pool(&module->mem_pool, sizeof(struct ir_node) + sizeof(struct ir_node*) * node->op_count);
     memcpy(new_node, node, sizeof(struct ir_node) + sizeof(struct ir_node*) * node->op_count);
-    bool ok = insert_in_hash_table(&module->nodes, &new_node, hash, sizeof(struct ir_node*), compare_ir_nodes);
-    assert(ok && "incorrect hash/comparison function for IR nodes");
-    (void)ok;
+    must_succeed(insert_in_hash_table(&module->nodes, &new_node, hash, sizeof(struct ir_node*), compare_ir_nodes));
     return new_node;
 }
 
@@ -76,19 +75,17 @@ static const struct debug_info* insert_debug_info(struct ir_module* module, cons
         return NULL;
     uint32_t hash = hash_debug_info(debug);
     struct debug_info** debug_ptr =
-        find_in_hash_table(&module->debug, debug, hash, sizeof(struct debug_info*), compare_debug_info);
+        find_in_hash_table(&module->debug, &debug, hash, sizeof(struct debug_info*), compare_debug_info);
     if (debug_ptr)
         return *debug_ptr;
     struct debug_info* new_debug = alloc_from_mem_pool(&module->mem_pool, sizeof(struct debug_info));
     memcpy(new_debug, debug, sizeof(struct debug_info));
-    bool ok = insert_in_hash_table(&module->debug, &new_debug, hash, sizeof(struct debug_info*), compare_debug_info);
-    assert(ok && "incorrect hash/comparison function for debug info");
-    (void)ok;
+    must_succeed(insert_in_hash_table(&module->debug, &new_debug, hash, sizeof(struct debug_info*), compare_debug_info));
     return new_debug;
 }
 
 static bool compare_strings(const void* left, const void* right) {
-    return !strcmp(*(void**)left, *(void**)right);
+    return !strcmp(*(char**)left, *(char**)right);
 }
 
 static const char* insert_string(struct ir_module* module, const char* str) {
@@ -96,16 +93,14 @@ static const char* insert_string(struct ir_module* module, const char* str) {
         return NULL;
     uint32_t hash = hash_string(hash_init(), str);
     char** str_ptr =
-        find_in_hash_table(&module->debug, str, hash, sizeof(char*), compare_strings);
+        find_in_hash_table(&module->strings, &str, hash, sizeof(char*), compare_strings);
     if (str_ptr)
         return *str_ptr;
     size_t len = strlen(str);
     char* new_str = alloc_from_mem_pool(&module->mem_pool, len + 1);
     memcpy(new_str, str, len);
     new_str[len] = 0;
-    bool ok = insert_in_hash_table(&module->strings, &new_str, hash, sizeof(char*), compare_strings);
-    assert(ok && "incorrect hash/comparison function for strings");
-    (void)ok;
+    must_succeed(insert_in_hash_table(&module->strings, &new_str, hash, sizeof(char*), compare_strings));
     return new_str;
 }
 

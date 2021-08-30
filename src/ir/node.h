@@ -51,7 +51,7 @@ union ir_node_data {
     union ir_node_data data; \
     size_t op_count; \
     const struct ir_node* type; \
-    const struct debug_info* debug; \
+    const struct debug_info* debug;
 
 struct ir_node {
     IR_NODE_FIELDS
@@ -61,5 +61,14 @@ struct ir_node {
 uint32_t hash_ir_node(const struct ir_node*);
 bool is_same_node(const struct ir_node*, const struct ir_node*);
 bool is_valid_pattern(const struct ir_node*);
+
+struct let_binding {
+    const struct ir_node* var;
+    const struct ir_node* val;
+};
+
+size_t let_bindings_count(const struct ir_node*);
+struct let_binding let_binding(const struct ir_node*, size_t);
+const struct ir_node* let_body(const struct ir_node*);
 
 #endif

@@ -40,3 +40,18 @@ bool is_valid_pattern(const struct ir_node* node) {
             return false;
     }
 }
+
+size_t let_bindings_count(const struct ir_node* let) {
+    return let->op_count / 2;
+}
+
+struct let_binding let_binding(const struct ir_node* let, size_t i) {
+    return (struct let_binding) {
+        .var = let->ops[i * 2 + 0],
+        .val = let->ops[i * 2 + 1]
+    };
+}
+
+const struct ir_node* let_body(const struct ir_node* let) {
+    return let->ops[let->op_count - 1];
+}

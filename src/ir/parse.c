@@ -5,24 +5,27 @@
 #include <string.h>
 #include <ctype.h>
 
+#include "core/utils.h"
 #include "core/alloc.h"
 #include "core/mem_pool.h"
+#include "core/hash_table.h"
+#include "core/hash.h"
 #include "core/log.h"
 #include "ir/parse.h"
 #include "ir/node.h"
 #include "ir/module.h"
 
 #define SYMBOLS(f) \
-    f(LPAREN, "(") \
-    f(RPAREN, ")") \
-    f(LBRACE, "{") \
-    f(RBRACE, "}") \
-    f(LBRACKET, "[") \
-    f(RBRACKET, "]") \
-    f(LANGLE, "<") \
-    f(RANGLE, ">") \
-    f(THINARROW, "->") \
-    f(FATARROW, "=>") \
+    f(L_PAREN, "(") \
+    f(R_PAREN, ")") \
+    f(L_BRACE, "{") \
+    f(R_BRACE, "}") \
+    f(L_BRACKET, "[") \
+    f(R_BRACKET, "]") \
+    f(L_ANGLE, "<") \
+    f(R_ANGLE, ">") \
+    f(THIN_ARROW, "->") \
+    f(FAT_ARROW, "=>") \
     f(DOT, ".") \
     f(COLON, ":") \
     f(SEMICOLON, ";") \
@@ -30,19 +33,28 @@
     f(PLUS, "+") \
     f(MINUS, "-") \
     f(STAR, "*") \
-    f(VBAR, "|") \
-    f(EQ, "=")
+    f(VERT_BAR, "|") \
+    f(EQUAL, "=")
 
 #define KEYWORDS(f) \
-    f(FUN, "fun")
+    f(FUN, "fun") \
+    f(LET, "let") \
+    f(IN, "in")
 
 #define TOKENS(f) \
-    SYMBOLS(f) \
     KEYWORDS(f) \
+    SYMBOLS(f) \
     f(IDENT, "identifier") \
     f(LITERAL, "literal") \
     f(ERROR, "error") \
     f(EOF, "end-of-file")
+
+enum {
+#define f(x, str) KEYWORD_##x,
+    KEYWORDS(f)
+#undef f
+    KEYWORD_COUNT
+} tag;
 
 struct literal {
     enum literal_tag {
@@ -60,14 +72,21 @@ struct token {
 #define f(x, str) TOKEN_##x,
         TOKENS(f)
 #undef f
+        TOKEN_COUNT
     } tag;
     struct literal lit;
 	struct file_loc loc;
 };
 
+struct keyword {
+    const char* name;
+    unsigned len;
+    enum token_tag tag;
+};
+
 struct lexer {
     struct log* log;
-    struct hash_table* keywords;
+    struct hash_table keywords;
     struct file_pos cur_pos;
     const char* data_end;
     const char* file_name;
@@ -80,6 +99,15 @@ struct parser {
     struct mem_pool* mem_pool;
     struct lexer lexer;
 };
+
+static inline const char* token_tag_to_string(enum token_tag tag) {
+    static const char* token_strs[] = {
+#define f(x, str) str,
+        TOKENS(f)
+#undef f
+    };
+    return token_strs[tag];
+}
 
 static inline bool is_utf8_multibyte_begin(uint8_t first_byte) {
     return first_byte & 0x80;
@@ -160,8 +188,22 @@ static inline struct token make_token(const struct lexer* lexer, const struct fi
     };
 }
 
-static inline size_t loc_length(const struct file_loc* loc) {
-    return loc->end.data_ptr - loc->begin.data_ptr;
+static bool compare_keywords(const void* left, const void* right) {
+    return
+        ((struct keyword*)left)->len == ((struct keyword*)right)->len &&
+        !memcmp(((struct keyword*)left)->name, ((struct keyword*)right)->name, ((struct keyword*)left)->len);
+}
+
+static void register_keywords(struct lexer* lexer) {
+#define f(x, str) \
+    must_succeed(insert_in_hash_table( \
+        &lexer->keywords, \
+        &(struct keyword) { .name = token_tag_to_string(TOKEN_##x), .len = strlen(str), .tag = TOKEN_##x }, \
+        hash_string(hash_init(), str), \
+        sizeof(struct keyword), \
+        compare_keywords));
+    KEYWORDS(f)
+#undef f
 }
 
 static struct token advance_lexer(struct lexer* lexer) {
@@ -175,12 +217,21 @@ static struct token advance_lexer(struct lexer* lexer) {
             continue;
         }
 
+        if (accept_char(lexer, '=')) return make_token(lexer, &lexer->cur_pos, TOKEN_EQUAL);
+        if (accept_char(lexer, ',')) return make_token(lexer, &lexer->cur_pos, TOKEN_COMMA);
+
         struct file_pos begin = lexer->cur_pos;
         if (next_char(lexer) == '_' || isalpha(next_char(lexer))) {
             eat_char(lexer);
             while (isalnum(next_char(lexer)) || next_char(lexer) == '_')
                 eat_char(lexer);
-            return make_token(lexer, &begin, TOKEN_IDENT);
+            size_t len = lexer->cur_pos.data_ptr - begin.data_ptr;
+            struct keyword* keyword = find_in_hash_table(
+                &lexer->keywords,
+                &(struct keyword) { .name = begin.data_ptr, .len = len },
+                hash_raw_bytes(hash_init(), begin.data_ptr, len),
+                sizeof(struct keyword), compare_keywords);
+            return make_token(lexer, &begin, keyword ? keyword->tag : TOKEN_IDENT);
         }
 
         eat_char(lexer);
@@ -191,7 +242,7 @@ static struct token advance_lexer(struct lexer* lexer) {
         };
         log_error(lexer->log, &loc, "unknown token '{sl}'", (union format_arg[]) {
             { .s = begin.data_ptr },
-            { .len = loc_length(&loc) }
+            { .len = lexer->cur_pos.data_ptr - begin.data_ptr }
         });
         return make_token(lexer, &begin, TOKEN_ERROR);
     }
@@ -204,11 +255,30 @@ static inline void eat_token(struct parser* parser, enum token_tag tag) {
 }
 
 static inline bool accept_token(struct parser* parser, enum token_tag tag) {
+    assert(tag != TOKEN_EOF && tag != TOKEN_ERROR);
     if (parser->ahead.tag == tag) {
         eat_token(parser, tag);
         return true;
     }
     return false;
+}
+
+static inline size_t loc_byte_span(const struct file_loc* loc) {
+    return loc->end.data_ptr - loc->begin.data_ptr;
+}
+
+static inline void expect_token(struct parser* parser, enum token_tag tag) {
+    if (!accept_token(parser, tag)) {
+        bool is_special = tag == TOKEN_IDENT || tag == TOKEN_LITERAL;
+        log_error(
+            parser->lexer.log, &parser->ahead.loc,
+            is_special ? "expected {s}, but got '{sl}'" : "expected '{s}', but got '{sl}'",
+            (union format_arg[]) {
+                { .s = token_tag_to_string(tag) },
+                { .s = parser->ahead.loc.begin.data_ptr },
+                { .len = loc_byte_span(&parser->ahead.loc) }
+            });
+    }
 }
 
 static inline const char* copy_string_from_token(struct parser* parser) {
@@ -230,6 +300,7 @@ static inline struct ir_node* make_ir_node(
         parser->mem_pool, sizeof(struct ir_node) + sizeof(struct ir_node*) * op_count);
     memset(node, 0, sizeof(struct ir_node));
     node->tag = tag;
+    node->op_count = op_count;
     node->debug = make_debug_info(parser->module, &(struct file_loc) {
         .file_name = parser->ahead.loc.file_name,
         .begin = *begin,
@@ -237,6 +308,8 @@ static inline struct ir_node* make_ir_node(
     }, name);
     return node;
 }
+
+static struct ir_node* parse(struct parser*);
 
 static struct ir_node* parse_var(struct parser* parser) {
     struct file_pos begin = parser->ahead.loc.begin;
@@ -253,17 +326,59 @@ static struct ir_node* parse_error(struct parser* parser) {
     return make_ir_node(parser, &begin, IR_NODE_ERROR, 0, NULL);
 }
 
+static inline struct ir_node* expect_var(struct parser* parser) {
+    if (parser->ahead.tag == TOKEN_IDENT)
+        return parse_var(parser);
+    log_error(
+        parser->lexer.log, &parser->ahead.loc,
+        "expected variable, but got '{sl}'",
+        (union format_arg[]) {
+            { .s = parser->ahead.loc.begin.data_ptr },
+            { .len = loc_byte_span(&parser->ahead.loc) }
+        });
+    return parse_error(parser);
+}
+
+static struct ir_node* parse_let(struct parser* parser) {
+    struct file_pos begin = parser->ahead.loc.begin;
+    eat_token(parser, TOKEN_LET);
+    struct ir_node** ops = NULL;
+    size_t op_count = 0, op_capacity = 0;
+    while (true) {
+        struct ir_node* var = expect_var(parser);
+        expect_token(parser, TOKEN_EQUAL);
+        struct ir_node* val = parse(parser);
+        if (op_count + 2 >= op_capacity) {
+            op_capacity = (op_capacity + 1) * 2;
+            ops = realloc_or_die(ops, sizeof(struct ir_node*) * op_capacity);
+        }
+        ops[op_count++] = var;
+        ops[op_count++] = val;
+        if (!accept_token(parser, TOKEN_COMMA))
+            break;
+    }
+    expect_token(parser, TOKEN_IN);
+    struct ir_node* body = parse(parser);
+    struct ir_node* let = make_ir_node(parser, &begin, IR_NODE_LET, op_count + 1, NULL);
+    memcpy(let->ops, ops, sizeof(struct ir_node*) * op_count);
+    free(ops);
+    let->ops[op_count] = body;
+    return let;
+}
+
 static struct ir_node* parse(struct parser* parser) {
     switch (parser->ahead.tag) {
         case TOKEN_IDENT:
             return parse_var(parser);
+        case TOKEN_LET:
+            return parse_let(parser);
         default:
             log_error(
                 parser->lexer.log, &parser->ahead.loc,
-                "expected top-level expression, but got '{sl}'",
+                "expected expression, but got '{sl}'",
                 (union format_arg[]) {
                     { .s = parser->ahead.loc.begin.data_ptr },
-                    { .len = loc_length(&parser->ahead.loc) }
+                    { .len = loc_byte_span(&parser->ahead.loc) }
                 });
             return parse_error(parser);
     }
@@ -287,12 +402,16 @@ struct ir_node* parse_ir(
         .lexer = (struct lexer) {
             .log = log,
             .cur_pos = begin,
+            .keywords = new_hash_table(KEYWORD_COUNT, sizeof(struct keyword)),
             .data_end = data_ptr + data_size,
             .file_name = file_name
         },
         .module = module
     };
+    register_keywords(&parser.lexer);
     parser.ahead = advance_lexer(&parser.lexer);
     parser.prev_end = begin;
-    return parse(&parser);
+    struct ir_node* node = parse(&parser);
+    free_hash_table(&parser.lexer.keywords);
+    return node;
 }

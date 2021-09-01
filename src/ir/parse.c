@@ -281,6 +281,17 @@ static inline void expect_token(struct parser* parser, enum token_tag tag) {
     }
 }
 
+static inline void report_generic_error(struct parser* parser, const char* msg) {
+    log_error(
+        parser->lexer.log, &parser->ahead.loc,
+        "expected {s}, but got '{sl}'",
+        (union format_arg[]) {
+            { .s = msg },
+            { .s = parser->ahead.loc.begin.data_ptr },
+            { .len = loc_byte_span(&parser->ahead.loc) }
+        });
+}
+
 static inline const char* copy_string_from_token(struct parser* parser) {
     size_t len = parser->ahead.loc.end.data_ptr - parser->ahead.loc.begin.data_ptr;
     char* str = alloc_from_mem_pool(parser->mem_pool, len + 1);
@@ -326,26 +337,17 @@ static struct ir_node* parse_error(struct parser* parser) {
     return make_ir_node(parser, &begin, IR_NODE_ERROR, 0, NULL);
 }
 
-static inline struct ir_node* expect_var(struct parser* parser) {
-    if (parser->ahead.tag == TOKEN_IDENT)
-        return parse_var(parser);
-    log_error(
-        parser->lexer.log, &parser->ahead.loc,
-        "expected variable, but got '{sl}'",
-        (union format_arg[]) {
-            { .s = parser->ahead.loc.begin.data_ptr },
-            { .len = loc_byte_span(&parser->ahead.loc) }
-        });
-    return parse_error(parser);
-}
-
 static struct ir_node* parse_let(struct parser* parser) {
     struct file_pos begin = parser->ahead.loc.begin;
     eat_token(parser, TOKEN_LET);
     struct ir_node** ops = NULL;
     size_t op_count = 0, op_capacity = 0;
     while (true) {
-        struct ir_node* var = expect_var(parser);
+        if (parser->ahead.tag != TOKEN_IDENT) {
+            report_generic_error(parser, "variable name");
+            break;
+        }
+        struct ir_node* var = parse_var(parser);
         expect_token(parser, TOKEN_EQUAL);
         struct ir_node* val = parse(parser);
         if (op_count + 2 >= op_capacity) {
@@ -373,13 +375,7 @@ static struct ir_node* parse(struct parser* parser) {
         case TOKEN_LET:
             return parse_let(parser);
         default:
-            log_error(
-                parser->lexer.log, &parser->ahead.loc,
-                "expected expression, but got '{sl}'",
-                (union format_arg[]) {
-                    { .s = parser->ahead.loc.begin.data_ptr },
-                    { .len = loc_byte_span(&parser->ahead.loc) }
-                });
+            report_generic_error(parser, "expression");
             return parse_error(parser);
     }
 }

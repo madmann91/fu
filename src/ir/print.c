@@ -25,7 +25,7 @@ void print_ir(struct format_state* state, const struct ir_node* node) {
             print_ir(state, let_body(node));
             break;
         case IR_NODE_VAR:
-            format(state, "{s}_{u64}", (union format_arg[]) {
+            format(state, "{s}#{u64}", (union format_arg[]) {
                 { .s = node->debug && node->debug->name ? node->debug->name : "" },
                 { .u64 = node->data.var_index }
             });

@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <inttypes.h>
 #include <string.h>
 #include <ctype.h>
 
@@ -31,8 +32,11 @@
     f(SEMICOLON, ";") \
     f(COMMA, ",") \
     f(PLUS, "+") \
+    f(SLASH, "/") \
+    f(BACK_SLASH, "\\") \
     f(MINUS, "-") \
     f(STAR, "*") \
+    f(HASH, "#") \
     f(VERT_BAR, "|") \
     f(EQUAL, "=")
 
@@ -58,8 +62,8 @@ enum {
 
 struct literal {
     enum literal_tag {
-        FLOAT_LITERAL,
-        INT_LITERAL
+        LITERAL_FLOAT,
+        LITERAL_INT
     } tag;
     union {
         double float_val;
@@ -177,6 +181,24 @@ static inline void eat_single_line_comment(struct lexer* lexer) {
         eat_char(lexer);
 }
 
+static inline void eat_multiline_comment(struct lexer* lexer, const struct file_pos* begin) {
+    while (true) {
+        while (!is_eof_reached(lexer) && next_char(lexer) != '*')
+            eat_char(lexer);
+        if (is_eof_reached(lexer)) {
+            struct file_loc loc = {
+                .file_name = lexer->file_name,
+                .begin = *begin,
+                .end = lexer->cur_pos
+            };
+            log_error(lexer->log, &loc, "unterminated multiline comment", NULL);
+            break;
+        }
+        if (accept_char(lexer, '*') && accept_char(lexer, '/'))
+            break;
+    }
+}
+
 static inline struct token make_token(const struct lexer* lexer, const struct file_pos* begin, enum token_tag tag) {
     return (struct token) {
         .tag = tag,
@@ -212,15 +234,22 @@ static struct token advance_lexer(struct lexer* lexer) {
         if (is_eof_reached(lexer))
             return make_token(lexer, &lexer->cur_pos, TOKEN_EOF);
 
-        if (accept_char(lexer, '#')) {
-            eat_single_line_comment(lexer);
-            continue;
-        }
-
-        if (accept_char(lexer, '=')) return make_token(lexer, &lexer->cur_pos, TOKEN_EQUAL);
-        if (accept_char(lexer, ',')) return make_token(lexer, &lexer->cur_pos, TOKEN_COMMA);
-
         struct file_pos begin = lexer->cur_pos;
+
+        if (accept_char(lexer, '/')) {
+            if (accept_char(lexer, '/')) {
+                eat_single_line_comment(lexer);
+                continue;
+            } else if (accept_char(lexer, '*')) {
+                eat_multiline_comment(lexer, &begin);
+                continue;
+            }
+            return make_token(lexer, &begin, TOKEN_SLASH);
+        }
+        if (accept_char(lexer, '=')) return make_token(lexer, &begin, TOKEN_EQUAL);
+        if (accept_char(lexer, '#')) return make_token(lexer, &begin, TOKEN_HASH);
+        if (accept_char(lexer, ',')) return make_token(lexer, &begin, TOKEN_COMMA);
+
         if (next_char(lexer) == '_' || isalpha(next_char(lexer))) {
             eat_char(lexer);
             while (isalnum(next_char(lexer)) || next_char(lexer) == '_')
@@ -232,6 +261,32 @@ static struct token advance_lexer(struct lexer* lexer) {
                 hash_raw_bytes(hash_init(), begin.data_ptr, len),
                 sizeof(struct keyword), compare_keywords);
             return make_token(lexer, &begin, keyword ? keyword->tag : TOKEN_IDENT);
+        }
+
+        if (isdigit(next_char(lexer))) {
+            while (isdigit(next_char(lexer)))
+                eat_char(lexer);
+            bool has_dot = false;
+            if (accept_char(lexer, '.')) {
+                has_dot = true;
+                while (isdigit(next_char(lexer)))
+                    eat_char(lexer);
+            }
+            if (accept_char(lexer, 'e')) {
+                if (!accept_char(lexer, '+'))
+                    accept_char(lexer, '-');
+                while (isdigit(next_char(lexer)))
+                    eat_char(lexer);
+            }
+            struct token token = make_token(lexer, &begin, TOKEN_LITERAL);
+            if (has_dot) {
+                token.lit.tag = LITERAL_FLOAT;
+                token.lit.data.float_val = strtod(begin.data_ptr, NULL);
+            } else {
+                token.lit.tag = LITERAL_INT;
+                token.lit.data.int_val = strtoumax(begin.data_ptr, NULL, 10);
+            }
+            return token;
         }
 
         eat_char(lexer);
@@ -248,10 +303,14 @@ static struct token advance_lexer(struct lexer* lexer) {
     }
 }
 
-static inline void eat_token(struct parser* parser, enum token_tag tag) {
-    assert(parser->ahead.tag == tag);
+static inline void skip_token(struct parser* parser) {
     parser->prev_end = parser->ahead.loc.end;
     parser->ahead = advance_lexer(&parser->lexer);
+}
+
+static inline void eat_token(struct parser* parser, enum token_tag tag) {
+    assert(parser->ahead.tag == tag);
+    skip_token(parser);
 }
 
 static inline bool accept_token(struct parser* parser, enum token_tag tag) {
@@ -284,7 +343,9 @@ static inline void expect_token(struct parser* parser, enum token_tag tag) {
 static inline void report_generic_error(struct parser* parser, const char* msg) {
     log_error(
         parser->lexer.log, &parser->ahead.loc,
-        "expected {s}, but got '{sl}'",
+        parser->ahead.tag == TOKEN_EOF
+            ? "expected {s}, but got end of file"
+            : "expected {s}, but got '{sl}'",
         (union format_arg[]) {
             { .s = msg },
             { .s = parser->ahead.loc.begin.data_ptr },
@@ -322,19 +383,29 @@ static inline struct ir_node* make_ir_node(
 
 static struct ir_node* parse(struct parser*);
 
-static struct ir_node* parse_var(struct parser* parser) {
-    struct file_pos begin = parser->ahead.loc.begin;
-    const char* name = copy_string_from_token(parser);
-    eat_token(parser, TOKEN_IDENT);
-    struct ir_node* var = make_ir_node(parser, &begin, IR_NODE_VAR, 0, name);
-    var->data.var_index = 0;
-    return var;
-}
-
 static struct ir_node* parse_error(struct parser* parser) {
     struct file_pos begin = parser->ahead.loc.begin;
-    eat_token(parser, parser->ahead.tag);
+    skip_token(parser);
     return make_ir_node(parser, &begin, IR_NODE_ERROR, 0, NULL);
+}
+
+static struct ir_node* parse_var(struct parser* parser) {
+    struct file_pos begin = parser->ahead.loc.begin;
+    const char* name = NULL;
+    if (parser->ahead.tag == TOKEN_IDENT) {
+        name = copy_string_from_token(parser);
+        eat_token(parser, TOKEN_IDENT);
+    }
+    struct ir_node* var = make_ir_node(parser, &begin, IR_NODE_VAR, 0, name);
+    expect_token(parser, TOKEN_HASH);
+    if (parser->ahead.tag == TOKEN_LITERAL && parser->ahead.lit.tag == LITERAL_INT) {
+        var->data.var_index = parser->ahead.lit.data.int_val;
+        eat_token(parser, TOKEN_LITERAL);
+    } else {
+        report_generic_error(parser, "variable index");
+        return parse_error(parser);
+    }
+    return var;
 }
 
 static struct ir_node* parse_let(struct parser* parser) {
@@ -343,7 +414,9 @@ static struct ir_node* parse_let(struct parser* parser) {
     struct ir_node** ops = NULL;
     size_t op_count = 0, op_capacity = 0;
     while (true) {
-        if (parser->ahead.tag != TOKEN_IDENT) {
+        if (parser->ahead.tag != TOKEN_IDENT &&
+            parser->ahead.tag != TOKEN_HASH)
+        {
             report_generic_error(parser, "variable name");
             break;
         }
@@ -370,6 +443,7 @@ static struct ir_node* parse_let(struct parser* parser) {
 
 static struct ir_node* parse(struct parser* parser) {
     switch (parser->ahead.tag) {
+        case TOKEN_HASH:
         case TOKEN_IDENT:
             return parse_var(parser);
         case TOKEN_LET:

@@ -1,12 +1,12 @@
+#include "core/alloc.h"
+#include "core/format.h"
+
 #include <assert.h>
 #include <stddef.h>
 #include <inttypes.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#include "core/alloc.h"
-#include "core/format.h"
 
 #define MAX_FORMAT_CHARS 64
 #define DEFAULT_BUF_CAPACITY 1024

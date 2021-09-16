@@ -2,6 +2,7 @@
 #define FU_CORE_UTILS_H
 
 #include <stdbool.h>
+#include <assert.h>
 
 #define must_succeed(...) \
     { \

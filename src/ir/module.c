@@ -1,36 +1,36 @@
-#include <stdlib.h>
-#include <string.h>
-#include <assert.h>
-
 #include "core/hash_table.h"
 #include "core/hash.h"
 #include "core/alloc.h"
 #include "core/mem_pool.h"
+#include "core/string_pool.h"
 #include "core/utils.h"
 #include "ir/module.h"
 #include "ir/node.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
 
 #define DEFAULT_MODULE_CAPACITY 256
 
 struct ir_module {
     struct hash_table nodes;
-    struct hash_table strings;
     struct hash_table debug;
     struct mem_pool mem_pool;
+    struct string_pool* string_pool;
 };
 
-struct ir_module* new_ir_module(void) {
+struct ir_module* new_ir_module(struct string_pool* string_pool) {
     struct ir_module* module = malloc_or_die(sizeof(struct ir_module));
     module->nodes    = new_hash_table(DEFAULT_MODULE_CAPACITY, sizeof(struct ir_node*));
-    module->strings  = new_hash_table(DEFAULT_MODULE_CAPACITY, sizeof(char*));
     module->debug    = new_hash_table(DEFAULT_MODULE_CAPACITY, sizeof(struct debug_info*));
     module->mem_pool = new_mem_pool();
+    module->string_pool = string_pool;
     return module;
 }
 
 void free_ir_module(struct ir_module* module) {
     free_hash_table(&module->nodes);
-    free_hash_table(&module->strings);
     free_hash_table(&module->debug);
     free_mem_pool(&module->mem_pool);
     free(module);
@@ -84,34 +84,14 @@ static const struct debug_info* insert_debug_info(struct ir_module* module, cons
     return new_debug;
 }
 
-static bool compare_strings(const void* left, const void* right) {
-    return !strcmp(*(char**)left, *(char**)right);
-}
-
-static const char* insert_string(struct ir_module* module, const char* str) {
-    if (!str)
-        return NULL;
-    uint32_t hash = hash_string(hash_init(), str);
-    char** str_ptr =
-        find_in_hash_table(&module->strings, &str, hash, sizeof(char*), compare_strings);
-    if (str_ptr)
-        return *str_ptr;
-    size_t len = strlen(str);
-    char* new_str = alloc_from_mem_pool(&module->mem_pool, len + 1);
-    memcpy(new_str, str, len);
-    new_str[len] = 0;
-    must_succeed(insert_in_hash_table(&module->strings, &new_str, hash, sizeof(char*), compare_strings));
-    return new_str;
-}
-
 const struct debug_info* make_debug_info(struct ir_module* module, const struct file_loc* loc, const char* name) {
     return insert_debug_info(module, &(struct debug_info) {
         .loc = {
-            .file_name = insert_string(module, loc->file_name),
+            .file_name = make_unique_string(module->string_pool, loc->file_name),
             .begin = loc->begin,
             .end = loc->end
         },
-        .name = insert_string(module, name)
+        .name = make_unique_string(module->string_pool, name)
     });    
 }
 

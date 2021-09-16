@@ -1,7 +1,7 @@
-#include <string.h>
-
 #include "core/hash.h"
 #include "ir/node.h"
+
+#include <string.h>
 
 uint32_t hash_ir_node(const struct ir_node* node) {
     uint32_t h = hash_init();

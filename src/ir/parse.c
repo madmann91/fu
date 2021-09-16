@@ -1,11 +1,3 @@
-#include <stdlib.h>
-#include <stdint.h>
-#include <assert.h>
-#include <stdbool.h>
-#include <inttypes.h>
-#include <string.h>
-#include <ctype.h>
-
 #include "core/utils.h"
 #include "core/alloc.h"
 #include "core/mem_pool.h"
@@ -15,6 +7,14 @@
 #include "ir/parse.h"
 #include "ir/node.h"
 #include "ir/module.h"
+
+#include <stdlib.h>
+#include <stdint.h>
+#include <assert.h>
+#include <stdbool.h>
+#include <inttypes.h>
+#include <string.h>
+#include <ctype.h>
 
 #define SYMBOLS(f) \
     f(L_PAREN, "(") \
@@ -237,15 +237,12 @@ static struct token advance_lexer(struct lexer* lexer) {
         struct file_pos begin = lexer->cur_pos;
 
         if (accept_char(lexer, '/')) {
-            if (accept_char(lexer, '/')) {
-                eat_single_line_comment(lexer);
-                continue;
-            } else if (accept_char(lexer, '*')) {
-                eat_multiline_comment(lexer, &begin);
-                continue;
-            }
-            return make_token(lexer, &begin, TOKEN_SLASH);
+            if (accept_char(lexer, '/')) eat_single_line_comment(lexer);
+            else if (accept_char(lexer, '*')) eat_multiline_comment(lexer, &begin);
+            else return make_token(lexer, &begin, TOKEN_SLASH);
+            continue;
         }
+
         if (accept_char(lexer, '=')) return make_token(lexer, &begin, TOKEN_EQUAL);
         if (accept_char(lexer, '#')) return make_token(lexer, &begin, TOKEN_HASH);
         if (accept_char(lexer, ',')) return make_token(lexer, &begin, TOKEN_COMMA);

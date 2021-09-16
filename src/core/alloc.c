@@ -1,7 +1,7 @@
+#include "core/alloc.h"
+
 #include <stdlib.h>
 #include <stdio.h>
-
-#include "core/alloc.h"
 
 static inline void die(const char* msg) {
     fputs(msg, stderr);

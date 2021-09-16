@@ -1,15 +1,13 @@
-#include <assert.h>
-
 #include "ir/print.h"
 #include "ir/node.h"
 #include "core/format.h"
+
+#include <assert.h>
 
 static const struct format_style error_style   = { .style = STYLE_BOLD, .color = COLOR_RED  };
 static const struct format_style keyword_style = { .style = STYLE_BOLD, .color = COLOR_BLUE };
 
 void print_ir(struct format_state* state, const struct ir_node* node) {
-    // TODO
-    (void)state;
     switch (node->tag) {
         case IR_NODE_LET:
             format(state, "{$}let{$} ", (union format_arg[]) { { .style = keyword_style }, { .style = reset_style } });

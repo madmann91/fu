@@ -1,10 +1,10 @@
-#include <stdlib.h>
-#include <string.h>
-#include <assert.h>
-
 #include "core/hash_table.h"
 #include "core/primes.h"
 #include "core/alloc.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
 
 #define OCCUPIED_MASK UINT32_C(0x80000000)
 #define MAX_LOAD_FACTOR 70//%

@@ -1,13 +1,14 @@
-#include <stdlib.h>
-#include <string.h>
-#include <stdbool.h>
-
 #include "core/log.h"
 #include "core/alloc.h"
 #include "core/mem_pool.h"
+#include "core/string_pool.h"
 #include "ir/parse.h"
 #include "ir/print.h"
 #include "ir/module.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
 
 struct options {
     unsigned opt_level;
@@ -125,7 +126,8 @@ int main(int argc, char** argv) {
         .opt_level  = 0    
     };
 
-    struct ir_module* module = new_ir_module();
+    struct string_pool string_pool = new_string_pool();
+    struct ir_module* module = new_ir_module(&string_pool);
 
     if (!parse_options(argc, argv, &options))
         goto failure;
@@ -142,6 +144,7 @@ failure:
     status = EXIT_FAILURE;
 success:
     free_ir_module(module);
+    free_string_pool(&string_pool);
     print_format_bufs(global_log.state.first_buf, stdout);
     free_format_bufs(global_log.state.first_buf);
     return status;

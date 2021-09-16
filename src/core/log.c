@@ -1,6 +1,6 @@
-#include <string.h>
-
 #include "core/log.h"
+
+#include <string.h>
 
 enum log_msg_type {
     LOG_ERROR,

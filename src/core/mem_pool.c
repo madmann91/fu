@@ -1,8 +1,8 @@
-#include <assert.h>
-#include <stdlib.h>
-
 #include "core/mem_pool.h"
 #include "core/alloc.h"
+
+#include <assert.h>
+#include <stdlib.h>
 
 struct mem_block {
     size_t size;

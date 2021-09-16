@@ -4,6 +4,7 @@
 struct ir_module;
 struct ir_node;
 struct file_loc;
+struct string_pool;
 
 /*
  * A module is just a hashed collection of nodes.
@@ -11,7 +12,7 @@ struct file_loc;
  * allowing perfect re-use, and automatic common-expression elimination.
  */
 
-struct ir_module* new_ir_module(void);
+struct ir_module* new_ir_module(struct string_pool*);
 void free_ir_module(struct ir_module*);
 
 const struct debug_info* make_debug_info(struct ir_module*, const struct file_loc*, const char* name);

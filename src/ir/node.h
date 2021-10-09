@@ -7,26 +7,28 @@
 
 #include "core/log.h"
 
-#define IR_NODE_TAGS(f) \
-    f(VAR) \
-    f(LITERAL) \
-    f(LET) \
-    f(APPLY) \
-    f(FUN) \
-    f(MATCH) \
-    f(INSERT) \
-    f(EXTRACT) \
+#define IR_KIND_LIST(f) \
+    f(STAR) \
+    f(NAT)
+
+#define IR_TYPE_LIST(f) \
+    f(VEC) \
+    f(ARRAY) \
     f(TUPLE) \
     f(OPTION) \
-    f(POINTER) \
-    f(INTEGER) \
-    f(FLOAT) \
-    f(PRODUCT) \
-    f(SUM) \
-    f(PI) \
-    f(STAR) \
-    f(NAT) \
-    f(ERROR)
+    f(FUNC) \
+    f(INT) \
+    f(FLOAT)
+
+#define IR_NODE_LIST(f) \
+    f(VAR) \
+    f(CONST) \
+    f(TUPLE) \
+    f(OPTION) \
+    f(EXTRACT) \
+    f(INSERT) \
+    f(FUNC) \
+    f(LET)
 
 struct debug_info {
     struct file_loc loc;
@@ -34,15 +36,35 @@ struct debug_info {
 };
 
 enum ir_node_tag {
-#define f(t) IR_NODE_##t,   
-    IR_NODE_TAGS(f)
+#define f(t) IR_NODE_##t,
+#define g(t) IR_TYPE_##t,
+#define h(t) IR_KIND_##t,
+    IR_KIND_LIST(h)
+    IR_TYPE_LIST(g)
+    IR_NODE_LIST(f)
+#undef h
+#undef g
 #undef f
 };
 
+enum fp_math_mode {
+    FP_NO_NANS     = 0x01,
+    FP_ONLY_FINITE = 0x01,
+    FP_COMMUTE     = 0x02,
+    FP_DISTRIBUTE  = 0x04,
+
+    FP_FAST = FP_NO_NANS | FP_ONLY_FINITE | FP_COMMUTE | FP_DISTRIBUTE,
+    FP_STRICT = 0
+};
+
+typedef uint64_t ir_uint_t;
+typedef double   ir_float_t;
+
 union ir_node_data {
-    uint64_t int_val;
-    double float_val;
+    ir_uint_t int_val;
+    ir_float_t float_val;
     size_t var_index;
+    unsigned fp_math;
 };
 
 #define IR_NODE_FIELDS \
@@ -58,17 +80,22 @@ struct ir_node {
     const struct ir_node* ops[];
 };
 
-uint32_t hash_ir_node(const struct ir_node*);
-bool is_same_node(const struct ir_node*, const struct ir_node*);
-bool is_valid_pattern(const struct ir_node*);
+typedef const struct ir_node* ir_node_t;
+typedef ir_node_t ir_type_t;
+typedef ir_node_t ir_kind_t;
 
-struct let_binding {
-    const struct ir_node* var;
-    const struct ir_node* val;
-};
+ir_type_t to_type(ir_node_t);
+ir_kind_t to_kind(ir_node_t);
 
-size_t let_bindings_count(const struct ir_node*);
-struct let_binding let_binding(const struct ir_node*, size_t);
-const struct ir_node* let_body(const struct ir_node*);
+bool is_type(ir_node_t);
+bool is_kind(ir_node_t);
+bool is_valid_pattern(ir_node_t);
+bool is_tied_var(ir_node_t);
+bool is_untied_var(ir_node_t);
+
+ir_node_t get_tied_val(ir_node_t);
+ir_node_t get_extract_or_insert_val(ir_node_t);
+ir_node_t get_extract_or_insert_index(ir_node_t);
+ir_node_t get_insert_elem(ir_node_t);
 
 #endif

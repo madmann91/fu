@@ -24,7 +24,7 @@ static bool compare_strings(const void* left, const void* right) {
     return !strcmp(*(char**)left, *(char**)right);
 }
 
-const char* make_unique_string(struct string_pool* string_pool, const char* str) {
+const char* make_string(struct string_pool* string_pool, const char* str) {
     if (!str)
         return NULL;
     uint32_t hash = hash_string(hash_init(), str);

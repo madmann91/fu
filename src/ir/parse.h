@@ -8,11 +8,11 @@ struct ir_module;
 struct log;
 struct mem_pool;
 
-struct ir_node* parse_ir(
+const struct ir_node* parse_ir(
     struct log* log,
     struct ir_module* module,
     struct mem_pool* mem_pool,
-    const char* data_ptr,
+    const char* data,
     size_t data_size,
     const char* file_name);
 

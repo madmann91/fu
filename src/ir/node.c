@@ -1,32 +1,27 @@
 #include "core/hash.h"
 #include "ir/node.h"
 
-#include <string.h>
+#include <assert.h>
 
-uint32_t hash_ir_node(const struct ir_node* node) {
-    uint32_t h = hash_init();
-    h = hash_uint32(h, node->tag);
-    h = hash_raw_bytes(h, &node->data, node->data_size);
-    for (size_t i = 0; i < node->op_count; ++i)
-        h = hash_pointer(h, node->ops[i]);
-    return h;
+ir_type_t to_type(ir_node_t node) {
+    assert(is_type(node));
+    return node;
 }
 
-bool is_same_node(const struct ir_node* left, const struct ir_node* right) {
-    if (left->tag != right->tag ||
-        left->data_size != right->data_size ||
-        left->op_count != right->op_count)
-        return false;
-    if (memcmp(&left->data, &right->data, left->data_size))
-        return false;
-    for (size_t i = 0, n = left->op_count; i < n; ++i) {
-        if (left->ops[i] != right->ops[i])
-            return false;
-    }
-    return true;
+ir_kind_t to_kind(ir_node_t node) {
+    assert(is_kind(node));
+    return node;
 }
 
-bool is_valid_pattern(const struct ir_node* node) {
+bool is_type(ir_node_t node) {
+    return node->type->tag == IR_KIND_STAR;
+}
+
+bool is_kind(ir_node_t node) {
+    return node->type == NULL;
+}
+
+bool is_valid_pattern(ir_node_t node) {
     switch (node->tag) {
         case IR_NODE_VAR:
         case IR_NODE_TUPLE:
@@ -41,17 +36,30 @@ bool is_valid_pattern(const struct ir_node* node) {
     }
 }
 
-size_t let_bindings_count(const struct ir_node* let) {
-    return let->op_count / 2;
+bool is_tied_var(ir_node_t node) {
+    return node->tag == IR_NODE_VAR && node->op_count == 1;
 }
 
-struct let_binding let_binding(const struct ir_node* let, size_t i) {
-    return (struct let_binding) {
-        .var = let->ops[i * 2 + 0],
-        .val = let->ops[i * 2 + 1]
-    };
+bool is_untied_var(ir_node_t node) {
+    return node->tag == IR_NODE_VAR && node->op_count == 0;
 }
 
-const struct ir_node* let_body(const struct ir_node* let) {
-    return let->ops[let->op_count - 1];
+ir_node_t get_tied_val(ir_node_t node) {
+    assert(is_tied_var(node));
+    return node->ops[0];
+}
+
+ir_node_t get_extract_or_insert_val(ir_node_t node) {
+    assert(node->tag == IR_NODE_INSERT || node->tag == IR_NODE_EXTRACT);
+    return node->ops[0];
+}
+
+ir_node_t get_extract_or_insert_index(ir_node_t node) {
+    assert(node->tag == IR_NODE_INSERT || node->tag == IR_NODE_EXTRACT);
+    return node->ops[1];
+}
+
+ir_node_t get_insert_elem(ir_node_t node) {
+    assert(node->tag == IR_NODE_INSERT);
+    return node->ops[2];
 }

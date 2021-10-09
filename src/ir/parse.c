@@ -92,7 +92,8 @@ struct lexer {
     struct log* log;
     struct hash_table keywords;
     struct file_pos cur_pos;
-    const char* data_end;
+    const char* data;
+    size_t data_size;
     const char* file_name;
 };
 
@@ -139,26 +140,28 @@ static inline size_t eat_utf8_bytes(const uint8_t* ptr, const uint8_t* end) {
 }
 
 static inline bool is_eof_reached(const struct lexer* lexer) {
-    return lexer->cur_pos.data_ptr >= lexer->data_end;
+    return lexer->cur_pos.byte_offset >= lexer->data_size;
 }
 
 static inline char next_char(const struct lexer* lexer) {
     assert(!is_eof_reached(lexer));
-    return *lexer->cur_pos.data_ptr;
+    return lexer->data[lexer->cur_pos.byte_offset];
 }
 
 static void eat_char(struct lexer* lexer) {
     assert(!is_eof_reached(lexer));
     if (is_utf8_multibyte_begin(next_char(lexer))) {
-        size_t n = eat_utf8_bytes((const uint8_t*)lexer->cur_pos.data_ptr, (const uint8_t*)lexer->data_end);
-        lexer->cur_pos.data_ptr += n;
+        size_t n = eat_utf8_bytes(
+            (const uint8_t*)(lexer->data + lexer->cur_pos.byte_offset),
+            (const uint8_t*)(lexer->data + lexer->data_size));
+        lexer->cur_pos.byte_offset += n;
         lexer->cur_pos.col++;
     } else if (next_char(lexer) == '\n') {
-        lexer->cur_pos.data_ptr++;
+        lexer->cur_pos.byte_offset++;
         lexer->cur_pos.col = 1;
         lexer->cur_pos.row++;
     } else {
-        lexer->cur_pos.data_ptr++;
+        lexer->cur_pos.byte_offset++;
         lexer->cur_pos.col++;
     }
 }
@@ -251,11 +254,11 @@ static struct token advance_lexer(struct lexer* lexer) {
             eat_char(lexer);
             while (isalnum(next_char(lexer)) || next_char(lexer) == '_')
                 eat_char(lexer);
-            size_t len = lexer->cur_pos.data_ptr - begin.data_ptr;
+            size_t len = lexer->cur_pos.byte_offset - begin.byte_offset;
             struct keyword* keyword = find_in_hash_table(
                 &lexer->keywords,
-                &(struct keyword) { .name = begin.data_ptr, .len = len },
-                hash_raw_bytes(hash_init(), begin.data_ptr, len),
+                &(struct keyword) { .name = lexer->data + begin.byte_offset, .len = len },
+                hash_raw_bytes(hash_init(), lexer->data + begin.byte_offset, len),
                 sizeof(struct keyword), compare_keywords);
             return make_token(lexer, &begin, keyword ? keyword->tag : TOKEN_IDENT);
         }
@@ -278,10 +281,10 @@ static struct token advance_lexer(struct lexer* lexer) {
             struct token token = make_token(lexer, &begin, TOKEN_LITERAL);
             if (has_dot) {
                 token.lit.tag = LITERAL_FLOAT;
-                token.lit.data.float_val = strtod(begin.data_ptr, NULL);
+                token.lit.data.float_val = strtod(lexer->data + begin.byte_offset, NULL);
             } else {
                 token.lit.tag = LITERAL_INT;
-                token.lit.data.int_val = strtoumax(begin.data_ptr, NULL, 10);
+                token.lit.data.int_val = strtoumax(lexer->data + begin.byte_offset, NULL, 10);
             }
             return token;
         }
@@ -293,8 +296,8 @@ static struct token advance_lexer(struct lexer* lexer) {
             .end = lexer->cur_pos
         };
         log_error(lexer->log, &loc, "unknown token '{sl}'", (union format_arg[]) {
-            { .s = begin.data_ptr },
-            { .len = lexer->cur_pos.data_ptr - begin.data_ptr }
+            { .s = lexer->data + begin.byte_offset },
+            { .len = lexer->cur_pos.byte_offset - begin.byte_offset }
         });
         return make_token(lexer, &begin, TOKEN_ERROR);
     }
@@ -319,8 +322,8 @@ static inline bool accept_token(struct parser* parser, enum token_tag tag) {
     return false;
 }
 
-static inline size_t loc_byte_span(const struct file_loc* loc) {
-    return loc->end.data_ptr - loc->begin.data_ptr;
+static inline size_t byte_span(const struct file_loc* loc) {
+    return loc->end.byte_offset - loc->begin.byte_offset;
 }
 
 static inline void expect_token(struct parser* parser, enum token_tag tag) {
@@ -331,114 +334,120 @@ static inline void expect_token(struct parser* parser, enum token_tag tag) {
             is_special ? "expected {s}, but got '{sl}'" : "expected '{s}', but got '{sl}'",
             (union format_arg[]) {
                 { .s = token_tag_to_string(tag) },
-                { .s = parser->ahead.loc.begin.data_ptr },
-                { .len = loc_byte_span(&parser->ahead.loc) }
+                { .s = parser->lexer.data + parser->ahead.loc.begin.byte_offset },
+                { .len = byte_span(&parser->ahead.loc) }
             });
     }
 }
 
-static inline void report_generic_error(struct parser* parser, const char* msg) {
+static inline const char* copy_string_from_token(struct parser* parser) {
+    size_t len = byte_span(&parser->ahead.loc);
+    char* str = alloc_from_mem_pool(parser->mem_pool, len + 1);
+    memcpy(str, parser->lexer.data + parser->ahead.loc.begin.byte_offset, len);
+    str[len] = 0;
+    return str;
+}
+
+static inline struct file_loc make_loc(const struct parser* parser, const struct file_pos* begin) {
+    return (struct file_loc) {
+        .file_name = parser->lexer.file_name,
+        .begin = *begin,
+        .end = parser->ahead.loc.end
+    };
+}
+
+static inline ir_node_t find_var(const struct parser* parser, size_t var_index, const struct file_pos* begin) {
+    // TODO
+    return NULL;
+}
+
+static ir_node_t parse_node(struct parser*);
+static ir_type_t parse_type(struct parser*);
+
+static const char* parse_ident(struct parser* parser) {
+    if (parser->ahead.tag != TOKEN_IDENT)
+        return NULL;
+    const char* name = copy_string_from_token(parser);
+    eat_token(parser, TOKEN_IDENT);
+    return name;
+}
+
+static ir_node_t parse_error_at(struct parser* parser, const char* msg, const struct file_loc* loc) {
     log_error(
-        parser->lexer.log, &parser->ahead.loc,
+        parser->lexer.log, loc,
         parser->ahead.tag == TOKEN_EOF
             ? "expected {s}, but got end of file"
             : "expected {s}, but got '{sl}'",
         (union format_arg[]) {
             { .s = msg },
-            { .s = parser->ahead.loc.begin.data_ptr },
-            { .len = loc_byte_span(&parser->ahead.loc) }
+            { .s = parser->lexer.data + parser->ahead.loc.begin.byte_offset },
+            { .len = byte_span(&parser->ahead.loc) }
         });
+    return NULL;
 }
 
-static inline const char* copy_string_from_token(struct parser* parser) {
-    size_t len = parser->ahead.loc.end.data_ptr - parser->ahead.loc.begin.data_ptr;
-    char* str = alloc_from_mem_pool(parser->mem_pool, len + 1);
-    memcpy(str, parser->ahead.loc.begin.data_ptr, len);
-    str[len] = 0;
-    return str;
+static ir_node_t parse_error(struct parser* parser, const char* msg) {
+    return parse_error_at(parser, msg, &parser->ahead.loc);
 }
 
-static inline struct ir_node* make_ir_node(
-    struct parser* parser,
-    const struct file_pos* begin,
-    enum ir_node_tag tag,
-    size_t op_count,
-    const char* name)
-{
-    struct ir_node* node = alloc_from_mem_pool(
-        parser->mem_pool, sizeof(struct ir_node) + sizeof(struct ir_node*) * op_count);
-    memset(node, 0, sizeof(struct ir_node));
-    node->tag = tag;
-    node->op_count = op_count;
-    node->debug = make_debug_info(parser->module, &(struct file_loc) {
-        .file_name = parser->ahead.loc.file_name,
-        .begin = *begin,
-        .end = parser->prev_end
-    }, name);
-    return node;
-}
-
-static struct ir_node* parse(struct parser*);
-
-static struct ir_node* parse_error(struct parser* parser) {
-    struct file_pos begin = parser->ahead.loc.begin;
-    skip_token(parser);
-    return make_ir_node(parser, &begin, IR_NODE_ERROR, 0, NULL);
-}
-
-static struct ir_node* parse_var(struct parser* parser) {
-    struct file_pos begin = parser->ahead.loc.begin;
-    const char* name = NULL;
-    if (parser->ahead.tag == TOKEN_IDENT) {
-        name = copy_string_from_token(parser);
-        eat_token(parser, TOKEN_IDENT);
+static size_t parse_var_index(struct parser* parser) {
+    if (parser->ahead.tag != TOKEN_LITERAL || parser->ahead.lit.tag != LITERAL_INT) {
+        parse_error(parser, "variable index");
+        return 0;
     }
-    struct ir_node* var = make_ir_node(parser, &begin, IR_NODE_VAR, 0, name);
+    return parser->ahead.lit.data.int_val;
+}
+
+static ir_node_t parse_var(struct parser* parser) {
+    struct file_pos begin = parser->ahead.loc.begin;
+    expect_token(parser, TOKEN_IDENT);
     expect_token(parser, TOKEN_HASH);
-    if (parser->ahead.tag == TOKEN_LITERAL && parser->ahead.lit.tag == LITERAL_INT) {
-        var->data.var_index = parser->ahead.lit.data.int_val;
-        eat_token(parser, TOKEN_LITERAL);
-    } else {
-        report_generic_error(parser, "variable index");
-        return parse_error(parser);
-    }
-    return var;
+    size_t var_index = parse_var_index(parser);
+    eat_token(parser, TOKEN_LITERAL);
+    return find_var(parser, var_index, &begin);
 }
 
-static struct ir_node* parse_let(struct parser* parser) {
+static ir_node_t parse_let_var(struct parser* parser) {
+    struct file_pos begin = parser->ahead.loc.begin;
+    const char* name = parse_ident(parser);
+    expect_token(parser, TOKEN_HASH);
+    size_t var_index = parse_var_index(parser);
+    eat_token(parser, TOKEN_LITERAL);
+    expect_token(parser, TOKEN_COLON);
+    ir_type_t type = parse_type(parser);
+    expect_token(parser, TOKEN_EQUAL);
+    ir_node_t val = parse_node(parser);
+    return type && val ? make_tied_var(parser->module, type, var_index, val,
+        &(struct debug_info) { .name = name, .loc = make_loc(parser, &begin) }) : NULL;
+}
+
+static ir_node_t parse_let(struct parser* parser) {
     struct file_pos begin = parser->ahead.loc.begin;
     eat_token(parser, TOKEN_LET);
-    struct ir_node** ops = NULL;
-    size_t op_count = 0, op_capacity = 0;
+    ir_node_t* vars = NULL;
+    size_t var_count = 0, var_capacity = 0;
     while (true) {
-        if (parser->ahead.tag != TOKEN_IDENT &&
-            parser->ahead.tag != TOKEN_HASH)
-        {
-            report_generic_error(parser, "variable name");
-            break;
+        ir_node_t var = parse_let_var(parser);
+        if (var_count + 2 >= var_capacity) {
+            var_capacity = (var_count + 2) * 2;
+            vars = realloc_or_die(vars, sizeof(struct ir_node*) * var_capacity);
         }
-        struct ir_node* var = parse_var(parser);
-        expect_token(parser, TOKEN_EQUAL);
-        struct ir_node* val = parse(parser);
-        if (op_count + 2 >= op_capacity) {
-            op_capacity = (op_capacity + 1) * 2;
-            ops = realloc_or_die(ops, sizeof(struct ir_node*) * op_capacity);
-        }
-        ops[op_count++] = var;
-        ops[op_count++] = val;
+
+        vars[var_count++] = var;
         if (!accept_token(parser, TOKEN_COMMA))
             break;
     }
     expect_token(parser, TOKEN_IN);
-    struct ir_node* body = parse(parser);
-    struct ir_node* let = make_ir_node(parser, &begin, IR_NODE_LET, op_count + 1, NULL);
-    memcpy(let->ops, ops, sizeof(struct ir_node*) * op_count);
-    free(ops);
-    let->ops[op_count] = body;
-    return let;
+    ir_node_t body = parse_node(parser);
+    if (!body)
+        return NULL;
+    ir_node_t node = make_let(parser->module, vars, var_count, body,
+        &(struct debug_info) { .loc = make_loc(parser, &begin) });
+    free(vars);
+    return node;
 }
 
-static struct ir_node* parse(struct parser* parser) {
+static ir_node_t parse_node(struct parser* parser) {
     switch (parser->ahead.tag) {
         case TOKEN_HASH:
         case TOKEN_IDENT:
@@ -446,23 +455,29 @@ static struct ir_node* parse(struct parser* parser) {
         case TOKEN_LET:
             return parse_let(parser);
         default:
-            report_generic_error(parser, "expression");
-            return parse_error(parser);
+            return parse_error(parser, "expression");
     }
 }
 
-struct ir_node* parse_ir(
+static ir_type_t parse_type(struct parser* parser) {
+    ir_type_t type = parse_node(parser);
+    if (type && !is_type(type))
+        return parse_error_at(parser, "type", &type->debug->loc);
+    return type;
+}
+
+ir_node_t parse_ir(
     struct log* log,
     struct ir_module* module,
     struct mem_pool* mem_pool,
-    const char* data_ptr,
+    const char* data,
     size_t data_size,
     const char* file_name)
 {
     struct file_pos begin = {
         .row = 1,
         .col = 1,
-        .data_ptr = data_ptr
+        .byte_offset = 0
     };
     struct parser parser = {
         .mem_pool = mem_pool,
@@ -470,7 +485,8 @@ struct ir_node* parse_ir(
             .log = log,
             .cur_pos = begin,
             .keywords = new_hash_table(KEYWORD_COUNT, sizeof(struct keyword)),
-            .data_end = data_ptr + data_size,
+            .data = data,
+            .data_size = data_size,
             .file_name = file_name
         },
         .module = module
@@ -478,7 +494,7 @@ struct ir_node* parse_ir(
     register_keywords(&parser.lexer);
     parser.ahead = advance_lexer(&parser.lexer);
     parser.prev_end = begin;
-    struct ir_node* node = parse(&parser);
+    ir_node_t node = parse_node(&parser);
     free_hash_table(&parser.lexer.keywords);
     return node;
 }

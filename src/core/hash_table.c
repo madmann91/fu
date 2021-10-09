@@ -125,7 +125,7 @@ void remove_from_hash_table(struct hash_table* hash_table, void* elem, size_t el
         size_t desired_index = mod_prime(next_hash, hash_table->capacity);
         // If the next element is part of the collision chain, move it
         if (desired_index <= index || desired_index > next_index) {
-            void* next_elem = elem_at(hash_table->elems, elem_size, next_index); 
+            void* next_elem = elem_at(hash_table->elems, elem_size, next_index);
             memcpy(elem, next_elem, elem_size);
             hash_table->hashes[index] = next_hash;
             elem = next_elem;

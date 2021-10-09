@@ -7,7 +7,7 @@
 
 struct file_pos {
     uint32_t row, col;
-    const char* data_ptr;
+    size_t byte_offset;
 };
 
 struct file_loc {

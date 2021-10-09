@@ -10,6 +10,7 @@ add_executable(fu
     ir/print.c
     ir/parse.c
     ir/module.c
+    ir/transform/simplify.c
     driver/main.c)
 set_target_properties(fu PROPERTIES C_STANDARD 11)
 target_include_directories(fu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

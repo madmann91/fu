@@ -11,6 +11,7 @@ struct string_pool {
 
 struct string_pool new_string_pool();
 void free_string_pool(struct string_pool*);
-const char* make_unique_string(struct string_pool*, const char*);
+
+const char* make_string(struct string_pool*, const char*);
 
 #endif

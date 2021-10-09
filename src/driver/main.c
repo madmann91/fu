@@ -110,8 +110,9 @@ static bool compile_file(struct ir_module* module, const char* file_name, const 
     // TODO
     (void)options;
     struct mem_pool mem_pool = new_mem_pool();
-    struct ir_node* node = parse_ir(&global_log, module, &mem_pool, file_data, file_size, file_name);
-    print_ir(&global_log.state, node);
+    ir_node_t node = parse_ir(&global_log, module, &mem_pool, file_data, file_size, file_name);
+    if (node)
+        print_ir(&global_log.state, node);
     format(&global_log.state, "\n", NULL);
     free_mem_pool(&mem_pool);
     free(file_data);
@@ -123,11 +124,10 @@ int main(int argc, char** argv) {
 
     struct options options = {
         .file_count = 0,
-        .opt_level  = 0    
+        .opt_level  = 0
     };
 
-    struct string_pool string_pool = new_string_pool();
-    struct ir_module* module = new_ir_module(&string_pool);
+    struct ir_module* module = new_ir_module();
 
     if (!parse_options(argc, argv, &options))
         goto failure;
@@ -144,7 +144,6 @@ failure:
     status = EXIT_FAILURE;
 success:
     free_ir_module(module);
-    free_string_pool(&string_pool);
     print_format_bufs(global_log.state.first_buf, stdout);
     free_format_bufs(global_log.state.first_buf);
     return status;

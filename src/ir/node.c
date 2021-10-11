@@ -56,6 +56,18 @@ bool is_nat_const(ir_type_t type) {
     return type->tag == IR_NODE_CONST && type->type->tag == IR_KIND_NAT;
 }
 
+bool is_sized_array_type(ir_type_t type) {
+    return type->tag == IR_TYPE_ARRAY && type->op_count == 1;
+}
+
+bool is_unit_tuple_type(ir_type_t type) {
+    return type->tag == IR_TYPE_TUPLE && type->op_count == 0;
+}
+
+bool is_unit_tuple(ir_node_t node) {
+    return node->tag == IR_NODE_TUPLE && node->op_count == 0;
+}
+
 ir_uint_t get_nat_const_val(ir_type_t type) {
     assert(is_nat_const(type));
     return type->data.int_val;
@@ -81,6 +93,21 @@ ir_node_t get_tied_val(ir_node_t node) {
     return node->ops[0];
 }
 
+size_t get_tuple_type_elem_count(ir_type_t type) {
+    assert(type->tag == IR_TYPE_TUPLE);
+    return type->op_count;
+}
+
+size_t get_option_type_elem_count(ir_type_t type) {
+    assert(type->tag == IR_TYPE_OPTION);
+    return type->op_count;
+}
+
+size_t get_sized_array_type_elem_count(ir_type_t type) {
+    assert(is_sized_array_type(type));
+    return get_nat_const_val(type->ops[0]);
+}
+
 ir_type_t get_tuple_type_elem(ir_type_t type, size_t i) {
     assert(type->tag == IR_TYPE_TUPLE);
     assert(i < type->op_count);
@@ -96,6 +123,11 @@ ir_type_t get_option_type_elem(ir_type_t type, size_t i) {
 ir_type_t get_array_type_elem(ir_type_t type) {
     assert(type->tag == IR_TYPE_ARRAY);
     return type->ops[0];
+}
+
+ir_node_t get_tuple_elem(ir_node_t node, size_t i) {
+    assert(node->tag == IR_NODE_TUPLE);
+    return node->ops[i];
 }
 
 ir_node_t get_extract_or_insert_val(ir_node_t node) {

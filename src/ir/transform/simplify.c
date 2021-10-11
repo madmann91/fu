@@ -35,6 +35,9 @@ static inline ir_node_t simplify_insert(struct ir_module* module, ir_node_t node
     ir_node_t val   = see_thru(get_extract_or_insert_val(node));
     ir_node_t index = see_thru(get_extract_or_insert_index(node));
 
+    if (val->type->tag == IR_TYPE_OPTION)
+        val = make_undef(module, val->type);
+
     if (find_insert_with_index(val, index))
         val = remove_insert_with_index(module, val, index);
 
@@ -48,7 +51,7 @@ static inline ir_node_t simplify_insert(struct ir_module* module, ir_node_t node
     return node;
 }
 
-static inline ir_node_t simplify_extract(ir_node_t node) {
+static inline ir_node_t simplify_extract(struct ir_module* module, ir_node_t node) {
     ir_node_t val   = see_thru(get_extract_or_insert_val(node));
     ir_node_t index = see_thru(get_extract_or_insert_index(node));
 
@@ -57,15 +60,25 @@ static inline ir_node_t simplify_extract(ir_node_t node) {
         return get_insert_elem(insert);
 
     if (val->tag == IR_NODE_TUPLE)
-        return val->ops[get_int_or_nat_const_val(index)];
+        return get_tuple_elem(val, get_int_or_nat_const_val(index));
 
+    if (val->tag == IR_NODE_INSERT && val->type->tag == IR_TYPE_OPTION)
+        return make_undef(module, get_option_type_elem(val->type, get_nat_const_val(index)));
+
+    return node;
+}
+
+static inline ir_node_t simplify_undef(struct ir_module* module, ir_node_t node) {
+    if (is_unit_tuple_type(node->type))
+        return make_tuple(module, NULL, 0, node->debug);
     return node;
 }
 
 ir_node_t simplify_ir_node(struct ir_module* module, ir_node_t node) {
     switch (node->tag) {
+        case IR_NODE_UNDEF:   return simplify_undef(module, node);
         case IR_NODE_INSERT:  return simplify_insert(module, node);
-        case IR_NODE_EXTRACT: return simplify_extract(node);
+        case IR_NODE_EXTRACT: return simplify_extract(module, node);
         default: return node;
     }
 }

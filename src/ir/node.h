@@ -97,15 +97,23 @@ bool is_tied_var(ir_node_t);
 bool is_untied_var(ir_node_t);
 bool is_int_const(ir_node_t);
 bool is_nat_const(ir_type_t);
+bool is_sized_array_type(ir_type_t);
+bool is_unit_tuple_type(ir_type_t);
+bool is_unit_tuple(ir_node_t);
 
 ir_uint_t get_nat_const_val(ir_type_t);
 ir_uint_t get_int_const_val(ir_node_t);
 ir_uint_t get_int_or_nat_const_val(ir_node_t);
 ir_float_t get_float_const_val(ir_node_t);
 
+size_t get_tuple_type_elem_count(ir_type_t);
+size_t get_option_type_elem_count(ir_type_t);
+size_t get_sized_array_type_elem_count(ir_type_t);
 ir_type_t get_tuple_type_elem(ir_type_t, size_t);
 ir_type_t get_option_type_elem(ir_type_t, size_t);
 ir_type_t get_array_type_elem(ir_type_t);
+
+ir_node_t get_tuple_elem(ir_node_t, size_t);
 
 ir_node_t get_tied_val(ir_node_t);
 ir_node_t get_extract_or_insert_val(ir_node_t);

@@ -172,6 +172,32 @@ ir_kind_t make_nat(struct ir_module* module) {
     return module->nat;
 }
 
+ir_type_t make_int_type(struct ir_module* module, ir_type_t bitwidth) {
+    assert(bitwidth->type->tag == IR_KIND_NAT);
+    return insert_ir_node(module, IR_NODE_WITH_N_OPS(1) {
+        .tag = IR_TYPE_INT,
+        .type = make_star(module),
+        .ops = { bitwidth }
+    });
+}
+
+ir_type_t make_intn_type(struct ir_module* module, ir_uint_t bitwidth) {
+    return make_int_type(module, make_nat_const(module, bitwidth));
+}
+
+ir_type_t make_float_type(struct ir_module* module, ir_type_t bitwidth) {
+    assert(bitwidth->type->tag == IR_KIND_NAT);
+    return insert_ir_node(module, IR_NODE_WITH_N_OPS(1) {
+        .tag = IR_TYPE_FLOAT,
+        .type = make_star(module),
+        .ops = { bitwidth }
+    });
+}
+
+ir_type_t make_floatn_type(struct ir_module* module, ir_uint_t bitwidth) {
+    return make_float_type(module, make_nat_const(module, bitwidth));
+}
+
 ir_type_t make_tuple_type(struct ir_module* module, const ir_node_t* args, size_t arg_count, const struct debug_info* debug) {
     struct ir_node* node = malloc_or_die(
         sizeof(struct ir_node) + sizeof(ir_node_t) * (arg_count + 1));
@@ -184,6 +210,46 @@ ir_type_t make_tuple_type(struct ir_module* module, const ir_node_t* args, size_
     ir_node_t inserted_node = insert_ir_node(module, node);
     free(node);
     return inserted_node;
+}
+
+ir_node_t make_undef(struct ir_module* module, ir_type_t type) {
+    return insert_ir_node(module, &(struct ir_node) { .tag = IR_NODE_CONST, .type = type });
+}
+
+ir_node_t make_const(struct ir_module* module, ir_node_t type, const union ir_node_data* data, size_t data_size) {
+    return insert_ir_node(module, &(struct ir_node) {
+        .tag = IR_NODE_CONST,
+        .type = type,
+        .data = *data,
+        .data_size = data_size
+    });
+}
+
+ir_type_t make_nat_const(struct ir_module* module, ir_uint_t int_val) {
+    return insert_ir_node(module, &(struct ir_node) {
+        .tag = IR_NODE_CONST,
+        .type = make_nat(module),
+        .data = { .int_val = int_val },
+        .data_size = sizeof(ir_uint_t)
+    });
+}
+
+ir_node_t make_int_const(struct ir_module* module, ir_type_t type, ir_uint_t int_val) {
+    return insert_ir_node(module, &(struct ir_node) {
+        .tag = IR_NODE_CONST,
+        .type = type,
+        .data = { .int_val = int_val },
+        .data_size = sizeof(ir_uint_t)
+    });
+}
+
+ir_node_t make_float_const(struct ir_module* module, ir_type_t type, ir_float_t float_val) {
+    return insert_ir_node(module, &(struct ir_node) {
+        .tag = IR_NODE_CONST,
+        .type = type,
+        .data = { .float_val = float_val },
+        .data_size = sizeof(ir_float_t)
+    });
 }
 
 ir_node_t make_var(struct ir_module* module, ir_type_t type, size_t var_index, const struct debug_info* debug) {
@@ -248,4 +314,42 @@ ir_node_t make_tuple(struct ir_module* module, const ir_node_t* args, size_t arg
     ir_node_t inserted_node = insert_ir_node(module, node);
     free(node);
     return inserted_node;
+}
+
+ir_node_t make_option(struct ir_module* module, ir_type_t option_type, ir_type_t index, ir_node_t val, const struct debug_info* debug) {
+    assert(option_type->tag == IR_TYPE_OPTION);
+    assert(index->type->tag == IR_KIND_NAT);
+    return make_insert(module, make_undef(module, option_type), index, val, debug);
+}
+
+static inline ir_type_t infer_extract_type(ir_node_t val, ir_node_t index) {
+    if (val->type->tag == IR_TYPE_TUPLE)
+        return get_tuple_type_elem(val, get_nat_const_val(index));
+    else if (val->type->tag == IR_TYPE_OPTION)
+        return get_option_type_elem(val, get_nat_const_val(index));
+    else if (val->type->tag == IR_TYPE_ARRAY)
+        return get_array_type_elem(val->type);
+    else
+        assert(false && "invalid extract value");
+}
+
+ir_node_t make_extract(struct ir_module* module, ir_node_t val, ir_node_t index, const struct debug_info* debug) {
+    return insert_ir_node(module, IR_NODE_WITH_N_OPS(2) {
+        .tag = IR_NODE_EXTRACT,
+        .debug = debug,
+        .type = infer_extract_type(val, index),
+        .ops = { val, index },
+        .op_count = 2
+    });
+}
+
+ir_node_t make_insert(struct ir_module* module, ir_node_t val, ir_node_t index, ir_node_t elem, const struct debug_info* debug) {
+    assert(elem->type == infer_extract_type(val, index));
+    return insert_ir_node(module, IR_NODE_WITH_N_OPS(3) {
+        .tag = IR_NODE_INSERT,
+        .debug = debug,
+        .type = val->type,
+        .ops = { val, index, elem },
+        .op_count = 3
+    });
 }

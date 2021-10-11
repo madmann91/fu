@@ -36,7 +36,8 @@ ir_type_t make_floatn_type(struct ir_module*, ir_uint_t);
 ir_type_t make_tuple_type(struct ir_module*, const ir_type_t*, size_t, const struct debug_info*);
 ir_type_t make_option_type(struct ir_module*, const ir_type_t*, size_t, const struct debug_info*);
 
-ir_node_t make_const(struct ir_module*, ir_node_t, const union ir_node_data*);
+ir_node_t make_undef(struct ir_module*, ir_type_t);
+ir_node_t make_const(struct ir_module*, ir_node_t, const union ir_node_data*, size_t);
 ir_type_t make_nat_const(struct ir_module*, ir_uint_t);
 ir_node_t make_int_const(struct ir_module*, ir_type_t, ir_uint_t);
 ir_node_t make_float_const(struct ir_module*, ir_type_t, ir_float_t);
@@ -44,6 +45,8 @@ ir_node_t make_var(struct ir_module*, ir_type_t, size_t, const struct debug_info
 ir_node_t make_tied_var(struct ir_module*, ir_type_t, size_t, ir_node_t, const struct debug_info*);
 ir_node_t make_let(struct ir_module*, const ir_node_t*, size_t, ir_node_t, const struct debug_info*);
 ir_node_t make_tuple(struct ir_module*, const ir_node_t*, size_t, const struct debug_info*);
-ir_node_t make_option(struct ir_module*, ir_type_t, const ir_node_t*, ir_type_t, const struct debug_info*);
+ir_node_t make_option(struct ir_module*, ir_type_t, ir_type_t, ir_node_t, const struct debug_info*);
+ir_node_t make_extract(struct ir_module*, ir_node_t, ir_node_t, const struct debug_info*);
+ir_node_t make_insert(struct ir_module*, ir_node_t, ir_node_t, ir_node_t, const struct debug_info*);
 
 #endif

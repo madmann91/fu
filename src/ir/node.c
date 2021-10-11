@@ -48,10 +48,26 @@ bool is_untied_var(ir_node_t node) {
     return node->tag == IR_NODE_VAR && node->op_count == 0;
 }
 
+bool is_int_const(ir_node_t node) {
+    return node->tag == IR_NODE_CONST && node->type->tag == IR_TYPE_INT;
+}
+
+bool is_nat_const(ir_type_t type) {
+    return type->tag == IR_NODE_CONST && type->type->tag == IR_KIND_NAT;
+}
+
+ir_uint_t get_nat_const_val(ir_type_t type) {
+    assert(is_nat_const(type));
+    return type->data.int_val;
+}
+
+ir_uint_t get_int_const_val(ir_node_t node) {
+    assert(is_int_const(node));
+    return node->data.int_val;
+}
+
 ir_uint_t get_int_or_nat_const_val(ir_node_t node) {
-    assert(
-        node->tag == IR_NODE_CONST &&
-        (node->type->tag == IR_KIND_NAT || node->type->tag == IR_TYPE_INT));
+    assert(is_int_const(node) || is_nat_const(node));
     return node->data.int_val;
 }
 
@@ -63,6 +79,23 @@ ir_float_t get_float_const_val(ir_node_t node) {
 ir_node_t get_tied_val(ir_node_t node) {
     assert(is_tied_var(node));
     return node->ops[0];
+}
+
+ir_type_t get_tuple_type_elem(ir_type_t type, size_t i) {
+    assert(type->tag == IR_TYPE_TUPLE);
+    assert(i < type->op_count);
+    return type->ops[i];
+}
+
+ir_type_t get_option_type_elem(ir_type_t type, size_t i) {
+    assert(type->tag == IR_TYPE_OPTION);
+    assert(i < type->op_count);
+    return type->ops[i];
+}
+
+ir_type_t get_array_type_elem(ir_type_t type) {
+    assert(type->tag == IR_TYPE_ARRAY);
+    return type->ops[0];
 }
 
 ir_node_t get_extract_or_insert_val(ir_node_t node) {

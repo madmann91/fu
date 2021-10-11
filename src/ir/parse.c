@@ -43,7 +43,10 @@
 #define KEYWORDS(f) \
     f(FUN, "fun") \
     f(LET, "let") \
-    f(IN, "in")
+    f(IN, "in") \
+    f(INT, "int") \
+    f(FLOAT, "float") \
+    f(NAT, "nat")
 
 #define TOKENS(f) \
     KEYWORDS(f) \
@@ -102,6 +105,7 @@ struct parser {
     struct file_pos prev_end;
     struct ir_module* module;
     struct mem_pool* mem_pool;
+    struct hash_table env;
     struct lexer lexer;
 };
 

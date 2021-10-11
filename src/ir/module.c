@@ -18,6 +18,8 @@ struct ir_module {
     struct hash_table debug;
     struct mem_pool mem_pool;
     struct string_pool string_pool;
+
+    ir_node_t nat, star;
 };
 
 struct ir_node_pair {
@@ -25,12 +27,16 @@ struct ir_node_pair {
     ir_node_t snd;
 };
 
+static ir_node_t insert_ir_node(struct ir_module*, ir_node_t);
+
 struct ir_module* new_ir_module() {
     struct ir_module* module = malloc_or_die(sizeof(struct ir_module));
     module->nodes    = new_hash_table(DEFAULT_MODULE_CAPACITY, sizeof(struct ir_node_pair));
     module->debug    = new_hash_table(DEFAULT_MODULE_CAPACITY, sizeof(struct debug_info*));
     module->mem_pool = new_mem_pool();
     module->string_pool = new_string_pool();
+    module->nat  = insert_ir_node(module, &(struct ir_node) { .tag = IR_KIND_NAT  });
+    module->star = insert_ir_node(module, &(struct ir_node) { .tag = IR_KIND_STAR });
     return module;
 }
 
@@ -158,6 +164,28 @@ ir_node_t rebuild_node(struct ir_module* module, ir_node_t node, ir_type_t type,
 #define IR_NODE_WITH_N_OPS(n) \
     (struct ir_node*) &(struct { IR_NODE_FIELDS ir_node_t ops[n]; })
 
+ir_kind_t make_star(struct ir_module* module) {
+    return module->star;
+}
+
+ir_kind_t make_nat(struct ir_module* module) {
+    return module->nat;
+}
+
+ir_type_t make_tuple_type(struct ir_module* module, const ir_node_t* args, size_t arg_count, const struct debug_info* debug) {
+    struct ir_node* node = malloc_or_die(
+        sizeof(struct ir_node) + sizeof(ir_node_t) * (arg_count + 1));
+    memcpy(node->ops, args, sizeof(ir_node_t) * arg_count);
+    node->tag = IR_TYPE_TUPLE;
+    node->data_size = 0;
+    node->type = make_star(module);
+    node->op_count = arg_count;
+    node->debug = debug;
+    ir_node_t inserted_node = insert_ir_node(module, node);
+    free(node);
+    return inserted_node;
+}
+
 ir_node_t make_var(struct ir_module* module, ir_type_t type, size_t var_index, const struct debug_info* debug) {
     return insert_ir_node(module, &(struct ir_node) {
         .tag = IR_NODE_VAR,
@@ -193,6 +221,29 @@ ir_node_t make_let(struct ir_module* module, const ir_node_t* vars, size_t var_c
     node->type = body->type;
     node->op_count = var_count + 1;
     node->ops[var_count] = body;
+    node->debug = debug;
+    ir_node_t inserted_node = insert_ir_node(module, node);
+    free(node);
+    return inserted_node;
+}
+
+static inline ir_type_t infer_tuple_type(struct ir_module* module, const ir_node_t* args, size_t arg_count, const struct debug_info* debug) {
+    ir_node_t* arg_types = malloc_or_die(sizeof(ir_node_t) * arg_count);
+    for (size_t i = 0; i < arg_count; ++i)
+        arg_types[i] = args[i]->type;
+    ir_node_t tuple_type = make_tuple_type(module, arg_types, arg_count, debug);
+    free(arg_types);
+    return tuple_type;
+}
+
+ir_node_t make_tuple(struct ir_module* module, const ir_node_t* args, size_t arg_count, const struct debug_info* debug) {
+    struct ir_node* node = malloc_or_die(
+        sizeof(struct ir_node) + sizeof(ir_node_t) * (arg_count + 1));
+    memcpy(node->ops, args, sizeof(ir_node_t) * arg_count);
+    node->tag = IR_NODE_TUPLE;
+    node->data_size = 0;
+    node->type = infer_tuple_type(module, args, arg_count, debug);
+    node->op_count = arg_count;
     node->debug = debug;
     ir_node_t inserted_node = insert_ir_node(module, node);
     free(node);

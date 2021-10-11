@@ -13,6 +13,9 @@
 
 #define IR_TYPE_LIST(f) \
     f(VEC) \
+    f(PTR) \
+    f(MEM) \
+    f(BOOL) \
     f(ARRAY) \
     f(TUPLE) \
     f(OPTION) \
@@ -24,7 +27,6 @@
     f(VAR) \
     f(CONST) \
     f(TUPLE) \
-    f(OPTION) \
     f(EXTRACT) \
     f(INSERT) \
     f(FUNC) \
@@ -92,6 +94,9 @@ bool is_kind(ir_node_t);
 bool is_valid_pattern(ir_node_t);
 bool is_tied_var(ir_node_t);
 bool is_untied_var(ir_node_t);
+
+ir_uint_t get_int_or_nat_const_val(ir_node_t);
+ir_float_t get_float_const_val(ir_node_t);
 
 ir_node_t get_tied_val(ir_node_t);
 ir_node_t get_extract_or_insert_val(ir_node_t);

@@ -7,6 +7,7 @@
 #include "ir/node.h"
 
 struct ir_module;
+struct error_mgr;
 
 /*
  * A module is just a hashed collection of nodes.
@@ -14,7 +15,7 @@ struct ir_module;
  * allowing perfect re-use, and automatic common-expression elimination.
  */
 
-struct ir_module* new_ir_module(void);
+struct ir_module* new_ir_module(struct error_mgr*);
 void free_ir_module(struct ir_module*);
 
 ir_node_t make_node(
@@ -25,6 +26,8 @@ ir_node_t make_node(
     const struct debug_info*);
 
 ir_node_t rebuild_node(struct ir_module*, ir_node_t, ir_type_t, const ir_node_t*, const struct debug_info*);
+
+ir_node_t make_error(struct ir_module*);
 
 ir_kind_t make_star(struct ir_module*);
 ir_kind_t make_nat(struct ir_module*);

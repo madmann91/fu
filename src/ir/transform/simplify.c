@@ -74,11 +74,17 @@ static inline ir_node_t simplify_undef(struct ir_module* module, ir_node_t node)
     return node;
 }
 
+static inline ir_node_t simplify_let(struct ir_module* module, ir_node_t node) {
+    // TODO
+    return node;
+}
+
 ir_node_t simplify_ir_node(struct ir_module* module, ir_node_t node) {
     switch (node->tag) {
         case IR_NODE_UNDEF:   return simplify_undef(module, node);
         case IR_NODE_INSERT:  return simplify_insert(module, node);
         case IR_NODE_EXTRACT: return simplify_extract(module, node);
+        case IR_NODE_LET:     return simplify_let(module, node);
         default: return node;
     }
 }

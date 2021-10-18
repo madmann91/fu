@@ -5,6 +5,7 @@
 #include "ir/parse.h"
 #include "ir/print.h"
 #include "ir/module.h"
+#include "ir/error_mgr.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -112,7 +113,7 @@ static bool compile_file(struct ir_module* module, const char* file_name, const 
     struct mem_pool mem_pool = new_mem_pool();
     ir_node_t node = parse_ir(&global_log, module, &mem_pool, file_data, file_size, file_name);
     if (node)
-        print_ir(&global_log.state, node);
+        print_ir(&global_log.state, node, SIZE_MAX);
     format(&global_log.state, "\n", NULL);
     free_mem_pool(&mem_pool);
     free(file_data);
@@ -127,7 +128,8 @@ int main(int argc, char** argv) {
         .opt_level  = 0
     };
 
-    struct ir_module* module = new_ir_module();
+    struct default_error_mgr error_mgr = get_default_error_mgr(&global_log);
+    struct ir_module* module = new_ir_module(&error_mgr.error_mgr);
 
     if (!parse_options(argc, argv, &options))
         goto failure;

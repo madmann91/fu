@@ -6,6 +6,7 @@
 #include "core/utils.h"
 #include "ir/module.h"
 #include "ir/node.h"
+#include "ir/error_mgr.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -18,8 +19,9 @@ struct ir_module {
     struct hash_table debug;
     struct mem_pool mem_pool;
     struct string_pool string_pool;
+    struct error_mgr* error_mgr;
 
-    ir_node_t nat, star;
+    ir_node_t nat, star, error;
 };
 
 struct ir_node_pair {
@@ -29,14 +31,17 @@ struct ir_node_pair {
 
 static ir_node_t insert_ir_node(struct ir_module*, ir_node_t);
 
-struct ir_module* new_ir_module() {
+struct ir_module* new_ir_module(struct error_mgr* error_mgr) {
     struct ir_module* module = malloc_or_die(sizeof(struct ir_module));
     module->nodes    = new_hash_table(DEFAULT_MODULE_CAPACITY, sizeof(struct ir_node_pair));
     module->debug    = new_hash_table(DEFAULT_MODULE_CAPACITY, sizeof(struct debug_info*));
     module->mem_pool = new_mem_pool();
     module->string_pool = new_string_pool();
-    module->nat  = insert_ir_node(module, &(struct ir_node) { .tag = IR_KIND_NAT  });
-    module->star = insert_ir_node(module, &(struct ir_node) { .tag = IR_KIND_STAR });
+    module->error_mgr = error_mgr;
+    module->nat   = insert_ir_node(module, &(struct ir_node) { .tag = IR_KIND_NAT   });
+    module->star  = insert_ir_node(module, &(struct ir_node) { .tag = IR_KIND_STAR  });
+    module->error = insert_ir_node(module, &(struct ir_node) { .tag = IR_NODE_ERROR });
+    ((struct ir_node*)module->error)->type = module->error;
     return module;
 }
 
@@ -76,6 +81,7 @@ static uint32_t hash_ir_node(ir_node_t node) {
 
 static bool is_same_ir_node(ir_node_t left, ir_node_t right) {
     if (left->tag != right->tag ||
+        left->type != right->type ||
         left->data_size != right->data_size ||
         left->op_count != right->op_count)
         return false;
@@ -164,20 +170,22 @@ ir_node_t rebuild_node(struct ir_module* module, ir_node_t node, ir_type_t type,
 #define IR_NODE_WITH_N_OPS(n) \
     (struct ir_node*) &(struct { IR_NODE_FIELDS ir_node_t ops[n]; })
 
-ir_kind_t make_star(struct ir_module* module) {
-    return module->star;
+void check_type(struct ir_module* module, ir_type_t type, ir_type_t expected, const struct debug_info* debug) {
+    if (module->error_mgr && type != expected)
+        module->error_mgr->invalid_type(module->error_mgr, type, expected, debug);
 }
 
-ir_kind_t make_nat(struct ir_module* module) {
-    return module->nat;
-}
+ir_node_t make_error(struct ir_module* module) { return module->error; }
+ir_kind_t make_star(struct ir_module* module) { return module->star; }
+ir_kind_t make_nat(struct ir_module* module) { return module->nat; }
 
 ir_type_t make_int_type(struct ir_module* module, ir_type_t bitwidth) {
-    assert(bitwidth->type->tag == IR_KIND_NAT);
+    check_type(module, bitwidth->type, make_nat(module), bitwidth->debug);
     return insert_ir_node(module, IR_NODE_WITH_N_OPS(1) {
         .tag = IR_TYPE_INT,
         .type = make_star(module),
-        .ops = { bitwidth }
+        .ops = { bitwidth },
+        .op_count = 1
     });
 }
 
@@ -186,11 +194,12 @@ ir_type_t make_intn_type(struct ir_module* module, ir_uint_t bitwidth) {
 }
 
 ir_type_t make_float_type(struct ir_module* module, ir_type_t bitwidth) {
-    assert(bitwidth->type->tag == IR_KIND_NAT);
+    check_type(module, bitwidth->type, make_nat(module), bitwidth->debug);
     return insert_ir_node(module, IR_NODE_WITH_N_OPS(1) {
         .tag = IR_TYPE_FLOAT,
         .type = make_star(module),
-        .ops = { bitwidth }
+        .ops = { bitwidth },
+        .op_count = 1
     });
 }
 
@@ -198,14 +207,14 @@ ir_type_t make_floatn_type(struct ir_module* module, ir_uint_t bitwidth) {
     return make_float_type(module, make_nat_const(module, bitwidth));
 }
 
-ir_type_t make_tuple_type(struct ir_module* module, const ir_node_t* args, size_t arg_count, const struct debug_info* debug) {
+ir_type_t make_tuple_type(struct ir_module* module, const ir_node_t* elems, size_t elem_count, const struct debug_info* debug) {
     struct ir_node* node = malloc_or_die(
-        sizeof(struct ir_node) + sizeof(ir_node_t) * (arg_count + 1));
-    memcpy(node->ops, args, sizeof(ir_node_t) * arg_count);
+        sizeof(struct ir_node) + sizeof(ir_node_t) * (elem_count + 1));
+    memcpy(node->ops, elems, sizeof(ir_node_t) * elem_count);
     node->tag = IR_TYPE_TUPLE;
     node->data_size = 0;
     node->type = make_star(module);
-    node->op_count = arg_count;
+    node->op_count = elem_count;
     node->debug = debug;
     ir_node_t inserted_node = insert_ir_node(module, node);
     free(node);
@@ -217,6 +226,8 @@ ir_node_t make_undef(struct ir_module* module, ir_type_t type) {
 }
 
 ir_node_t make_const(struct ir_module* module, ir_node_t type, const union ir_node_data* data, size_t data_size) {
+    if (module->error_mgr && type->tag != IR_TYPE_INT && type->tag != IR_TYPE_FLOAT && type->tag != IR_KIND_NAT)
+        module->error_mgr->unexpected_type(module->error_mgr, type, "int, float, or nat", type->debug);
     return insert_ir_node(module, &(struct ir_node) {
         .tag = IR_NODE_CONST,
         .type = type,
@@ -226,30 +237,15 @@ ir_node_t make_const(struct ir_module* module, ir_node_t type, const union ir_no
 }
 
 ir_type_t make_nat_const(struct ir_module* module, ir_uint_t int_val) {
-    return insert_ir_node(module, &(struct ir_node) {
-        .tag = IR_NODE_CONST,
-        .type = make_nat(module),
-        .data = { .int_val = int_val },
-        .data_size = sizeof(ir_uint_t)
-    });
+    return make_const(module, make_nat(module), &(union ir_node_data) { .int_val = int_val }, sizeof(ir_uint_t));
 }
 
 ir_node_t make_int_const(struct ir_module* module, ir_type_t type, ir_uint_t int_val) {
-    return insert_ir_node(module, &(struct ir_node) {
-        .tag = IR_NODE_CONST,
-        .type = type,
-        .data = { .int_val = int_val },
-        .data_size = sizeof(ir_uint_t)
-    });
+    return make_const(module, type, &(union ir_node_data) { .int_val = int_val }, sizeof(ir_uint_t));
 }
 
 ir_node_t make_float_const(struct ir_module* module, ir_type_t type, ir_float_t float_val) {
-    return insert_ir_node(module, &(struct ir_node) {
-        .tag = IR_NODE_CONST,
-        .type = type,
-        .data = { .float_val = float_val },
-        .data_size = sizeof(ir_float_t)
-    });
+    return make_const(module, type, &(union ir_node_data) { .float_val = float_val }, sizeof(ir_float_t));
 }
 
 ir_node_t make_var(struct ir_module* module, ir_type_t type, size_t var_index, const struct debug_info* debug) {
@@ -263,6 +259,7 @@ ir_node_t make_var(struct ir_module* module, ir_type_t type, size_t var_index, c
 }
 
 ir_node_t make_tied_var(struct ir_module* module, ir_type_t type, size_t var_index, ir_node_t value, const struct debug_info* debug) {
+    check_type(module, value->type, type, debug);
     return insert_ir_node(module, IR_NODE_WITH_N_OPS(1) {
         .tag = IR_NODE_VAR,
         .debug = debug,
@@ -316,35 +313,32 @@ ir_node_t make_tuple(struct ir_module* module, const ir_node_t* args, size_t arg
     return inserted_node;
 }
 
-ir_node_t make_option(struct ir_module* module, ir_type_t option_type, ir_type_t index, ir_node_t val, const struct debug_info* debug) {
-    assert(option_type->tag == IR_TYPE_OPTION);
-    assert(index->type->tag == IR_KIND_NAT);
-    return make_insert(module, make_undef(module, option_type), index, val, debug);
-}
-
-static inline ir_type_t infer_extract_type(ir_node_t val, ir_node_t index) {
+static inline ir_type_t infer_extract_type(struct ir_module* module, ir_node_t val, ir_node_t index) {
     if (val->type->tag == IR_TYPE_TUPLE)
         return get_tuple_type_elem(val, get_nat_const_val(index));
     else if (val->type->tag == IR_TYPE_OPTION)
         return get_option_type_elem(val, get_nat_const_val(index));
     else if (val->type->tag == IR_TYPE_ARRAY)
         return get_array_type_elem(val->type);
-    else
-        assert(false && "invalid extract value");
+    else {
+        if (module->error_mgr)
+            module->error_mgr->unexpected_type(module->error_mgr, val->type, "tuple, option or array", val->debug);
+        return make_error(module);
+    }
 }
 
 ir_node_t make_extract(struct ir_module* module, ir_node_t val, ir_node_t index, const struct debug_info* debug) {
     return insert_ir_node(module, IR_NODE_WITH_N_OPS(2) {
         .tag = IR_NODE_EXTRACT,
         .debug = debug,
-        .type = infer_extract_type(val, index),
+        .type = infer_extract_type(module, val, index),
         .ops = { val, index },
         .op_count = 2
     });
 }
 
 ir_node_t make_insert(struct ir_module* module, ir_node_t val, ir_node_t index, ir_node_t elem, const struct debug_info* debug) {
-    assert(elem->type == infer_extract_type(val, index));
+    check_type(module, elem->type, infer_extract_type(module, val, index), debug);
     return insert_ir_node(module, IR_NODE_WITH_N_OPS(3) {
         .tag = IR_NODE_INSERT,
         .debug = debug,

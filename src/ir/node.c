@@ -56,6 +56,14 @@ bool is_nat_const(ir_type_t type) {
     return type->tag == IR_NODE_CONST && type->type->tag == IR_KIND_NAT;
 }
 
+bool is_int_or_nat_const(ir_node_t node) {
+    return is_nat_const(node) || is_int_const(node);
+}
+
+bool is_float_const(ir_node_t node) {
+    return node->tag == IR_NODE_CONST && node->type->tag == IR_TYPE_FLOAT;
+}
+
 bool is_sized_array_type(ir_type_t type) {
     return type->tag == IR_TYPE_ARRAY && type->op_count == 1;
 }
@@ -66,6 +74,98 @@ bool is_unit_tuple_type(ir_type_t type) {
 
 bool is_unit_tuple(ir_node_t node) {
     return node->tag == IR_NODE_TUPLE && node->op_count == 0;
+}
+
+bool is_vec_op(enum ir_node_tag tag) {
+    switch (tag) {
+#define S(t, s)
+#define V(t, s) case IR_NODE_V##t:
+#define node(t, s, v) v(t, s)
+        IR_NODE_LIST(node)
+            return true;
+#undef node
+#undef V
+#undef S
+        default:
+            return false;
+    }
+}
+
+#define MAKE_LIST_PREDICATE(name, list) \
+    bool name(enum ir_node_tag tag) { \
+        switch (tag) { \
+            list(node) \
+                return true; \
+            default: \
+                return false; \
+        } \
+    }
+
+#define V(t) case IR_NODE_V##t:
+#define node(t, s, v) case IR_NODE_##t: v(t)
+
+MAKE_LIST_PREDICATE(is_arith_op,       IR_ARITH_OP_LIST)
+MAKE_LIST_PREDICATE(is_int_arith_op,   IR_INT_ARITH_OP_LIST)
+MAKE_LIST_PREDICATE(is_float_arith_op, IR_FLOAT_ARITH_OP_LIST)
+MAKE_LIST_PREDICATE(is_cmp_op,         IR_CMP_OP_LIST)
+MAKE_LIST_PREDICATE(is_int_cmp_op,     IR_INT_CMP_OP_LIST)
+MAKE_LIST_PREDICATE(is_float_cmp_op,   IR_FLOAT_CMP_OP_LIST)
+MAKE_LIST_PREDICATE(is_bit_op,         IR_BIT_OP_LIST)
+
+#undef MAKE_LIST_PREDICATE
+#undef node
+#undef V
+
+bool has_fp_math_mode(enum ir_node_tag tag) {
+    return is_float_cmp_op(tag) || is_float_arith_op(tag);
+}
+
+const char* get_node_name(enum ir_node_tag tag) {
+    switch (tag)
+    {
+#define S(t, s)
+#define V(t, s) case IR_NODE_V##t: return "v" s;
+#define node(t, s, v) case IR_NODE_##t: return s; v(t, s)
+#define type(t, s) case IR_TYPE_##t: return s;
+#define kind(t, s) case IR_KIND_##t: return s;
+        IR_NODE_LIST(node)
+        IR_TYPE_LIST(type)
+        IR_KIND_LIST(kind)
+#undef kind
+#undef type
+#undef node
+#undef V
+#undef S
+        default:
+            assert(false && "invalid node");
+            return "";
+    }
+}
+
+enum ir_node_tag to_vec_tag(enum ir_node_tag tag) {
+    switch (tag) {
+#define S(t, s)
+#define V(t, s) case IR_NODE_##t: return IR_NODE_V##t;
+#define node(t, s, v) v(t, s)
+        IR_NODE_LIST(node)
+#undef node
+#undef V
+#undef S
+        default: return tag;
+    }
+}
+
+enum ir_node_tag to_scalar_tag(enum ir_node_tag tag) {
+    switch (tag) {
+#define S(t, s)
+#define V(t, s) case IR_NODE_V##t: return IR_NODE_##t;
+#define node(t, s, v) v(t, s)
+        IR_NODE_LIST(node)
+#undef node
+#undef V
+#undef S
+        default: return tag;
+    }
 }
 
 ir_uint_t get_nat_const_val(ir_type_t type) {
@@ -79,17 +179,22 @@ ir_uint_t get_int_const_val(ir_node_t node) {
 }
 
 ir_uint_t get_int_or_nat_const_val(ir_node_t node) {
-    assert(is_int_const(node) || is_nat_const(node));
+    assert(is_int_or_nat_const(node));
     return node->data.int_val;
 }
 
 ir_float_t get_float_const_val(ir_node_t node) {
-    assert(node->tag == IR_NODE_CONST && node->type->tag == IR_TYPE_FLOAT);
+    assert(is_float_const(node));
     return node->data.float_val;
 }
 
 ir_node_t get_tied_val(ir_node_t node) {
     assert(is_tied_var(node));
+    return node->ops[0];
+}
+
+ir_node_t get_vec_op_mask(ir_node_t node) {
+    assert(is_vec_op(node->tag));
     return node->ops[0];
 }
 
@@ -131,16 +236,20 @@ ir_node_t get_tuple_elem(ir_node_t node, size_t i) {
 }
 
 ir_node_t get_extract_or_insert_val(ir_node_t node) {
-    assert(node->tag == IR_NODE_INSERT || node->tag == IR_NODE_EXTRACT);
-    return node->ops[0];
+    assert(
+        node->tag == IR_NODE_INSERT || node->tag == IR_NODE_EXTRACT ||
+        node->tag == IR_NODE_VINSERT || node->tag == IR_NODE_VEXTRACT);
+    return node->ops[is_vec_op(node->tag) ? 1 : 0];
 }
 
 ir_node_t get_extract_or_insert_index(ir_node_t node) {
-    assert(node->tag == IR_NODE_INSERT || node->tag == IR_NODE_EXTRACT);
-    return node->ops[1];
+    assert(
+        node->tag == IR_NODE_INSERT || node->tag == IR_NODE_EXTRACT ||
+        node->tag == IR_NODE_VINSERT || node->tag == IR_NODE_VEXTRACT);
+    return node->ops[is_vec_op(node->tag) ? 2 : 1];
 }
 
 ir_node_t get_insert_elem(ir_node_t node) {
-    assert(node->tag == IR_NODE_INSERT);
-    return node->ops[2];
+    assert(node->tag == IR_NODE_INSERT || node->tag == IR_NODE_VINSERT);
+    return node->ops[is_vec_op(node->tag) ? 3 : 2];
 }

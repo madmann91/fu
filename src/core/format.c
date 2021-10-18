@@ -1,5 +1,7 @@
 #include "core/alloc.h"
 #include "core/format.h"
+#include "ir/print.h"
+#include "ir/node.h"
 
 #include <assert.h>
 #include <stddef.h>
@@ -56,14 +58,16 @@ static const char* format_arg(struct format_state* state, const char* ptr, size_
     const union format_arg* arg = &args[(*index)++];
     char* buf_ptr = reserve_buf(state, MAX_FORMAT_CHARS);
     size_t chars_printed = 0;
-    switch (*(ptr++)) {
+    char c = *(ptr++);
+    switch (c) {
         case 'u':
             switch (*(ptr++)) {
                 case '8': chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu8, arg->u8);  break;
                 case '1': assert(*ptr == '6'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu16, arg->u16); break;
                 case '3': assert(*ptr == '2'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu32, arg->u32); break;
                 case '6': assert(*ptr == '4'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu64, arg->u64); break;
-            } 
+                default: assert(false && "invalid unsigned integer format string");
+            }
             break;
         case 'i':
             switch (*(ptr++)) {
@@ -71,7 +75,15 @@ static const char* format_arg(struct format_state* state, const char* ptr, size_
                 case '1': assert(*ptr == '6'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi16, arg->i16); break;
                 case '3': assert(*ptr == '2'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi32, arg->i32); break;
                 case '6': assert(*ptr == '4'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi64, arg->i64); break;
-            } 
+                default: assert(false && "invalid signed integer format string");
+            }
+            break;
+        case 'f':
+            switch (*(ptr++)) {
+                case '3': assert(*ptr == '2'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%f", arg->f32); break;
+                case '6': assert(*ptr == '4'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%g", arg->f64); break;
+                default: assert(false && "invalid floating-point format string");
+            }
             break;
         case 's':
             if (*ptr == 'l') {
@@ -87,7 +99,8 @@ static const char* format_arg(struct format_state* state, const char* ptr, size_
             chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%p", arg->p);
             break;
         default:
-            assert(false && "unknown format argument type");
+            assert(state->custom_format[(unsigned char)c]);
+            state->custom_format[(unsigned char)c](state, arg->p);
             break;
     }
     assert(chars_printed < MAX_FORMAT_CHARS);

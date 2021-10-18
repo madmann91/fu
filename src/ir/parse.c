@@ -44,6 +44,7 @@
     f(FUN, "fun") \
     f(LET, "let") \
     f(IN, "in") \
+    f(CONST, "const") \
     f(INT, "int") \
     f(FLOAT, "float") \
     f(NAT, "nat")
@@ -69,8 +70,8 @@ struct literal {
         LITERAL_INT
     } tag;
     union {
-        double float_val;
-        uint64_t int_val;
+        ir_float_t float_val;
+        ir_uint_t int_val;
     } data;
 };
 
@@ -251,8 +252,11 @@ static struct token advance_lexer(struct lexer* lexer) {
         }
 
         if (accept_char(lexer, '=')) return make_token(lexer, &begin, TOKEN_EQUAL);
+        if (accept_char(lexer, ':')) return make_token(lexer, &begin, TOKEN_COLON);
         if (accept_char(lexer, '#')) return make_token(lexer, &begin, TOKEN_HASH);
         if (accept_char(lexer, ',')) return make_token(lexer, &begin, TOKEN_COMMA);
+        if (accept_char(lexer, '[')) return make_token(lexer, &begin, TOKEN_L_BRACKET);
+        if (accept_char(lexer, ']')) return make_token(lexer, &begin, TOKEN_R_BRACKET);
 
         if (next_char(lexer) == '_' || isalpha(next_char(lexer))) {
             eat_char(lexer);
@@ -360,13 +364,12 @@ static inline struct file_loc make_loc(const struct parser* parser, const struct
     };
 }
 
-static inline ir_node_t find_var(const struct parser* parser, size_t var_index, const struct file_pos* begin) {
+static inline ir_node_t find_var(const struct parser* parser, size_t var_index) {
     // TODO
     return NULL;
 }
 
-static ir_node_t parse_node(struct parser*);
-static ir_type_t parse_type(struct parser*);
+static ir_node_t parse_node(struct parser*, ir_type_t);
 
 static const char* parse_ident(struct parser* parser) {
     if (parser->ahead.tag != TOKEN_IDENT)
@@ -387,7 +390,7 @@ static ir_node_t parse_error_at(struct parser* parser, const char* msg, const st
             { .s = parser->lexer.data + parser->ahead.loc.begin.byte_offset },
             { .len = byte_span(&parser->ahead.loc) }
         });
-    return NULL;
+    return make_error(parser->module);
 }
 
 static ir_node_t parse_error(struct parser* parser, const char* msg) {
@@ -408,7 +411,36 @@ static ir_node_t parse_var(struct parser* parser) {
     expect_token(parser, TOKEN_HASH);
     size_t var_index = parse_var_index(parser);
     eat_token(parser, TOKEN_LITERAL);
-    return find_var(parser, var_index, &begin);
+    ir_node_t var = find_var(parser, var_index);
+    if (!var) {
+        struct file_loc loc = make_loc(parser, &begin);
+        log_error(parser->lexer.log, &loc,
+            "variable with index '{u64}' is not in the current scope",
+            (union format_arg[]) { { .u64 = var_index } });
+        return make_error(parser->module);
+    }
+    return var;
+}
+
+static ir_node_t parse_const(struct parser* parser, ir_type_t type) {
+    eat_token(parser, TOKEN_CONST);
+    union ir_node_data data = { 0 };
+    size_t data_size = 0;
+    if (parser->ahead.tag == TOKEN_LITERAL) {
+        if (parser->ahead.lit.tag == LITERAL_INT) {
+            data.int_val = parser->ahead.lit.data.int_val;
+            data_size = sizeof(ir_uint_t);
+        } else {
+            data.float_val = parser->ahead.lit.data.float_val;
+            data_size = sizeof(ir_float_t);
+        }
+    }
+    expect_token(parser, TOKEN_LITERAL);
+    if (!type || parser->ahead.tag == TOKEN_COLON) {
+        expect_token(parser, TOKEN_COLON);
+        type = parse_node(parser, NULL);
+    }
+    return make_const(parser->module, type, &data, data_size);
 }
 
 static ir_node_t parse_let_var(struct parser* parser) {
@@ -418,11 +450,11 @@ static ir_node_t parse_let_var(struct parser* parser) {
     size_t var_index = parse_var_index(parser);
     eat_token(parser, TOKEN_LITERAL);
     expect_token(parser, TOKEN_COLON);
-    ir_type_t type = parse_type(parser);
+    ir_type_t type = parse_node(parser, NULL);
     expect_token(parser, TOKEN_EQUAL);
-    ir_node_t val = parse_node(parser);
-    return type && val ? make_tied_var(parser->module, type, var_index, val,
-        &(struct debug_info) { .name = name, .loc = make_loc(parser, &begin) }) : NULL;
+    ir_node_t val = parse_node(parser, type);
+    return make_tied_var(parser->module, type, var_index, val,
+        &(struct debug_info) { .name = name, .loc = make_loc(parser, &begin) });
 }
 
 static ir_node_t parse_let(struct parser* parser) {
@@ -432,6 +464,9 @@ static ir_node_t parse_let(struct parser* parser) {
     size_t var_count = 0, var_capacity = 0;
     while (true) {
         ir_node_t var = parse_let_var(parser);
+        if (!var)
+            break;
+
         if (var_count + 2 >= var_capacity) {
             var_capacity = (var_count + 2) * 2;
             vars = realloc_or_die(vars, sizeof(struct ir_node*) * var_capacity);
@@ -442,32 +477,46 @@ static ir_node_t parse_let(struct parser* parser) {
             break;
     }
     expect_token(parser, TOKEN_IN);
-    ir_node_t body = parse_node(parser);
-    if (!body)
-        return NULL;
+    if (var_count == 0)
+        return make_error(parser->module);
+    ir_node_t body = parse_node(parser, NULL);
     ir_node_t node = make_let(parser->module, vars, var_count, body,
         &(struct debug_info) { .loc = make_loc(parser, &begin) });
     free(vars);
     return node;
 }
 
-static ir_node_t parse_node(struct parser* parser) {
+static ir_node_t parse_int_or_float(struct parser* parser) {
+    bool is_int = parser->ahead.tag == TOKEN_INT;
+    skip_token(parser);
+    expect_token(parser, TOKEN_L_BRACKET);
+    ir_node_t bitwidth = parse_node(parser, make_nat(parser->module));
+    expect_token(parser, TOKEN_R_BRACKET);
+    return is_int ? make_int_type(parser->module, bitwidth) : make_float_type(parser->module, bitwidth);
+}
+
+static ir_node_t parse_nat(struct parser* parser) {
+    eat_token(parser, TOKEN_NAT);
+    return make_nat(parser->module);
+}
+
+static ir_node_t parse_node(struct parser* parser, ir_type_t expected) {
     switch (parser->ahead.tag) {
         case TOKEN_HASH:
         case TOKEN_IDENT:
             return parse_var(parser);
         case TOKEN_LET:
             return parse_let(parser);
+        case TOKEN_INT:
+        case TOKEN_FLOAT:
+            return parse_int_or_float(parser);
+        case TOKEN_NAT:
+            return parse_nat(parser);
+        case TOKEN_CONST:
+            return parse_const(parser, expected);
         default:
             return parse_error(parser, "expression");
     }
-}
-
-static ir_type_t parse_type(struct parser* parser) {
-    ir_type_t type = parse_node(parser);
-    if (type && !is_type(type))
-        return parse_error_at(parser, "type", &type->debug->loc);
-    return type;
 }
 
 ir_node_t parse_ir(
@@ -498,7 +547,7 @@ ir_node_t parse_ir(
     register_keywords(&parser.lexer);
     parser.ahead = advance_lexer(&parser.lexer);
     parser.prev_end = begin;
-    ir_node_t node = parse_node(&parser);
+    ir_node_t node = parse_node(&parser, NULL);
     free_hash_table(&parser.lexer.keywords);
     return node;
 }

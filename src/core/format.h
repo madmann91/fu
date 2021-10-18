@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+struct ir_node;
+
 struct format_buf {
     size_t size;
     size_t capacity;
@@ -45,8 +47,14 @@ union format_arg {
     int16_t i16;
     int32_t i32;
     int64_t i64;
+    float f32;
+    double f64;
     size_t len;
 };
+
+struct format_state;
+
+typedef void (*format_fn_t)(struct format_state*, const void*);
 
 struct format_state {
     struct format_buf* cur_buf;
@@ -54,6 +62,7 @@ struct format_state {
     bool ignore_style;
     size_t indent;
     const char* tab;
+    format_fn_t custom_format[256];
 };
 
 static const struct format_style reset_style = { STYLE_NORMAL, COLOR_NORMAL };

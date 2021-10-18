@@ -4,6 +4,7 @@
 
 #include <assert.h>
 
+static const struct format_style error_style    = { .style = STYLE_BOLD, .color = COLOR_RED };
 static const struct format_style keyword_style  = { .style = STYLE_BOLD, .color = COLOR_BLUE };
 static const struct format_style ellipsis_style = { .style = STYLE_BOLD, .color = COLOR_WHITE };
 
@@ -55,6 +56,9 @@ void print_ir(struct format_state* state, ir_node_t node, size_t depth) {
                 format(state, " : ", NULL);
                 print_ir(state, node->type, depth);
             }
+            break;
+        case IR_NODE_ERROR:
+            format(state, "{$}error{$}", (union format_arg[]) { { .style = error_style }, { .style = reset_style } });
             break;
         default:
             format(state, "{$}{s}{$}",

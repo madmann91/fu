@@ -334,7 +334,7 @@ static inline size_t byte_span(const struct file_loc* loc) {
     return loc->end.byte_offset - loc->begin.byte_offset;
 }
 
-static inline void expect_token(struct parser* parser, enum token_tag tag) {
+static inline bool expect_token(struct parser* parser, enum token_tag tag) {
     if (!accept_token(parser, tag)) {
         bool is_special = tag == TOKEN_IDENT || tag == TOKEN_LITERAL;
         log_error(
@@ -345,7 +345,9 @@ static inline void expect_token(struct parser* parser, enum token_tag tag) {
                 { .s = parser->lexer.data + parser->ahead.loc.begin.byte_offset },
                 { .len = byte_span(&parser->ahead.loc) }
             });
+        return false;
     }
+    return true;
 }
 
 static inline const char* copy_string_from_token(struct parser* parser) {
@@ -424,21 +426,27 @@ static ir_node_t parse_var(struct parser* parser) {
 
 static ir_node_t parse_const(struct parser* parser, ir_type_t type) {
     eat_token(parser, TOKEN_CONST);
-    union ir_node_data data = { 0 };
-    size_t data_size = 0;
-    if (parser->ahead.tag == TOKEN_LITERAL) {
-        if (parser->ahead.lit.tag == LITERAL_INT) {
-            data.int_val = parser->ahead.lit.data.int_val;
-            data_size = sizeof(ir_uint_t);
-        } else {
-            data.float_val = parser->ahead.lit.data.float_val;
-            data_size = sizeof(ir_float_t);
-        }
-    }
-    expect_token(parser, TOKEN_LITERAL);
+    struct literal literal = parser->ahead.lit;
+    bool was_literal = expect_token(parser, TOKEN_LITERAL);
     if (!type || parser->ahead.tag == TOKEN_COLON) {
         expect_token(parser, TOKEN_COLON);
         type = parse_node(parser, NULL);
+    }
+    union ir_node_data data = { 0 };
+    size_t data_size = 0;
+    if (was_literal) {
+        if (literal.tag == LITERAL_INT) {
+            if (type->tag == IR_TYPE_FLOAT) {
+                data.float_val = literal.data.int_val;
+                data_size = sizeof(ir_float_t);
+            } else {
+                data.int_val = literal.data.int_val;
+                data_size = sizeof(ir_uint_t);
+            }
+        } else {
+            data.float_val = literal.data.float_val;
+            data_size = sizeof(ir_float_t);
+        }
     }
     return make_const(parser->module, type, &data, data_size);
 }

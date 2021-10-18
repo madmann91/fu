@@ -428,9 +428,11 @@ static ir_node_t parse_const(struct parser* parser, ir_type_t type) {
     eat_token(parser, TOKEN_CONST);
     struct literal literal = parser->ahead.lit;
     bool was_literal = expect_token(parser, TOKEN_LITERAL);
-    if (!type || parser->ahead.tag == TOKEN_COLON) {
-        expect_token(parser, TOKEN_COLON);
+    if (accept_token(parser, TOKEN_COLON))
         type = parse_node(parser, NULL);
+    if (!type) {
+        type = was_literal && literal.tag == LITERAL_FLOAT
+            ? make_floatn_type(parser->module, 64) : make_nat(parser->module);
     }
     union ir_node_data data = { 0 };
     size_t data_size = 0;

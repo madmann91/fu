@@ -48,10 +48,13 @@ void print_ir(struct format_state* state, ir_node_t node, size_t depth) {
         case IR_NODE_CONST:
             format(state, "{$}const{$} ", (union format_arg[]) { { .style = keyword_style }, { .style = reset_style } });
             if (is_int_or_nat_const(node))
-                format(state, "{u64} : ", (union format_arg[]) { { .u64 = get_int_or_nat_const_val(node) } });
+                format(state, "{u64}", (union format_arg[]) { { .u64 = get_int_or_nat_const_val(node) } });
             else if (is_float_const(node))
-                format(state, "{f64} : ", (union format_arg[]) { { .f64 = get_float_const_val(node) } });
-            print_ir(state, node->type, depth);
+                format(state, "{f64}", (union format_arg[]) { { .f64 = get_float_const_val(node) } });
+            if (!is_nat_const(node)) {
+                format(state, " : ", NULL);
+                print_ir(state, node->type, depth);
+            }
             break;
         default:
             format(state, "{$}{s}{$}",

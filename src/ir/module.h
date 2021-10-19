@@ -48,7 +48,6 @@ ir_node_t make_var(struct ir_module*, ir_type_t, size_t, const struct debug_info
 ir_node_t make_tied_var(struct ir_module*, ir_type_t, size_t, ir_node_t, const struct debug_info*);
 ir_node_t make_let(struct ir_module*, const ir_node_t*, size_t, ir_node_t, const struct debug_info*);
 ir_node_t make_tuple(struct ir_module*, const ir_node_t*, size_t, const struct debug_info*);
-ir_node_t make_option(struct ir_module*, ir_type_t, ir_type_t, ir_node_t, const struct debug_info*);
 ir_node_t make_extract(struct ir_module*, ir_node_t, ir_node_t, const struct debug_info*);
 ir_node_t make_insert(struct ir_module*, ir_node_t, ir_node_t, ir_node_t, const struct debug_info*);
 

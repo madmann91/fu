@@ -4,9 +4,10 @@
 
 #include <assert.h>
 
-static const struct format_style error_style    = { .style = STYLE_BOLD, .color = COLOR_RED };
-static const struct format_style keyword_style  = { .style = STYLE_BOLD, .color = COLOR_BLUE };
-static const struct format_style ellipsis_style = { .style = STYLE_BOLD, .color = COLOR_WHITE };
+static const struct format_style error_style    = { .style = STYLE_BOLD,   .color = COLOR_RED };
+static const struct format_style number_style   = { .style = STYLE_NORMAL, .color = COLOR_MAGENTA };
+static const struct format_style keyword_style  = { .style = STYLE_BOLD,   .color = COLOR_BLUE };
+static const struct format_style ellipsis_style = { .style = STYLE_BOLD,   .color = COLOR_WHITE };
 
 static inline size_t decrease_depth(size_t depth) {
     assert(depth > 0);
@@ -48,10 +49,21 @@ void print_ir(struct format_state* state, ir_node_t node, size_t depth) {
             break;
         case IR_NODE_CONST:
             format(state, "{$}const{$} ", (union format_arg[]) { { .style = keyword_style }, { .style = reset_style } });
-            if (is_int_or_nat_const(node))
-                format(state, "{u64}", (union format_arg[]) { { .u64 = get_int_or_nat_const_val(node) } });
-            else if (is_float_const(node))
-                format(state, "{f64}", (union format_arg[]) { { .f64 = get_float_const_val(node) } });
+            if (is_float_const(node)) {
+                format(state, "{$}{f64}{$}",
+                    (union format_arg[]) {
+                        { .style = number_style },
+                        { .f64 = get_float_const_val(node) },
+                        { .style = reset_style }
+                    });
+            } else {
+                format(state, "{$}{u64}{$}",
+                    (union format_arg[]) {
+                        { .style = number_style },
+                        { .u64 = is_int_or_nat_const(node) ? get_int_or_nat_const_val(node) : 0 },
+                        { .style = reset_style }
+                    });
+            }
             if (!is_nat_const(node)) {
                 format(state, " : ", NULL);
                 print_ir(state, node->type, depth);

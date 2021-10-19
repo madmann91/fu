@@ -16,6 +16,8 @@
 #include <string.h>
 #include <ctype.h>
 
+#define DEFAULT_ENV_CAPACITY 8
+
 #define SYMBOLS(f) \
     f(L_PAREN, "(") \
     f(R_PAREN, ")") \
@@ -366,9 +368,33 @@ static inline struct file_loc make_loc(const struct parser* parser, const struct
     };
 }
 
+static bool compare_vars(const void* left, const void* right) {
+    return (*(ir_node_t*)left)->data.var_index == (*(ir_node_t*)right)->data.var_index;
+}
+
+static uint32_t hash_var_index(size_t var_index) {
+    return hash_uint64(hash_init(), var_index);
+}
+
 static inline ir_node_t find_var(const struct parser* parser, size_t var_index) {
-    // TODO
-    return NULL;
+    struct ir_node node = { .data.var_index = var_index };
+    ir_node_t node_ptr = &node;
+    ir_node_t* var_ptr = find_in_hash_table(
+        &parser->env, &node_ptr, hash_var_index(var_index), sizeof(ir_node_t), compare_vars);
+    return var_ptr ? *var_ptr : NULL;
+}
+
+static bool add_var(struct parser* parser, ir_node_t var) {
+    assert(var->tag == IR_NODE_VAR);
+    return insert_in_hash_table(
+        &parser->env, &var, hash_var_index(var->data.var_index), sizeof(ir_node_t), compare_vars);
+}
+
+static void remove_var(struct parser* parser, ir_node_t var) {
+    ir_node_t* var_ptr = find_in_hash_table(
+        &parser->env, &var, hash_var_index(var->data.var_index), sizeof(ir_node_t), compare_vars);
+    if (var_ptr)
+        remove_from_hash_table(&parser->env, var_ptr, sizeof(ir_node_t));
 }
 
 static ir_node_t parse_node(struct parser*, ir_type_t);
@@ -489,7 +515,16 @@ static ir_node_t parse_let(struct parser* parser) {
     expect_token(parser, TOKEN_IN);
     if (var_count == 0)
         return make_error(parser->module);
+    for (size_t i = 0; i < var_count; ++i) {
+        if (!add_var(parser, vars[i])) {
+            log_error(parser->lexer.log, &vars[i]->debug->loc,
+                "shadowing variable with index '{u64}'",
+                (union format_arg[]) { { .u64 = vars[i]->data.var_index } });
+        }
+    }
     ir_node_t body = parse_node(parser, NULL);
+    for (size_t i = 0; i < var_count; ++i)
+        remove_var(parser, vars[i]);
     ir_node_t node = make_let(parser->module, vars, var_count, body,
         &(struct debug_info) { .loc = make_loc(parser, &begin) });
     free(vars);
@@ -552,12 +587,14 @@ ir_node_t parse_ir(
             .data_size = data_size,
             .file_name = file_name
         },
-        .module = module
+        .module = module,
+        .env = new_hash_table(DEFAULT_ENV_CAPACITY, sizeof(ir_node_t)),
     };
     register_keywords(&parser.lexer);
     parser.ahead = advance_lexer(&parser.lexer);
     parser.prev_end = begin;
     ir_node_t node = parse_node(&parser, NULL);
     free_hash_table(&parser.lexer.keywords);
+    free_hash_table(&parser.env);
     return node;
 }

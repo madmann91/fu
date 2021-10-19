@@ -36,7 +36,7 @@ bool insert_in_hash_table(
     compare_fn compare);
 
 void* find_in_hash_table(
-    struct hash_table*,
+    const struct hash_table*,
     const void* elem,
     uint32_t hash,
     size_t elem_size,

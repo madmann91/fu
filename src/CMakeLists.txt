@@ -13,6 +13,6 @@ add_executable(fu
     ir/error_mgr.c
     ir/transform/simplify.c
     driver/main.c)
-set_target_properties(fu PROPERTIES C_STANDARD 11)
+set_target_properties(fu PROPERTIES C_STANDARD 11 C_EXTENSIONS OFF)
 target_include_directories(fu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(fu PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")

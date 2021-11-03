@@ -4,18 +4,13 @@
 
 #include <assert.h>
 
-static const struct format_style error_style    = { .style = STYLE_BOLD,   .color = COLOR_RED };
-static const struct format_style number_style   = { .style = STYLE_NORMAL, .color = COLOR_MAGENTA };
-static const struct format_style keyword_style  = { .style = STYLE_BOLD,   .color = COLOR_BLUE };
-static const struct format_style ellipsis_style = { .style = STYLE_BOLD,   .color = COLOR_WHITE };
-
 static inline size_t decrease_depth(size_t depth) {
     assert(depth > 0);
     return depth == SIZE_MAX ? SIZE_MAX : depth - 1;
 }
 
 static void print_var_name(struct format_state* state, ir_node_t node) {
-    assert(node->tag == IR_NODE_VAR);
+    assert(node->tag == IR_VAR);
     format(state, "{s}#{u64}", (union format_arg[]) {
         { .s = node->debug && node->debug->name ? node->debug->name : "" },
         { .u64 = node->data.var_index }
@@ -29,7 +24,7 @@ void print_ir(struct format_state* state, ir_node_t node, size_t depth) {
     }
 
     switch (node->tag) {
-        case IR_NODE_LET:
+        case IR_VAL_LET:
             format(state, "{$}let{$} ", (union format_arg[]) { { .style = keyword_style }, { .style = reset_style } });
             for (size_t i = 0, n = node->op_count - 1; i < n; ++i) {
                 print_var_name(state, node->ops[i]);
@@ -44,16 +39,16 @@ void print_ir(struct format_state* state, ir_node_t node, size_t depth) {
             print_ir(state, node->ops[node->op_count - 1], decrease_depth(depth));
             state->indent--;
             break;
-        case IR_NODE_VAR:
+        case IR_VAR:
             print_var_name(state, node);
             break;
-        case IR_NODE_CONST:
+        case IR_CONST:
             format(state, "{$}const{$} ", (union format_arg[]) { { .style = keyword_style }, { .style = reset_style } });
             if (is_float_const(node)) {
                 format(state, "{$}{f64}{$}",
                     (union format_arg[]) {
                         { .style = number_style },
-                        { .f64 = get_float_const_val(node) },
+                        { .f64 = get_float_const_val(to_val(node)) },
                         { .style = reset_style }
                     });
             } else {
@@ -69,7 +64,7 @@ void print_ir(struct format_state* state, ir_node_t node, size_t depth) {
                 print_ir(state, node->type, depth);
             }
             break;
-        case IR_NODE_ERROR:
+        case IR_ERROR:
             format(state, "{$}error{$}", (union format_arg[]) { { .style = error_style }, { .style = reset_style } });
             break;
         default:

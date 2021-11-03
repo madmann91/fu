@@ -12,4 +12,30 @@
         (void)res; \
     } while (false)
 
+#define IGNORE(...)
+#define FORWARD(...) __VA_ARGS__
+#define DEFER(x) x IGNORE()
+
+#define  ARG_1(x, ...)  x
+#define  ARG_2(x, ...)  ARG_1(__VA_ARGS__)
+#define  ARG_3(x, ...)  ARG_2(__VA_ARGS__)
+#define  ARG_4(x, ...)  ARG_3(__VA_ARGS__)
+#define  ARG_5(x, ...)  ARG_4(__VA_ARGS__)
+#define  ARG_6(x, ...)  ARG_5(__VA_ARGS__)
+#define  ARG_7(x, ...)  ARG_6(__VA_ARGS__)
+#define  ARG_8(x, ...)  ARG_7(__VA_ARGS__)
+#define  ARG_9(x, ...)  ARG_8(__VA_ARGS__)
+#define ARG_10(x, ...)  ARG_9(__VA_ARGS__)
+#define ARG_11(x, ...) ARG_10(__VA_ARGS__)
+
+#define SKIP_1(x, ...) __VA_ARGS__
+#define SKIP_2(x, ...) SKIP_1(__VA_ARGS__)
+#define SKIP_3(x, ...) SKIP_2(__VA_ARGS__)
+#define SKIP_4(x, ...) SKIP_3(__VA_ARGS__)
+#define SKIP_5(x, ...) SKIP_4(__VA_ARGS__)
+#define SKIP_6(x, ...) SKIP_5(__VA_ARGS__)
+#define SKIP_7(x, ...) SKIP_6(__VA_ARGS__)
+#define SKIP_8(x, ...) SKIP_7(__VA_ARGS__)
+#define SKIP_9(x, ...) SKIP_8(__VA_ARGS__)
+
 #endif

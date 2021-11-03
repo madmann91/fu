@@ -65,7 +65,11 @@ struct format_state {
     format_fn_t custom_format[256];
 };
 
-static const struct format_style reset_style = { STYLE_NORMAL, COLOR_NORMAL };
+static const struct format_style reset_style    = { STYLE_NORMAL, COLOR_NORMAL };
+static const struct format_style error_style    = { STYLE_BOLD,   COLOR_RED };
+static const struct format_style number_style   = { STYLE_NORMAL, COLOR_MAGENTA };
+static const struct format_style keyword_style  = { STYLE_BOLD,   COLOR_BLUE };
+static const struct format_style ellipsis_style = { STYLE_BOLD,   COLOR_WHITE };
 
 void format(struct format_state* state, const char* format_str, const union format_arg* args);
 

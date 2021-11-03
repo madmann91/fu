@@ -378,8 +378,13 @@ static inline ir_node_t find_var(const struct parser* parser, size_t var_index) 
 
 static bool add_var(struct parser* parser, ir_node_t var) {
     assert(var->tag == IR_VAR);
-    return insert_in_hash_table(
-        &parser->env, &var, hash_var_index(var->data.var_index), sizeof(ir_node_t), compare_vars);
+    if (!insert_in_hash_table(&parser->env, &var, hash_var_index(var->data.var_index), sizeof(ir_node_t), compare_vars)) {
+        log_error(parser->lexer.log, &var->debug->loc,
+            "shadowing variable with index '{u64}'",
+            (union format_arg[]) { { .u64 = var->data.var_index } });
+        return false;
+    }
+    return true;
 }
 
 static void remove_var(struct parser* parser, ir_node_t var) {
@@ -455,15 +460,16 @@ static ir_node_t parse_var(struct parser* parser) {
 }
 
 static ir_node_t parse_const(struct parser* parser, ir_node_t type) {
+    struct file_pos begin = parser->ahead.loc.begin;
     eat_token(parser, TOKEN_CONST);
     struct literal literal = parser->ahead.lit;
     bool was_literal = expect_token(parser, TOKEN_LITERAL);
     if (!type && accept_token(parser, TOKEN_COLON))
         type = as_node(parse_type(parser));
     if (!type) {
-        type = was_literal && literal.tag == LITERAL_FLOAT
-            ? as_node(make_floatn_type(parser->module, 64))
-            : as_node(make_nat(parser->module));
+        struct file_loc loc = make_loc(parser, &begin);
+        log_error(parser->lexer.log, &loc, "type annotation required for constant", NULL);
+        return make_error(parser->module);
     }
     union ir_node_data data = { 0 };
     size_t data_size = 0;
@@ -482,43 +488,6 @@ static ir_node_t parse_const(struct parser* parser, ir_node_t type) {
         }
     }
     return make_const(parser->module, type, &data, data_size);
-}
-
-static ir_node_t parse_let_var(struct parser* parser) {
-    struct file_pos begin = parser->ahead.loc.begin;
-    expect_token(parser, TOKEN_HASH);
-    size_t var_index = parse_var_index(parser);
-    eat_token(parser, TOKEN_LITERAL);
-    expect_token(parser, TOKEN_COLON);
-    ir_type_t type = parse_type(parser);
-    expect_token(parser, TOKEN_EQUAL);
-    ir_val_t val = parse_val(parser, type);
-    return make_tied_var(parser->module, as_node(type), var_index, as_node(val),
-        &(struct debug_info) { .loc = make_loc(parser, &begin) });
-}
-
-static ir_val_t parse_let(struct parser* parser) {
-    struct file_pos begin = parser->ahead.loc.begin;
-    eat_token(parser, TOKEN_LET);
-    size_t var_count = 0;
-    ir_val_t* vars = (ir_val_t*)parse_many(parser, &var_count, TOKEN_COMMA, parse_let_var);
-    expect_token(parser, TOKEN_IN);
-    if (var_count == 0)
-        return to_val(make_error(parser->module));
-    for (size_t i = 0; i < var_count; ++i) {
-        if (!add_var(parser, as_node(vars[i]))) {
-            log_error(parser->lexer.log, &vars[i]->debug->loc,
-                "shadowing variable with index '{u64}'",
-                (union format_arg[]) { { .u64 = vars[i]->data.var_index } });
-        }
-    }
-    ir_val_t body = parse_val(parser, NULL);
-    for (size_t i = 0; i < var_count; ++i)
-        remove_var(parser, as_node(vars[i]));
-    ir_val_t val = make_let(parser->module, vars, var_count, body,
-        &(struct debug_info) { .loc = make_loc(parser, &begin) });
-    free(vars);
-    return val;
 }
 
 static ir_node_t parse_type_op(struct parser* parser) {
@@ -552,6 +521,60 @@ static ir_type_t parse_type(struct parser* parser) {
     return type;
 }
 
+static ir_node_t parse_let_var(struct parser* parser) {
+    struct file_pos begin = parser->ahead.loc.begin;
+    expect_token(parser, TOKEN_HASH);
+    size_t var_index = parse_var_index(parser);
+    eat_token(parser, TOKEN_LITERAL);
+    expect_token(parser, TOKEN_COLON);
+    ir_type_t type = parse_type(parser);
+    expect_token(parser, TOKEN_EQUAL);
+    ir_val_t val = parse_val(parser, type);
+    return make_tied_var(parser->module, as_node(type), var_index, as_node(val),
+        &(struct debug_info) { .loc = make_loc(parser, &begin) });
+}
+
+static ir_val_t parse_let(struct parser* parser) {
+    struct file_pos begin = parser->ahead.loc.begin;
+    eat_token(parser, TOKEN_LET);
+    size_t var_count = 0;
+    ir_val_t* vars = (ir_val_t*)parse_many(parser, &var_count, TOKEN_COMMA, parse_let_var);
+    expect_token(parser, TOKEN_IN);
+    if (var_count == 0)
+        return to_val(make_error(parser->module));
+    for (size_t i = 0; i < var_count; ++i)
+        add_var(parser, as_node(vars[i]));
+    ir_val_t body = parse_val(parser, NULL);
+    for (size_t i = 0; i < var_count; ++i)
+        remove_var(parser, as_node(vars[i]));
+    ir_val_t val = make_let(parser->module, vars, var_count, body,
+        &(struct debug_info) { .loc = make_loc(parser, &begin) });
+    free(vars);
+    return val;
+}
+
+static ir_node_t parse_func_var(struct parser* parser) {
+    struct file_pos begin = parser->ahead.loc.begin;
+    expect_token(parser, TOKEN_HASH);
+    size_t var_index = parse_var_index(parser);
+    eat_token(parser, TOKEN_LITERAL);
+    expect_token(parser, TOKEN_COLON);
+    ir_type_t type = parse_type(parser);
+    return make_var(parser->module, as_node(type), var_index, &(struct debug_info) { .loc = make_loc(parser, &begin) });
+}
+
+static ir_val_t parse_func(struct parser* parser) {
+    struct file_pos begin = parser->ahead.loc.begin;
+    eat_token(parser, TOKEN_FUNC);
+    expect_token(parser, TOKEN_L_PAREN);
+    ir_node_t var = parse_func_var(parser);
+    add_var(parser, var);
+    expect_token(parser, TOKEN_R_PAREN);
+    ir_node_t body = as_node(parse_val(parser, NULL));
+    remove_var(parser, var);
+    return to_val(make_func(parser->module, var, body, &(struct debug_info) { .loc = make_loc(parser, &begin) }));
+}
+
 static ir_node_t parse_val_op(struct parser* parser) {
     return as_node(parse_val(parser, NULL));
 }
@@ -573,8 +596,12 @@ static ir_val_t parse_val(struct parser* parser, ir_type_t expected) {
         case TOKEN_ALLOC:     node_tag = IR_VAL_ALLOC; break;
         case TOKEN_ARRAY:     node_tag = IR_VAL_ARRAY; break;
         case TOKEN_TUPLE:     node_tag = IR_VAL_TUPLE; break;
+        case TOKEN_HASH:
+            return to_val(parse_var(parser));
         case TOKEN_LET:
             return parse_let(parser);
+        case TOKEN_FUNC:
+            return parse_func(parser);
         case TOKEN_CONST:
             return to_val(parse_const(parser, as_node(expected)));
         default:

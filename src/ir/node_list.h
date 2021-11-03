@@ -109,11 +109,9 @@
     IR_BIT_OP_LIST(f)
 
 #define IR_FUNC_OP_LIST(f) \
-    f(FUNC,   "func",   1) \
-    f(CALL,   "call",   2) \
-    f(CALLC,  "callc",  3) \
-    f(RETURN, "return", 1) \
-    f(PARAM,  "param",  1)
+    f(FUNC,   "func",    2) \
+    f(CALL,   "call",    2) \
+    f(CALLC,  "control", 1)
 
 #define IR_SCALAR_OP_LIST(f) \
     f(UNDEF,     "undef",     0) \

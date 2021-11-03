@@ -138,7 +138,7 @@ static ir_node_t insert_ir_node(struct ir_module* module, ir_node_t node) {
     new_node->debug = import_debug_info(module, node->debug);
     struct ir_node_pair new_node_pair = { .fst = new_node, .snd = simplify_ir_node(module, new_node) };
     must_succeed(insert_in_hash_table(&module->nodes, &new_node_pair, hash, sizeof(struct ir_node_pair), compare_ir_nodes));
-    return new_node;
+    return new_node_pair.snd;
 }
 
 ir_node_t make_node(
@@ -300,6 +300,16 @@ ir_type_t make_tuple_type(struct ir_module* module, const ir_type_t* elems, size
     return to_type(inserted_node);
 }
 
+ir_type_t make_func_type(struct ir_module* module, ir_type_t dom, ir_type_t codom, const struct debug_info* debug) {
+    return to_type(insert_ir_node(module, IR_NODE_WITH_N_OPS(2) {
+        .tag = IR_TYPE_FUNC,
+        .debug = debug,
+        .type = codom->type,
+        .ops = { as_node(dom), as_node(codom) },
+        .op_count = 2
+    }));
+}
+
 ir_val_t make_undef(struct ir_module* module, ir_type_t type) {
     return to_val(insert_ir_node(module, &(struct ir_node) { .tag = IR_VAL_UNDEF, .type = as_node(type) }));
 }
@@ -347,6 +357,17 @@ ir_node_t make_tied_var(struct ir_module* module, ir_node_t type, size_t var_ind
         .data.var_index = var_index,
         .ops = { value },
         .op_count = 1
+    });
+}
+
+ir_node_t make_func(struct ir_module* module, ir_node_t var, ir_node_t body, const struct debug_info* debug) {
+    assert(var->tag == IR_VAR);
+    return insert_ir_node(module, IR_NODE_WITH_N_OPS(2) {
+        .tag = IR_VAL_FUNC,
+        .debug = debug,
+        .type = as_node(make_func_type(module, to_type(var->type), to_type(body->type), debug)),
+        .ops = { var, body },
+        .op_count = 2
     });
 }
 

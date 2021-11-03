@@ -148,7 +148,7 @@ const char* get_node_name(enum ir_node_tag tag) {
 size_t get_expected_op_count(enum ir_node_tag tag) {
     switch (tag) {
 #define scalar_op(tag, str, n) case IR_VAL_##tag: return n;
-#define vec_op(tag, str, n) case IR_VAL_V##tag: return n; scalar_op(tag, str, n)
+#define vec_op(tag, str, n) case IR_VAL_V##tag: return n == SIZE_MAX ? n : n + 1; scalar_op(tag, str, n)
 #define type(tag, str, n) case IR_TYPE_##tag: return n;
 #define kind(tag, str, n) case IR_KIND_##tag: return n;
 #define N SIZE_MAX

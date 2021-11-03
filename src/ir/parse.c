@@ -546,8 +546,10 @@ static ir_type_t parse_type(struct parser* parser) {
         ops = parse_many(parser, &op_count, TOKEN_COMMA, parse_type_op);
         expect_token(parser, TOKEN_R_BRACKET);
     }
-    return to_type(make_node(parser->module, node_tag, as_node(make_star(parser->module)), ops, op_count, NULL,
+    ir_type_t type = to_type(make_node(parser->module, node_tag, as_node(make_star(parser->module)), ops, op_count, NULL,
         &(struct debug_info) { .loc = make_loc(parser, &begin) }));
+    free(ops);
+    return type;
 }
 
 static ir_node_t parse_val_op(struct parser* parser) {

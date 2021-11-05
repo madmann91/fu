@@ -83,12 +83,36 @@ static inline ir_val_t simplify_let(struct ir_module* module, ir_val_t let) {
     return let;
 }
 
-ir_node_t simplify_ir_node(struct ir_module* module, ir_node_t node) {
-    switch (node->tag) {
-        case IR_VAL_UNDEF:   return as_node(simplify_undef(module, to_val(node)));
-        case IR_VAL_INSERT:  return as_node(simplify_insert(module, to_val(node)));
-        case IR_VAL_EXTRACT: return as_node(simplify_extract(module, to_val(node)));
-        case IR_VAL_LET:     return as_node(simplify_let(module, to_val(node)));
-        default: return node;
+static inline ir_val_t simplify_int_arith_op(struct ir_module* module, ir_val_t int_arith_op) {
+    ir_val_t left  = see_thru(get_left_operand(int_arith_op));
+    ir_val_t right = see_thru(get_right_operand(int_arith_op));
+    if (left->tag == IR_CONST && right->tag == IR_CONST) {
+        switch (int_arith_op->tag) {
+            case IR_VAL_IADD: return make_int_const(module, to_type(left->type), left->data.int_val + right->data.int_val);
+            case IR_VAL_ISUB: return make_int_const(module, to_type(left->type), left->data.int_val - right->data.int_val);
+            case IR_VAL_IMUL: return make_int_const(module, to_type(left->type), left->data.int_val * right->data.int_val);
+            case IR_VAL_UDIV: return make_int_const(module, to_type(left->type), left->data.int_val / right->data.int_val);
+            case IR_VAL_SDIV: return make_int_const(module, to_type(left->type), ((intmax_t)left->data.int_val) / ((intmax_t)right->data.int_val));
+            case IR_VAL_UREM: return make_int_const(module, to_type(left->type), left->data.int_val % right->data.int_val);
+            case IR_VAL_SREM: return make_int_const(module, to_type(left->type), ((intmax_t)left->data.int_val) % ((intmax_t)right->data.int_val));
+            default:
+                assert(false && "invalid integer operation");
+                break;
+        }
     }
+    return int_arith_op;
+}
+
+ir_node_t simplify_ir_node(struct ir_module* module, ir_node_t node) {
+    if (node->tag == IR_VAL_LET)
+        return as_node(simplify_let(module, to_val(node)));
+    if (is_int_arith_op(node->tag))
+        return as_node(simplify_int_arith_op(module, to_val(node)));
+    if (node->tag == IR_VAL_UNDEF)
+        return as_node(simplify_undef(module, to_val(node)));
+    if (node->tag == IR_VAL_INSERT)
+        return as_node(simplify_insert(module, to_val(node)));
+    if (node->tag == IR_VAL_EXTRACT)
+        return as_node(simplify_extract(module, to_val(node)));
+    return node;
 }

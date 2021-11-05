@@ -2,6 +2,7 @@
 #include "ir/node.h"
 
 #include <assert.h>
+#include <limits.h>
 
 ir_type_t to_type(ir_node_t node) {
     assert(is_type(node));
@@ -189,6 +190,19 @@ bool has_fp_math_mode(enum ir_node_tag tag) {
     return is_float_op(tag) && (is_cmp_op(tag) || is_arith_op(tag));
 }
 
+ir_type_t get_int_or_float_type_bitwidth(ir_type_t type) {
+    assert(type->tag == IR_TYPE_INT || type->tag == IR_TYPE_FLOAT);
+    return to_type(type->ops[0]);
+}
+
+size_t get_int_or_float_type_bitwidth_as_int(ir_type_t type) {
+    return get_nat_const_val(get_int_or_float_type_bitwidth(type));
+}
+
+ir_uint_t get_int_type_bitmask(ir_type_t type) {
+    return ((ir_uint_t)-1) >> (sizeof(ir_uint_t) * CHAR_BIT - get_int_or_float_type_bitwidth_as_int(type));
+}
+
 ir_uint_t get_nat_const_val(ir_type_t type) {
     assert(is_nat_const(as_node(type)));
     return type->data.int_val;
@@ -269,4 +283,14 @@ ir_val_t get_extract_or_insert_index(ir_val_t val) {
 ir_val_t get_insert_elem(ir_val_t val) {
     assert(is_insert(val));
     return to_val(val->ops[is_vec_op(val->tag) ? 3 : 2]);
+}
+
+ir_val_t get_left_operand(ir_val_t val) {
+    assert(is_arith_op(val->tag) || is_cmp_op(val->tag) || is_bit_op(val->tag));
+    return to_val(val->ops[is_vec_op(val->tag) ? 1 : 0]);
+}
+
+ir_val_t get_right_operand(ir_val_t val) {
+    assert(is_arith_op(val->tag) || is_cmp_op(val->tag) || is_bit_op(val->tag));
+    return to_val(val->ops[is_vec_op(val->tag) ? 2 : 1]);
 }

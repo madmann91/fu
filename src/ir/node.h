@@ -116,6 +116,10 @@ size_t get_expected_op_count(enum ir_node_tag);
 enum ir_node_tag to_vec_tag(enum ir_node_tag);
 enum ir_node_tag to_scalar_tag(enum ir_node_tag);
 
+ir_type_t get_int_or_float_type_bitwidth(ir_type_t);
+size_t get_int_or_float_type_bitwidth_as_int(ir_type_t);
+ir_uint_t get_int_type_bitmask(ir_type_t);
+
 ir_uint_t get_nat_const_val(ir_type_t);
 ir_uint_t get_int_const_val(ir_val_t);
 ir_uint_t get_int_or_nat_const_val(ir_node_t);
@@ -135,5 +139,8 @@ ir_val_t get_vec_op_mask(ir_val_t);
 ir_val_t get_extract_or_insert_val(ir_val_t);
 ir_val_t get_extract_or_insert_index(ir_val_t);
 ir_val_t get_insert_elem(ir_val_t);
+
+ir_val_t get_left_operand(ir_val_t);
+ir_val_t get_right_operand(ir_val_t);
 
 #endif

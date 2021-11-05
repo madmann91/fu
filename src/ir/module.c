@@ -330,7 +330,7 @@ ir_type_t make_nat_const(struct ir_module* module, ir_uint_t int_val) {
 }
 
 ir_val_t make_int_const(struct ir_module* module, ir_type_t type, ir_uint_t int_val) {
-    return to_val(make_const(module, as_node(type), &(union ir_node_data) { .int_val = int_val }, sizeof(ir_uint_t)));
+    return to_val(make_const(module, as_node(type), &(union ir_node_data) { .int_val = int_val & get_int_type_bitmask(type) }, sizeof(ir_uint_t)));
 }
 
 ir_val_t make_float_const(struct ir_module* module, ir_type_t type, ir_float_t float_val) {

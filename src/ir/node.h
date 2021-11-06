@@ -53,7 +53,7 @@ union ir_node_data {
 };
 
 #define IR_NODE_FIELDS \
-    enum ir_node_tag tag : 32; \
+    enum ir_node_tag tag; \
     union ir_node_data data; \
     size_t op_count; \
     const struct ir_node* type; \

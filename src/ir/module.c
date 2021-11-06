@@ -136,7 +136,11 @@ static ir_node_t insert_ir_node(struct ir_module* module, ir_node_t node) {
     struct ir_node* new_node = alloc_from_mem_pool(&module->mem_pool, sizeof(struct ir_node) + sizeof(struct ir_node*) * node->op_count);
     memcpy(new_node, node, sizeof(struct ir_node) + sizeof(struct ir_node*) * node->op_count);
     new_node->debug = import_debug_info(module, node->debug);
+
     struct ir_node_pair new_node_pair = { .fst = new_node, .snd = simplify_ir_node(module, new_node) };
+    assert(
+        new_node_pair.snd->type == new_node->type &&
+        "simplified nodes must have the same type as the original, non-simplified one");
     must_succeed(insert_in_hash_table(&module->nodes, &new_node_pair, hash, sizeof(struct ir_node_pair), compare_ir_nodes));
     return new_node_pair.snd;
 }

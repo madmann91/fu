@@ -93,10 +93,6 @@ bool is_sized_array_type(ir_type_t);
 bool is_unit_tuple_type(ir_type_t);
 bool is_unit_tuple(ir_val_t);
 
-bool is_insert(ir_val_t);
-bool is_extract(ir_val_t);
-bool is_extract_or_insert(ir_val_t);
-
 bool is_vec_op(enum ir_node_tag);
 bool is_int_op(enum ir_node_tag);
 bool is_float_op(enum ir_node_tag);
@@ -107,7 +103,14 @@ bool is_cmp_op(enum ir_node_tag);
 bool is_int_cmp_op(enum ir_node_tag);
 bool is_float_cmp_op(enum ir_node_tag);
 bool is_bit_op(enum ir_node_tag);
+
+bool is_insert(enum ir_node_tag);
+bool is_extract(enum ir_node_tag);
+bool is_extract_or_insert(enum ir_node_tag);
+
 bool has_fp_math_mode(enum ir_node_tag);
+bool has_err(enum ir_node_tag);
+bool has_mem(enum ir_node_tag);
 
 const char* get_unique_name(ir_node_t);
 const char* get_node_name(enum ir_node_tag);
@@ -140,6 +143,8 @@ ir_val_t get_extract_or_insert_val(ir_val_t);
 ir_val_t get_extract_or_insert_index(ir_val_t);
 ir_val_t get_insert_elem(ir_val_t);
 
+ir_val_t get_err(ir_val_t);
+ir_val_t get_mem(ir_val_t);
 ir_val_t get_left_operand(ir_val_t);
 ir_val_t get_right_operand(ir_val_t);
 

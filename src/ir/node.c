@@ -87,18 +87,6 @@ bool is_unit_tuple(ir_val_t val) {
     return val->tag == IR_VAL_TUPLE && val->op_count == 0;
 }
 
-bool is_extract(ir_val_t val) {
-    return val->tag == IR_VAL_EXTRACT || val->tag == IR_VAL_VEXTRACT;
-}
-
-bool is_insert(ir_val_t val) {
-    return val->tag == IR_VAL_INSERT || val->tag == IR_VAL_VINSERT;
-}
-
-bool is_extract_or_insert(ir_val_t val) {
-    return is_extract(val) || is_insert(val);
-}
-
 #define MAKE_PREDICATE(name, ...) \
     bool name(enum ir_node_tag tag) { \
         switch (tag) { \
@@ -186,8 +174,53 @@ enum ir_node_tag to_scalar_tag(enum ir_node_tag tag) {
     }
 }
 
+bool is_extract(enum ir_node_tag tag) {
+    return tag == IR_VAL_EXTRACT || tag == IR_VAL_VEXTRACT;
+}
+
+bool is_insert(enum ir_node_tag tag) {
+    return tag == IR_VAL_INSERT || tag == IR_VAL_VINSERT;
+}
+
+bool is_extract_or_insert(enum ir_node_tag tag) {
+    return is_extract(tag) || is_insert(tag);
+}
+
 bool has_fp_math_mode(enum ir_node_tag tag) {
     return is_float_op(tag) && (is_cmp_op(tag) || is_arith_op(tag));
+}
+
+bool has_err(enum ir_node_tag tag) {
+    switch (tag) {
+        case IR_VAL_UDIV:
+        case IR_VAL_SDIV:
+        case IR_VAL_UREM:
+        case IR_VAL_SREM:
+        case IR_VAL_FDIV:
+        case IR_VAL_FREM:
+        case IR_VAL_VUDIV:
+        case IR_VAL_VSDIV:
+        case IR_VAL_VUREM:
+        case IR_VAL_VSREM:
+        case IR_VAL_VFDIV:
+        case IR_VAL_VFREM:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool has_mem(enum ir_node_tag tag) {
+    switch (tag) {
+        case IR_VAL_ALLOC:
+        case IR_VAL_LOAD:
+        case IR_VAL_STORE:
+        case IR_VAL_VLOAD:
+        case IR_VAL_VSTORE:
+            return true;
+        default:
+            return false;
+    }
 }
 
 ir_type_t get_int_or_float_type_bitwidth(ir_type_t type) {
@@ -271,26 +304,36 @@ ir_val_t get_tuple_elem(ir_val_t val, size_t i) {
 }
 
 ir_val_t get_extract_or_insert_val(ir_val_t val) {
-    assert(is_extract_or_insert(val));
+    assert(is_extract_or_insert(val->tag));
     return to_val(val->ops[is_vec_op(val->tag) ? 1 : 0]);
 }
 
 ir_val_t get_extract_or_insert_index(ir_val_t val) {
-    assert(is_extract_or_insert(val));
+    assert(is_extract_or_insert(val->tag));
     return to_val(val->ops[is_vec_op(val->tag) ? 2 : 1]);
 }
 
 ir_val_t get_insert_elem(ir_val_t val) {
-    assert(is_insert(val));
+    assert(is_insert(val->tag));
     return to_val(val->ops[is_vec_op(val->tag) ? 3 : 2]);
+}
+
+ir_val_t get_err(ir_val_t val) {
+    assert(has_err(val->tag));
+    return to_val(val->ops[is_vec_op(val->tag) ? 1 : 0]);
+}
+
+ir_val_t get_mem(ir_val_t val) {
+    assert(has_mem(val->tag));
+    return to_val(val->ops[is_vec_op(val->tag) ? 1 : 0]);
 }
 
 ir_val_t get_left_operand(ir_val_t val) {
     assert(is_arith_op(val->tag) || is_cmp_op(val->tag) || is_bit_op(val->tag));
-    return to_val(val->ops[is_vec_op(val->tag) ? 1 : 0]);
+    return to_val(val->ops[(has_err(val->tag) ? 1 : 0) + (is_vec_op(val->tag) ? 1 : 0)]);
 }
 
 ir_val_t get_right_operand(ir_val_t val) {
     assert(is_arith_op(val->tag) || is_cmp_op(val->tag) || is_bit_op(val->tag));
-    return to_val(val->ops[is_vec_op(val->tag) ? 2 : 1]);
+    return to_val(val->ops[(has_err(val->tag) ? 1 : 0) + (is_vec_op(val->tag) ? 2 : 1)]);
 }

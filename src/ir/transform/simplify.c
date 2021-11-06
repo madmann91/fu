@@ -4,13 +4,14 @@
 
 #include <assert.h>
 #include <string.h>
+#include <math.h>
 
 static inline ir_val_t see_thru(ir_val_t val) {
     return is_tied_var(as_node(val)) ? to_val(get_tied_val(as_node(val))) : val;
 }
 
 static inline ir_val_t find_insert_with_index(ir_val_t val, ir_val_t index, ir_val_t mask) {
-    while (is_insert(val)) {
+    while (is_insert(val->tag)) {
         if (is_vec_op(val->tag) && get_vec_op_mask(val) != mask)
             break;
         ir_val_t other_index = see_thru(get_extract_or_insert_index(val));
@@ -87,20 +88,66 @@ static inline ir_val_t simplify_int_arith_op(struct ir_module* module, ir_val_t 
     ir_val_t left  = see_thru(get_left_operand(int_arith_op));
     ir_val_t right = see_thru(get_right_operand(int_arith_op));
     if (left->tag == IR_CONST && right->tag == IR_CONST) {
+        ir_val_t result = NULL;
         switch (int_arith_op->tag) {
             case IR_VAL_IADD: return make_int_const(module, to_type(left->type), left->data.int_val + right->data.int_val);
             case IR_VAL_ISUB: return make_int_const(module, to_type(left->type), left->data.int_val - right->data.int_val);
             case IR_VAL_IMUL: return make_int_const(module, to_type(left->type), left->data.int_val * right->data.int_val);
-            case IR_VAL_UDIV: return make_int_const(module, to_type(left->type), left->data.int_val / right->data.int_val);
-            case IR_VAL_SDIV: return make_int_const(module, to_type(left->type), ((intmax_t)left->data.int_val) / ((intmax_t)right->data.int_val));
-            case IR_VAL_UREM: return make_int_const(module, to_type(left->type), left->data.int_val % right->data.int_val);
-            case IR_VAL_SREM: return make_int_const(module, to_type(left->type), ((intmax_t)left->data.int_val) % ((intmax_t)right->data.int_val));
+            case IR_VAL_UDIV: result = make_int_const(module, to_type(left->type), left->data.int_val / right->data.int_val); break;
+            case IR_VAL_SDIV: result = make_int_const(module, to_type(left->type), ((intmax_t)left->data.int_val) / ((intmax_t)right->data.int_val)); break;
+            case IR_VAL_UREM: result = make_int_const(module, to_type(left->type), left->data.int_val % right->data.int_val); break;
+            case IR_VAL_SREM: result = make_int_const(module, to_type(left->type), ((intmax_t)left->data.int_val) % ((intmax_t)right->data.int_val)); break;
             default:
                 assert(false && "invalid integer operation");
-                break;
+                return int_arith_op;
         }
+        return make_tuple(module, (ir_val_t[]) { get_err(int_arith_op), result }, 2, int_arith_op->debug);
     }
     return int_arith_op;
+}
+
+static ir_float_t fadd_32(ir_float_t x, ir_float_t y) { return ((float)x) + ((float)y); }
+static ir_float_t fsub_32(ir_float_t x, ir_float_t y) { return ((float)x) - ((float)y); }
+static ir_float_t fmul_32(ir_float_t x, ir_float_t y) { return ((float)x) * ((float)y); }
+static ir_float_t fdiv_32(ir_float_t x, ir_float_t y) { return ((float)x) / ((float)y); }
+static ir_float_t frem_32(ir_float_t x, ir_float_t y) { return fmodf(x, y); }
+
+static ir_float_t fadd_64(ir_float_t x, ir_float_t y) { return x + y; }
+static ir_float_t fsub_64(ir_float_t x, ir_float_t y) { return x - y; }
+static ir_float_t fmul_64(ir_float_t x, ir_float_t y) { return x * y; }
+static ir_float_t fdiv_64(ir_float_t x, ir_float_t y) { return x / y; }
+static ir_float_t frem_64(ir_float_t x, ir_float_t y) { return fmod(x, y); }
+
+typedef ir_float_t (*float_op_t) (ir_float_t, ir_float_t);
+
+static inline ir_float_t apply_float_op(ir_val_t left, ir_val_t right, float_op_t op_32, float_op_t op_64) {
+    switch (get_int_or_float_type_bitwidth_as_int(to_type(left->type))) {
+        case 32: return op_32(left->data.float_val, right->data.float_val);
+        case 64: return op_64(left->data.float_val, right->data.float_val);
+        default:
+            assert(false && "unsupported float type bitwidth");
+            return 0;
+    }
+}
+
+static inline ir_val_t simplify_float_arith_op(struct ir_module* module, ir_val_t float_arith_op) {
+    ir_val_t left  = see_thru(get_left_operand(float_arith_op));
+    ir_val_t right = see_thru(get_right_operand(float_arith_op));
+    if (left->tag == IR_CONST && right->tag == IR_CONST) {
+        ir_val_t result = NULL;
+        switch (float_arith_op->tag) {
+            case IR_VAL_FADD: return make_float_const(module, to_type(left->type), apply_float_op(left, right, fadd_32, fadd_64));
+            case IR_VAL_FSUB: return make_float_const(module, to_type(left->type), apply_float_op(left, right, fsub_32, fsub_64));
+            case IR_VAL_FMUL: return make_float_const(module, to_type(left->type), apply_float_op(left, right, fmul_32, fmul_64));
+            case IR_VAL_FDIV: result = make_float_const(module, to_type(left->type), apply_float_op(left, right, fdiv_32, fdiv_64)); break;
+            case IR_VAL_FREM: result = make_float_const(module, to_type(left->type), apply_float_op(left, right, frem_32, frem_64)); break;
+            default:
+                assert(false && "invalid integer operation");
+                return float_arith_op;
+        }
+        return make_tuple(module, (ir_val_t[]) { get_err(float_arith_op), result }, 2, float_arith_op->debug);
+    }
+    return float_arith_op;
 }
 
 ir_node_t simplify_ir_node(struct ir_module* module, ir_node_t node) {
@@ -108,6 +155,8 @@ ir_node_t simplify_ir_node(struct ir_module* module, ir_node_t node) {
         return as_node(simplify_let(module, to_val(node)));
     if (is_int_arith_op(node->tag))
         return as_node(simplify_int_arith_op(module, to_val(node)));
+    if (is_float_arith_op(node->tag))
+        return as_node(simplify_float_arith_op(module, to_val(node)));
     if (node->tag == IR_VAL_UNDEF)
         return as_node(simplify_undef(module, to_val(node)));
     if (node->tag == IR_VAL_INSERT)

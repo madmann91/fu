@@ -18,6 +18,12 @@ struct error_mgr;
 struct ir_module* new_ir_module(struct error_mgr*);
 void free_ir_module(struct ir_module*);
 
+ir_var_set_t make_empty_var_set(struct ir_module*);
+ir_var_set_t make_singleton_var_set(struct ir_module*, ir_node_t);
+ir_var_set_t make_var_set(struct ir_module*, const ir_node_t*, size_t);
+ir_var_set_t make_union_var_set(struct ir_module*, ir_var_set_t, ir_var_set_t);
+ir_var_set_t make_diff_var_set(struct ir_module*, ir_var_set_t, ir_var_set_t);
+
 ir_node_t make_node(
     struct ir_module*,
     enum ir_node_tag,

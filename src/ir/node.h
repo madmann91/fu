@@ -52,10 +52,13 @@ union ir_node_data {
     unsigned fp_math;
 };
 
+typedef const struct ir_var_set* ir_var_set_t;
+
 #define IR_NODE_FIELDS \
     enum ir_node_tag tag; \
     union ir_node_data data; \
     size_t op_count; \
+    ir_var_set_t free_vars; \
     const struct ir_node* type; \
     const struct debug_info* debug;
 
@@ -66,10 +69,18 @@ struct ir_node {
 
 typedef const struct ir_node* ir_node_t;
 
+struct ir_var_set {
+    size_t var_count;
+    ir_node_t vars[];
+};
+
 // These types prevent mixing different node sorts together.
 typedef const struct { IR_NODE_FIELDS const struct ir_node* ops[]; }* ir_kind_t;
 typedef const struct { IR_NODE_FIELDS const struct ir_node* ops[]; }* ir_type_t;
 typedef const struct { IR_NODE_FIELDS const struct ir_node* ops[]; }* ir_val_t;
+
+bool contains_var(ir_var_set_t, ir_node_t);
+bool contains_any_var_of(ir_var_set_t, ir_var_set_t);
 
 union ir_node_data make_int_node_data(ir_uint_t);
 union ir_node_data make_float_node_data(ir_float_t);

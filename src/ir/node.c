@@ -5,6 +5,28 @@
 #include <limits.h>
 #include <string.h>
 
+bool contains_var(ir_var_set_t var_set, ir_node_t var) {
+    size_t i = 0, j = var_set->var_count;
+    while (i < j) {
+        size_t m = (i + j) / 2;
+        if (var < var_set->vars[m])
+            i = m + 1;
+        else if (var > var_set->vars[m])
+            j = m;
+        else
+            return true;
+    }
+    return false;
+}
+
+bool contains_any_var_of(ir_var_set_t var_set, ir_var_set_t other) {
+    for (size_t i = 0; i < other->var_count; ++i) {
+        if (contains_var(var_set, other->vars[i]))
+            return true;
+    }
+    return false;
+}
+
 #define MAKE_NODE_DATA(name, type, field) \
     union ir_node_data make_##name##_node_data(type field) { \
         union ir_node_data data; \

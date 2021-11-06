@@ -10,6 +10,11 @@ static inline ir_val_t see_thru(ir_val_t val) {
     return is_tied_var(as_node(val)) ? to_val(get_tied_val(as_node(val))) : val;
 }
 
+static inline ir_val_t simplify_let(struct ir_module* module, ir_val_t let) {
+    // TODO
+    return let;
+}
+
 static inline ir_val_t find_insert_with_index(ir_val_t val, ir_val_t index, ir_val_t mask) {
     while (is_insert(val->tag)) {
         if (is_vec_op(val->tag) && get_vec_op_mask(val) != mask)
@@ -79,11 +84,6 @@ static inline ir_val_t simplify_undef(struct ir_module* module, ir_val_t undef) 
     return undef;
 }
 
-static inline ir_val_t simplify_let(struct ir_module* module, ir_val_t let) {
-    // TODO
-    return let;
-}
-
 static inline ir_val_t simplify_int_arith_op(struct ir_module* module, ir_val_t int_arith_op) {
     ir_val_t left  = see_thru(get_left_operand(int_arith_op));
     ir_val_t right = see_thru(get_right_operand(int_arith_op));
@@ -150,7 +150,7 @@ static inline ir_val_t simplify_float_arith_op(struct ir_module* module, ir_val_
     return float_arith_op;
 }
 
-ir_node_t simplify_ir_node(struct ir_module* module, ir_node_t node) {
+ir_node_t simplify_node(struct ir_module* module, ir_node_t node) {
     if (node->tag == IR_VAL_LET)
         return as_node(simplify_let(module, to_val(node)));
     if (is_int_arith_op(node->tag))

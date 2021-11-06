@@ -46,7 +46,7 @@ ir_type_t make_option_type(struct ir_module*, const ir_type_t*, size_t, const st
 ir_type_t make_func_type(struct ir_module*, ir_type_t, ir_type_t, const struct debug_info*);
 
 ir_val_t make_undef(struct ir_module*, ir_type_t);
-ir_node_t make_const(struct ir_module*, ir_node_t, const union ir_node_data*, size_t);
+ir_node_t make_const(struct ir_module*, ir_node_t, const union ir_node_data*);
 ir_type_t make_nat_const(struct ir_module*, ir_uint_t);
 ir_val_t make_int_const(struct ir_module*, ir_type_t, ir_uint_t);
 ir_val_t make_float_const(struct ir_module*, ir_type_t, ir_float_t);

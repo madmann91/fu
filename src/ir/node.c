@@ -3,6 +3,22 @@
 
 #include <assert.h>
 #include <limits.h>
+#include <string.h>
+
+#define MAKE_NODE_DATA(name, type, field) \
+    union ir_node_data make_##name##_node_data(type field) { \
+        union ir_node_data data; \
+        memset(&data, 0, sizeof(union ir_node_data)); \
+        data.field = field; \
+        return data; \
+    }
+
+MAKE_NODE_DATA(int, ir_uint_t, int_val)
+MAKE_NODE_DATA(float, ir_float_t, float_val)
+MAKE_NODE_DATA(var_index, size_t, var_index)
+MAKE_NODE_DATA(fp_math, unsigned, fp_math)
+
+#undef MAKE_NODE_DATA
 
 ir_type_t to_type(ir_node_t node) {
     assert(is_type(node));

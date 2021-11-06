@@ -471,23 +471,17 @@ static ir_node_t parse_const(struct parser* parser, ir_node_t type) {
         log_error(parser->lexer.log, &loc, "type annotation required for constant", NULL);
         return make_error(parser->module);
     }
-    union ir_node_data data = { 0 };
-    size_t data_size = 0;
+    union ir_node_data data;
     if (was_literal) {
         if (literal.tag == LITERAL_INT) {
-            if (type->tag == IR_TYPE_FLOAT) {
-                data.float_val = literal.data.int_val;
-                data_size = sizeof(ir_float_t);
-            } else {
-                data.int_val = literal.data.int_val;
-                data_size = sizeof(ir_uint_t);
-            }
-        } else {
-            data.float_val = literal.data.float_val;
-            data_size = sizeof(ir_float_t);
-        }
+            if (type->tag == IR_TYPE_FLOAT)
+                data = make_float_node_data(literal.data.int_val);
+            else
+                data = make_int_node_data(literal.data.int_val);
+        } else
+            data = make_float_node_data(literal.data.float_val);
     }
-    return make_const(parser->module, type, &data, data_size);
+    return make_const(parser->module, type, &data);
 }
 
 static ir_node_t parse_type_op(struct parser* parser) {

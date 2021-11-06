@@ -73,7 +73,7 @@ static bool compare_debug_info(const void* left, const void* right) {
 static uint32_t hash_ir_node(ir_node_t node) {
     uint32_t h = hash_init();
     h = hash_uint32(h, node->tag);
-    h = hash_raw_bytes(h, &node->data, node->data_size);
+    h = hash_raw_bytes(h, &node->data, sizeof(union ir_node_data));
     for (size_t i = 0; i < node->op_count; ++i)
         h = hash_pointer(h, node->ops[i]);
     return h;
@@ -82,10 +82,9 @@ static uint32_t hash_ir_node(ir_node_t node) {
 static bool is_same_ir_node(ir_node_t left, ir_node_t right) {
     if (left->tag != right->tag ||
         left->type != right->type ||
-        left->data_size != right->data_size ||
         left->op_count != right->op_count)
         return false;
-    if (memcmp(&left->data, &right->data, left->data_size))
+    if (memcmp(&left->data, &right->data, sizeof(union ir_node_data)))
         return false;
     for (size_t i = 0, n = left->op_count; i < n; ++i) {
         if (left->ops[i] != right->ops[i])
@@ -295,7 +294,6 @@ ir_type_t make_tuple_type(struct ir_module* module, const ir_type_t* elems, size
         sizeof(struct ir_node) + sizeof(ir_node_t) * (elem_count + 1));
     memcpy(node->ops, elems, sizeof(ir_node_t) * elem_count);
     node->tag = IR_TYPE_TUPLE;
-    node->data_size = 0;
     node->type = as_node(make_star(module));
     node->op_count = elem_count;
     node->debug = debug;
@@ -318,27 +316,29 @@ ir_val_t make_undef(struct ir_module* module, ir_type_t type) {
     return to_val(insert_ir_node(module, &(struct ir_node) { .tag = IR_VAL_UNDEF, .type = as_node(type) }));
 }
 
-ir_node_t make_const(struct ir_module* module, ir_node_t type, const union ir_node_data* data, size_t data_size) {
+ir_node_t make_const(struct ir_module* module, ir_node_t type, const union ir_node_data* data) {
     if (module->error_mgr && type->tag != IR_TYPE_INT && type->tag != IR_TYPE_FLOAT && type->tag != IR_KIND_NAT)
         module->error_mgr->unexpected_node(module->error_mgr, type, "int, float, or nat", type->debug);
     return insert_ir_node(module, &(struct ir_node) {
         .tag = IR_CONST,
         .type = type,
-        .data = *data,
-        .data_size = data_size
+        .data = *data
     });
 }
 
 ir_type_t make_nat_const(struct ir_module* module, ir_uint_t int_val) {
-    return to_type(make_const(module, as_node(make_nat(module)), &(union ir_node_data) { .int_val = int_val }, sizeof(ir_uint_t)));
+    union ir_node_data data = make_int_node_data(int_val);
+    return to_type(make_const(module, as_node(make_nat(module)), &data));
 }
 
 ir_val_t make_int_const(struct ir_module* module, ir_type_t type, ir_uint_t int_val) {
-    return to_val(make_const(module, as_node(type), &(union ir_node_data) { .int_val = int_val & get_int_type_bitmask(type) }, sizeof(ir_uint_t)));
+    union ir_node_data data = make_int_node_data(int_val & get_int_type_bitmask(type));
+    return to_val(make_const(module, as_node(type), &data));
 }
 
 ir_val_t make_float_const(struct ir_module* module, ir_type_t type, ir_float_t float_val) {
-    return to_val(make_const(module, as_node(type), &(union ir_node_data) { .float_val = float_val }, sizeof(ir_float_t)));
+    union ir_node_data data = make_float_node_data(float_val);
+    return to_val(make_const(module, as_node(type), &data));
 }
 
 ir_node_t make_var(struct ir_module* module, ir_node_t type, size_t var_index, const struct debug_info* debug) {
@@ -346,8 +346,7 @@ ir_node_t make_var(struct ir_module* module, ir_node_t type, size_t var_index, c
         .tag = IR_VAR,
         .debug = debug,
         .type = type,
-        .data_size = sizeof(size_t),
-        .data.var_index = var_index
+        .data = make_var_index_node_data(var_index)
     });
 }
 
@@ -357,8 +356,7 @@ ir_node_t make_tied_var(struct ir_module* module, ir_node_t type, size_t var_ind
         .tag = IR_VAR,
         .debug = debug,
         .type = type,
-        .data_size = sizeof(size_t),
-        .data.var_index = var_index,
+        .data = make_var_index_node_data(var_index),
         .ops = { value },
         .op_count = 1
     });
@@ -384,7 +382,6 @@ ir_val_t make_let(struct ir_module* module, const ir_val_t* vars, size_t var_cou
         sizeof(struct ir_node) + sizeof(ir_node_t) * (var_count + 1));
     memcpy(node->ops, vars, sizeof(ir_node_t) * var_count);
     node->tag = IR_VAL_LET;
-    node->data_size = 0;
     node->type = as_node(infer_let_type(body));
     node->op_count = var_count + 1;
     node->ops[var_count] = as_node(body);
@@ -399,7 +396,6 @@ ir_val_t make_tuple(struct ir_module* module, const ir_val_t* args, size_t arg_c
         sizeof(struct ir_node) + sizeof(ir_node_t) * (arg_count + 1));
     memcpy(node->ops, args, sizeof(ir_node_t) * arg_count);
     node->tag = IR_VAL_TUPLE;
-    node->data_size = 0;
     node->type = as_node(infer_tuple_type(module, args, arg_count, debug));
     node->op_count = arg_count;
     node->debug = debug;

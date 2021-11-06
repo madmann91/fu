@@ -54,7 +54,6 @@ union ir_node_data {
 
 #define IR_NODE_FIELDS \
     enum ir_node_tag tag : 32; \
-    uint32_t data_size; \
     union ir_node_data data; \
     size_t op_count; \
     const struct ir_node* type; \
@@ -71,6 +70,11 @@ typedef const struct ir_node* ir_node_t;
 typedef const struct { IR_NODE_FIELDS const struct ir_node* ops[]; }* ir_kind_t;
 typedef const struct { IR_NODE_FIELDS const struct ir_node* ops[]; }* ir_type_t;
 typedef const struct { IR_NODE_FIELDS const struct ir_node* ops[]; }* ir_val_t;
+
+union ir_node_data make_int_node_data(ir_uint_t);
+union ir_node_data make_float_node_data(ir_float_t);
+union ir_node_data make_var_index_node_data(size_t);
+union ir_node_data make_fp_math_node_data(unsigned);
 
 bool is_kind(ir_node_t);
 bool is_type(ir_node_t);

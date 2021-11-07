@@ -13,9 +13,12 @@ add_executable(fu
     ir/error_mgr.c
     ir/simplify.c
     driver/main.c)
-set_target_properties(fu PROPERTIES C_STANDARD 11 C_EXTENSIONS OFF)
 target_include_directories(fu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-set_target_properties(fu PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set_target_properties(fu PROPERTIES
+    C_STANDARD 11
+    C_EXTENSIONS OFF
+    INTERPROCEDURAL_OPTIMIZATION_RELEASE ON
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
 include(CheckLibraryExists)
 check_library_exists(m sin "" HAS_LIBM)

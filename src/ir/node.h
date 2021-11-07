@@ -143,6 +143,9 @@ ir_uint_t get_int_const_val(ir_val_t);
 ir_uint_t get_int_or_nat_const_val(ir_node_t);
 ir_float_t get_float_const_val(ir_val_t);
 
+ir_node_t get_func_body(ir_node_t);
+ir_node_t get_func_param(ir_node_t);
+
 size_t get_tuple_type_elem_count(ir_type_t);
 size_t get_option_type_elem_count(ir_type_t);
 size_t get_sized_array_type_elem_count(ir_type_t);
@@ -162,5 +165,9 @@ ir_val_t get_err(ir_val_t);
 ir_val_t get_mem(ir_val_t);
 ir_val_t get_left_operand(ir_val_t);
 ir_val_t get_right_operand(ir_val_t);
+
+size_t get_let_var_count(ir_val_t);
+ir_val_t get_let_var(ir_val_t, size_t i);
+ir_val_t get_let_body(ir_val_t);
 
 #endif

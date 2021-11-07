@@ -554,7 +554,7 @@ static ir_node_t parse_func_var(struct parser* parser) {
     eat_token(parser, TOKEN_LITERAL);
     expect_token(parser, TOKEN_COLON);
     ir_type_t type = parse_type(parser);
-    return make_var(parser->module, as_node(type), var_index, &(struct debug_info) { .loc = make_loc(parser, &begin) });
+    return make_untied_var(parser->module, as_node(type), var_index, &(struct debug_info) { .loc = make_loc(parser, &begin) });
 }
 
 static ir_val_t parse_func(struct parser* parser) {

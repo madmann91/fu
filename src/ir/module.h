@@ -23,6 +23,7 @@ ir_var_set_t make_singleton_var_set(struct ir_module*, ir_node_t);
 ir_var_set_t make_var_set(struct ir_module*, const ir_node_t*, size_t);
 ir_var_set_t make_union_var_set(struct ir_module*, ir_var_set_t, ir_var_set_t);
 ir_var_set_t make_diff_var_set(struct ir_module*, ir_var_set_t, ir_var_set_t);
+ir_var_set_t get_let_declared_var_set(struct ir_module*, ir_val_t);
 
 ir_node_t make_node(
     struct ir_module*,
@@ -37,6 +38,8 @@ ir_val_t  rebuild_val (struct ir_module*, ir_val_t,  ir_type_t, const ir_val_t*,
 ir_type_t rebuild_type(struct ir_module*, ir_type_t, ir_kind_t, const ir_type_t*, const struct debug_info*);
 
 ir_type_t infer_type(struct ir_module*, enum ir_node_tag, const ir_val_t*, size_t, const struct debug_info*);
+
+ir_node_t untie_var(struct ir_module*, ir_node_t);
 
 ir_node_t make_error(struct ir_module*);
 
@@ -56,7 +59,7 @@ ir_node_t make_const(struct ir_module*, ir_node_t, const union ir_node_data*);
 ir_type_t make_nat_const(struct ir_module*, ir_uint_t);
 ir_val_t make_int_const(struct ir_module*, ir_type_t, ir_uint_t);
 ir_val_t make_float_const(struct ir_module*, ir_type_t, ir_float_t);
-ir_node_t make_var(struct ir_module*, ir_node_t, size_t, const struct debug_info*);
+ir_node_t make_untied_var(struct ir_module*, ir_node_t, size_t, const struct debug_info*);
 ir_node_t make_tied_var(struct ir_module*, ir_node_t, size_t, ir_node_t, const struct debug_info*);
 ir_node_t make_func(struct ir_module*, ir_node_t, ir_node_t, const struct debug_info*);
 ir_val_t make_let(struct ir_module*, const ir_val_t*, size_t, ir_val_t, const struct debug_info*);

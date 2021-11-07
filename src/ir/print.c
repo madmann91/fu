@@ -87,9 +87,27 @@ void print_ir(struct format_state* state, ir_node_t node, size_t depth) {
     }
 }
 
+void print_var_set(struct format_state* state, ir_var_set_t var_set) {
+    format(state, "{{", NULL);
+    for (size_t i = 0, n = var_set->var_count; i < n; ++i) {
+        print_var_name(state, var_set->vars[i]);
+        if (i != n - 1)
+            format(state, ", ", NULL);
+    }
+    format(state, "}", NULL);
+}
+
 void dump_ir(ir_node_t node) {
     struct format_state state = { .tab = "    " };
     print_ir(&state, node, SIZE_MAX);
+    print_format_bufs(state.first_buf, stdout);
+    free_format_bufs(state.first_buf);
+    printf("\n");
+}
+
+void dump_var_set(ir_var_set_t var_set) {
+    struct format_state state = { .tab = "    " };
+    print_var_set(&state, var_set);
     print_format_bufs(state.first_buf, stdout);
     free_format_bufs(state.first_buf);
     printf("\n");

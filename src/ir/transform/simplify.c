@@ -11,8 +11,25 @@ static inline ir_val_t see_thru(ir_val_t val) {
 }
 
 static inline ir_val_t simplify_let(struct ir_module* module, ir_val_t let) {
-    // TODO
-    return let;
+    ir_val_t body = see_thru(get_let_body(let));
+    size_t var_count = get_let_var_count(let);
+
+    // Remove variables that are not used in the body
+    ir_val_t* used_vars = malloc_or_die(sizeof(ir_val_t) * var_count);
+    size_t used_var_count = 0;
+    for (size_t i = 0; i < var_count; ++i) {
+        ir_node_t untied_var = untie_var(module, as_node(get_let_var(let, i)));
+        if (contains_var(body->free_vars, untied_var))
+            used_vars[used_var_count++] = get_let_var(let, i);
+    }
+
+    ir_val_t result = let;
+    if (used_var_count == 0)
+        result = body;
+    else if (used_var_count != var_count)
+        result = make_let(module, used_vars, used_var_count, body, let->debug);
+    free(used_vars);
+    return result;
 }
 
 static inline ir_val_t find_insert_with_index(ir_val_t val, ir_val_t index, ir_val_t mask) {

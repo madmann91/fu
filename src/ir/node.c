@@ -294,6 +294,16 @@ ir_float_t get_float_const_val(ir_val_t val) {
     return val->data.float_val;
 }
 
+ir_node_t get_func_body(ir_node_t node) {
+    assert(node->tag == IR_VAL_FUNC);
+    return node->ops[1];
+}
+
+ir_node_t get_func_param(ir_node_t node) {
+    assert(node->tag == IR_VAL_FUNC);
+    return node->ops[0];
+}
+
 ir_node_t get_tied_val(ir_node_t node) {
     assert(is_tied_var(node));
     return node->ops[0];
@@ -374,4 +384,20 @@ ir_val_t get_left_operand(ir_val_t val) {
 ir_val_t get_right_operand(ir_val_t val) {
     assert(is_arith_op(val->tag) || is_cmp_op(val->tag) || is_bit_op(val->tag));
     return to_val(val->ops[(has_err(val->tag) ? 1 : 0) + (is_vec_op(val->tag) ? 2 : 1)]);
+}
+
+size_t get_let_var_count(ir_val_t val) {
+    assert(val->tag == IR_VAL_LET);
+    return val->op_count - 1;
+}
+
+ir_val_t get_let_var(ir_val_t val, size_t i) {
+    assert(val->tag == IR_VAL_LET);
+    assert(i < get_let_var_count(val));
+    return to_val(val->ops[i]);
+}
+
+ir_val_t get_let_body(ir_val_t val) {
+    assert(val->tag == IR_VAL_LET);
+    return to_val(val->ops[val->op_count - 1]);
 }

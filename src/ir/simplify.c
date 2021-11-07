@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <string.h>
 #include <math.h>
+#include <stdlib.h>
 
 static inline ir_val_t see_thru(ir_val_t val) {
     return is_tied_var(as_node(val)) ? to_val(get_tied_val(as_node(val))) : val;

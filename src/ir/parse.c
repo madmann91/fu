@@ -319,6 +319,7 @@ static inline void skip_token(struct parser* parser) {
 }
 
 static inline void eat_token(struct parser* parser, enum token_tag tag) {
+    (void)tag;
     assert(parser->ahead.tag == tag);
     skip_token(parser);
 }

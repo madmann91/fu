@@ -1,8 +1,6 @@
 #ifndef FU_IR_NODE_LIST_H
 #define FU_IR_NODE_LIST_H
 
-#include "core/utils.h"
-
 #define IR_KIND_LIST(f) \
     f(STAR, "star", 0) \
     f(NAT,  "nat",  0)

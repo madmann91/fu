@@ -165,7 +165,9 @@ ir_var_set_t make_union_var_set(struct ir_module* module, ir_var_set_t left, ir_
     }
     for (; i < left ->var_count; i++, var_count++) vars[var_count] = left->vars[i];
     for (; j < right->var_count; j++, var_count++) vars[var_count] = right->vars[j];
-    return make_var_set(module, vars, var_count);
+    ir_var_set_t result = make_var_set(module, vars, var_count);
+    free(vars);
+    return result;
 }
 
 ir_var_set_t make_diff_var_set(struct ir_module* module, ir_var_set_t left, ir_var_set_t right) {
@@ -182,7 +184,9 @@ ir_var_set_t make_diff_var_set(struct ir_module* module, ir_var_set_t left, ir_v
             i++, j++;
     }
     for (; i < left ->var_count; i++, var_count++) vars[var_count] = left->vars[i];
-    return make_var_set(module, vars, var_count);
+    ir_var_set_t result = make_var_set(module, vars, var_count);
+    free(vars);
+    return result;
 }
 
 ir_var_set_t get_let_declared_var_set(struct ir_module* module, ir_val_t let) {

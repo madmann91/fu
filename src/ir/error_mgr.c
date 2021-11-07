@@ -6,7 +6,7 @@ static struct log* get_log(struct error_mgr* error_mgr) {
 }
 
 static void format_ir(struct format_state* state, const void* p) {
-    print_ir(state, p, 1);
+    print_ir(state, p, is_type(p) ? SIZE_MAX : 1);
 }
 
 static void invalid_type(struct error_mgr* error_mgr, ir_type_t type, ir_type_t expected, const struct debug_info* debug) {

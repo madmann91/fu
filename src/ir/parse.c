@@ -464,7 +464,7 @@ static ir_node_t parse_const(struct parser* parser, ir_node_t type) {
     eat_token(parser, TOKEN_CONST);
     struct literal literal = parser->ahead.lit;
     bool was_literal = expect_token(parser, TOKEN_LITERAL);
-    if (!type && accept_token(parser, TOKEN_COLON))
+    if (accept_token(parser, TOKEN_COLON))
         type = as_node(parse_type(parser));
     if (!type) {
         struct file_loc loc = make_loc(parser, &begin);

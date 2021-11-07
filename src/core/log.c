@@ -47,7 +47,7 @@ static void log_msg(
                 { .u32 = loc->end.col },
                 { .style = reset_style }
             });
-    }     
+    }
 }
 
 void log_error(struct log* log, const struct file_loc* loc, const char* format_str, const union format_arg* args) {

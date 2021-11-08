@@ -516,6 +516,14 @@ static ir_type_t parse_type(struct parser* parser) {
     return type;
 }
 
+static ir_val_t parse_bot_or_top(struct parser* parser, bool is_bot) {
+    skip_token(parser);
+    expect_token(parser, TOKEN_L_PAREN);
+    ir_type_t type = parse_type(parser);
+    expect_token(parser, TOKEN_R_PAREN);
+    return is_bot ? make_bot(parser->module, type) : make_top(parser->module, type);
+}
+
 static ir_node_t parse_let_var(struct parser* parser) {
     struct file_pos begin = parser->ahead.loc.begin;
     expect_token(parser, TOKEN_HASH);
@@ -583,7 +591,6 @@ static ir_val_t parse_val(struct parser* parser, ir_type_t expected) {
         IR_VEC_OP_LIST(vec_op)
 #undef val
 #undef vec_op
-        case TOKEN_UNDEF:     node_tag = IR_VAL_UNDEF; break;
         case TOKEN_ANY:       node_tag = IR_VAL_ANY; break;
         case TOKEN_ALL:       node_tag = IR_VAL_ANY; break;
         case TOKEN_BROADCAST: node_tag = IR_VAL_BROADCAST; break;
@@ -591,6 +598,9 @@ static ir_val_t parse_val(struct parser* parser, ir_type_t expected) {
         case TOKEN_ALLOC:     node_tag = IR_VAL_ALLOC; break;
         case TOKEN_ARRAY:     node_tag = IR_VAL_ARRAY; break;
         case TOKEN_TUPLE:     node_tag = IR_VAL_TUPLE; break;
+        case TOKEN_BOT:
+        case TOKEN_TOP:
+            return parse_bot_or_top(parser, parser->ahead.tag == TOKEN_BOT);
         case TOKEN_HASH:
             return to_val(parse_var(parser));
         case TOKEN_LET:

@@ -112,7 +112,8 @@
     f(CALLC,  "control", 1)
 
 #define IR_SCALAR_OP_LIST(f) \
-    f(UNDEF,     "undef",     0) \
+    f(TOP,       "top",       0) \
+    f(BOT,       "bot",       0) \
     f(ANY,       "any",       1) \
     f(ALL,       "all",       1) \
     f(LET,       "let",       N) \

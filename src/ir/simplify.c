@@ -63,7 +63,7 @@ static inline ir_val_t simplify_insert(struct ir_module* module, ir_val_t insert
     ir_val_t index = see_thru(get_extract_or_insert_index(insert));
 
     if (val->type->tag == IR_TYPE_OPTION)
-        val = make_undef(module, to_type(val->type));
+        val = make_bot(module, to_type(val->type));
 
     if (find_insert_with_index(val, index, mask))
         val = remove_insert_with_index(module, val, index);
@@ -91,15 +91,15 @@ static inline ir_val_t simplify_extract(struct ir_module* module, ir_val_t extra
         return get_tuple_elem(val, get_int_const_val(index));
 
     if (val->tag == IR_VAL_INSERT && val->type->tag == IR_TYPE_OPTION)
-        return make_undef(module, get_option_type_elem(to_type(val->type), get_int_const_val(index)));
+        return make_bot(module, get_option_type_elem(to_type(val->type), get_int_const_val(index)));
 
     return extract;
 }
 
-static inline ir_val_t simplify_undef(struct ir_module* module, ir_val_t undef) {
-    if (is_unit_tuple_type(to_type(undef->type)))
-        return make_tuple(module, NULL, 0, undef->debug);
-    return undef;
+static inline ir_val_t simplify_bot(struct ir_module* module, ir_val_t bot) {
+    if (is_unit_tuple_type(to_type(bot->type)))
+        return make_tuple(module, NULL, 0, bot->debug);
+    return bot;
 }
 
 static inline ir_val_t simplify_int_arith_op(struct ir_module* module, ir_val_t int_arith_op) {
@@ -175,8 +175,8 @@ ir_node_t simplify_node(struct ir_module* module, ir_node_t node) {
         return as_node(simplify_int_arith_op(module, to_val(node)));
     if (is_float_arith_op(node->tag))
         return as_node(simplify_float_arith_op(module, to_val(node)));
-    if (node->tag == IR_VAL_UNDEF)
-        return as_node(simplify_undef(module, to_val(node)));
+    if (node->tag == IR_VAL_BOT)
+        return as_node(simplify_bot(module, to_val(node)));
     if (node->tag == IR_VAL_INSERT)
         return as_node(simplify_insert(module, to_val(node)));
     if (node->tag == IR_VAL_EXTRACT)

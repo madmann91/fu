@@ -482,8 +482,12 @@ ir_type_t make_func_type(struct ir_module* module, ir_type_t dom, ir_type_t codo
     }));
 }
 
-ir_val_t make_undef(struct ir_module* module, ir_type_t type) {
-    return to_val(insert_node(module, &(struct ir_node) { .tag = IR_VAL_UNDEF, .type = as_node(type) }));
+ir_val_t make_bot(struct ir_module* module, ir_type_t type) {
+    return to_val(insert_node(module, &(struct ir_node) { .tag = IR_VAL_BOT, .type = as_node(type) }));
+}
+
+ir_val_t make_top(struct ir_module* module, ir_type_t type) {
+    return to_val(insert_node(module, &(struct ir_node) { .tag = IR_VAL_TOP, .type = as_node(type) }));
 }
 
 ir_node_t make_const(struct ir_module* module, ir_node_t type, const union ir_node_data* data) {

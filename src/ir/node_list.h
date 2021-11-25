@@ -117,6 +117,7 @@
     f(ANY,       "any",       1) \
     f(ALL,       "all",       1) \
     f(LET,       "let",       N) \
+    f(LETREC,    "letrec",    N) \
     f(BROADCAST, "broadcast", 1) \
     f(PTRTOVEC,  "ptrtovec",  1) \
     f(ALLOC,     "alloc",     2) \

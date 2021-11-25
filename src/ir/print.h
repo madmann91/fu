@@ -4,12 +4,12 @@
 #include <stddef.h>
 
 struct ir_node;
-struct ir_var_set;
+struct var_set;
 struct format_state;
 
-void print_ir(struct format_state*, const struct ir_node*, size_t);
-void print_var_set(struct format_state*, const struct ir_var_set*);
-void dump_ir(const struct ir_node*);
-void dump_var_set(const struct ir_var_set*);
+void print_ir_node(struct format_state*, const struct ir_node*, size_t);
+void print_var_set(struct format_state*, const struct var_set*);
+void dump_ir_node(const struct ir_node*);
+void dump_var_set(const struct var_set*);
 
 #endif

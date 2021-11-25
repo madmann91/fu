@@ -8,6 +8,8 @@
 #include "core/log.h"
 #include "ir/node_list.h"
 
+struct ir_module;
+
 typedef uint64_t ir_uint_t;
 typedef double   ir_float_t;
 
@@ -31,6 +33,7 @@ enum ir_node_tag {
 #define vec_op(tag, str, n) IR_VAL_V##tag, scalar_op(tag, str, n)
 #define type(tag, str, n) IR_TYPE_##tag,
 #define kind(tag, str, n) IR_KIND_##tag,
+    IR_UNIVERSE,
     IR_ERROR,
     IR_CONST,
     IR_VAR,
@@ -46,6 +49,7 @@ enum ir_node_tag {
 };
 
 union ir_node_data {
+    struct ir_module* module;
     ir_uint_t int_val;
     ir_float_t float_val;
     size_t var_index;
@@ -86,6 +90,8 @@ union ir_node_data make_int_node_data(ir_uint_t);
 union ir_node_data make_float_node_data(ir_float_t);
 union ir_node_data make_var_index_node_data(size_t);
 union ir_node_data make_fp_math_node_data(unsigned);
+
+struct ir_module* get_ir_module(ir_node_t);
 
 bool is_kind(ir_node_t);
 bool is_type(ir_node_t);
@@ -161,13 +167,16 @@ ir_val_t get_extract_or_insert_val(ir_val_t);
 ir_val_t get_extract_or_insert_index(ir_val_t);
 ir_val_t get_insert_elem(ir_val_t);
 
-ir_val_t get_err(ir_val_t);
-ir_val_t get_mem(ir_val_t);
+ir_val_t get_input_err(ir_val_t);
+ir_val_t get_input_mem(ir_val_t);
+ir_val_t get_output_err(ir_val_t);
+ir_val_t get_output_mem(ir_val_t);
 ir_val_t get_left_operand(ir_val_t);
 ir_val_t get_right_operand(ir_val_t);
 
 size_t get_let_var_count(ir_val_t);
 ir_val_t get_let_var(ir_val_t, size_t i);
+const ir_val_t* get_let_vars(ir_val_t);
 ir_val_t get_let_body(ir_val_t);
 
 #endif

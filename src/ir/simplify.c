@@ -11,7 +11,7 @@ static inline ir_val_t see_thru(ir_val_t val) {
     return is_tied_var(as_node(val)) ? to_val(get_tied_val(as_node(val))) : val;
 }
 
-static inline ir_val_t simplify_let(struct ir_module* module, ir_val_t let) {
+static inline ir_val_t remove_unused_vars(struct ir_module* module, ir_val_t let) {
     ir_val_t body = see_thru(get_let_body(let));
     size_t var_count = get_let_var_count(let);
 
@@ -31,6 +31,46 @@ static inline ir_val_t simplify_let(struct ir_module* module, ir_val_t let) {
         result = make_let(module, used_vars, used_var_count, body, let->debug);
     free(used_vars);
     return result;
+}
+
+static inline ir_val_t try_merge_let(struct ir_module* module, ir_val_t let) {
+    ir_val_t inner_let = get_let_body(let);
+    if (inner_let->tag != IR_VAL_LET)
+        return NULL;
+
+    // Try to grab some variables of the child and pull them in the parent
+    size_t var_count = get_let_var_count(let);
+    size_t inner_var_count = get_let_var_count(inner_let);
+    ir_var_set_t let_vars = get_let_var_set(module, let);
+
+    ir_val_t* pulled_vars = malloc_or_die((inner_var_count + var_count) * sizeof(ir_val_t));
+    ir_val_t* kept_vars = malloc_or_die(inner_var_count * sizeof(ir_val_t));
+    size_t pulled_var_count = 0, kept_var_count = 0;
+    for (size_t i = 0; i < inner_var_count; ++i) {
+        ir_val_t inner_var = get_let_var(inner_let, i);
+        if (!contains_any_var_of(get_tied_val(as_node(inner_var))->free_vars, let_vars))
+            pulled_vars[pulled_var_count++] = inner_var;
+        else
+            kept_vars[kept_var_count++] = inner_var;
+    }
+
+    ir_val_t result = NULL;
+    if (pulled_var_count != 0) {
+        memcpy(pulled_vars + pulled_var_count, get_let_vars(let), sizeof(ir_val_t) * var_count);
+        ir_val_t body = make_let(module, kept_vars, kept_var_count, get_let_body(inner_let), inner_let->debug);
+        result = make_let(module, pulled_vars, pulled_var_count + var_count, body, let->debug);
+    }
+
+    free(pulled_vars);
+    free(kept_vars);
+    return result;
+}
+
+static inline ir_val_t simplify_let(struct ir_module* module, ir_val_t let) {
+    ir_val_t merged_let = try_merge_let(module, let);
+    if (merged_let)
+        return merged_let;
+    return remove_unused_vars(module, let);
 }
 
 static inline ir_val_t find_insert_with_index(ir_val_t val, ir_val_t index, ir_val_t mask) {
@@ -119,7 +159,7 @@ static inline ir_val_t simplify_int_arith_op(struct ir_module* module, ir_val_t 
                 assert(false && "invalid integer operation");
                 return int_arith_op;
         }
-        return make_tuple(module, (ir_val_t[]) { get_err(int_arith_op), result }, 2, int_arith_op->debug);
+        return make_tuple(module, (ir_val_t[]) { get_input_err(int_arith_op), result }, 2, int_arith_op->debug);
     }
     return int_arith_op;
 }
@@ -163,7 +203,7 @@ static inline ir_val_t simplify_float_arith_op(struct ir_module* module, ir_val_
                 assert(false && "invalid integer operation");
                 return float_arith_op;
         }
-        return make_tuple(module, (ir_val_t[]) { get_err(float_arith_op), result }, 2, float_arith_op->debug);
+        return make_tuple(module, (ir_val_t[]) { get_input_err(float_arith_op), result }, 2, float_arith_op->debug);
     }
     return float_arith_op;
 }

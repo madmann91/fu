@@ -86,6 +86,7 @@ static ir_var_set_t insert_var_set(struct ir_module* module, ir_var_set_t var_se
         return *var_set_ptr;
     struct ir_var_set* new_var_set =
         alloc_from_mem_pool(&module->mem_pool, sizeof(struct ir_var_set) + sizeof(ir_node_t) * var_set->var_count);
+
     memcpy(new_var_set, var_set, sizeof(struct ir_var_set) + sizeof(ir_node_t) * var_set->var_count);
     must_succeed(insert_in_hash_table(&module->var_sets, &new_var_set, hash, sizeof(ir_var_set_t), compare_var_sets));
     return new_var_set;
@@ -189,7 +190,7 @@ ir_var_set_t make_diff_var_set(struct ir_module* module, ir_var_set_t left, ir_v
     return result;
 }
 
-ir_var_set_t get_let_declared_var_set(struct ir_module* module, ir_val_t let) {
+ir_var_set_t get_let_var_set(struct ir_module* module, ir_val_t let) {
     size_t var_count = get_let_var_count(let);
     ir_node_t* untied_vars = malloc_or_die(sizeof(ir_val_t) * var_count);
     for (size_t i = 0; i < var_count; ++i)
@@ -275,7 +276,7 @@ static ir_var_set_t compute_free_vars(struct ir_module* module, ir_node_t node) 
     if (node->tag == IR_VAL_FUNC)
         return make_diff_var_set(module, get_func_body(node)->free_vars, make_singleton_var_set(module, get_func_param(node)));
     if (node->tag == IR_VAL_LET)
-        return make_diff_var_set(module, get_let_body(to_val(node))->free_vars, get_let_declared_var_set(module, to_val(node)));
+        return make_diff_var_set(module, get_let_body(to_val(node))->free_vars, get_let_var_set(module, to_val(node)));
     if (node->tag == IR_VAR)
         return make_singleton_var_set(module, is_tied_var(node) ? untie_var(module, node) : node);
     ir_var_set_t result = node->type ? node->type->free_vars : make_empty_var_set(module);
@@ -309,7 +310,7 @@ static ir_node_t insert_node(struct ir_module* module, ir_node_t node) {
     return simplified_node;
 }
 
-ir_node_t make_node(
+ir_node_t make_ir_node(
     struct ir_module* module,
     enum ir_node_tag tag,
     ir_node_t type,
@@ -317,13 +318,17 @@ ir_node_t make_node(
     const union ir_node_data* data,
     const struct debug_info* debug)
 {
+    assert(!type || get_ir_module(type) == module);
+    for (size_t i = 0; i < op_count; ++i)
+        assert(get_ir_module(ops[i]) == module);
+
     if (module->error_mgr) {
         size_t expected_op_count = get_expected_op_count(tag);
         if (expected_op_count != op_count && expected_op_count != SIZE_MAX) {
             module->error_mgr->invalid_op_count(module->error_mgr, tag, op_count, expected_op_count, debug);
             return make_error(module);
         }
-        ir_node_t expected_type = as_node(infer_type(module, tag, (const ir_val_t*)ops, op_count, debug));
+        ir_node_t expected_type = as_node(infer_ir_type(module, tag, (const ir_val_t*)ops, op_count, debug));
         if (expected_type != type && expected_type != NULL) {
             module->error_mgr->invalid_type(module->error_mgr, to_type(type), to_type(expected_type), debug);
             return make_error(module);
@@ -338,9 +343,11 @@ ir_node_t make_node(
         case IR_TYPE_INT:    return as_node(make_int_type(module, to_type(ops[0])));
         case IR_TYPE_FLOAT:  return as_node(make_float_type(module, to_type(ops[0])));
         case IR_VAL_LET:     return as_node(make_let(module, (const ir_val_t*)ops, op_count - 1, to_val(ops[op_count - 1]), debug));
+        case IR_VAL_LETREC:  return as_node(make_letrec(module, (const ir_val_t*)ops, op_count - 1, to_val(ops[op_count - 1]), debug));
         case IR_VAL_TUPLE:   return as_node(make_tuple(module, (const ir_val_t*)ops, op_count, debug));
         case IR_VAL_EXTRACT: return as_node(make_extract(module, to_val(ops[0]), to_val(ops[1]), debug));
         case IR_VAL_INSERT:  return as_node(make_insert(module, to_val(ops[0]), to_val(ops[1]), to_val(ops[2]), debug));
+        case IR_TYPE_TUPLE:  return as_node(make_tuple_type(module, (const ir_type_t*)ops, op_count, debug));
 #define int_arith_op(tag, str, n) case IR_VAL_##tag:
         IR_INT_ARITH_OP_LIST(int_arith_op)
 #undef int_arith_op
@@ -366,9 +373,9 @@ ir_type_t rebuild_type(struct ir_module* module, ir_type_t type, ir_kind_t kind,
 static inline ir_type_t infer_extract_type(ir_val_t val, ir_val_t index) {
     ir_type_t val_type = to_type(val->type);
     if (val_type->tag == IR_TYPE_TUPLE)
-        return get_tuple_type_elem(val_type, get_int_const_val(index));
+        return is_int_const(as_node(index)) ? get_tuple_type_elem(val_type, get_int_const_val(index)) : NULL;
     else if (val_type->tag == IR_TYPE_OPTION)
-        return get_option_type_elem(val_type, get_int_const_val(index));
+        return is_int_const(as_node(index)) ? get_option_type_elem(val_type, get_int_const_val(index)) : NULL;
     else if (val_type->tag == IR_TYPE_ARRAY)
         return get_array_type_elem(val_type);
     else
@@ -388,7 +395,7 @@ static inline ir_type_t infer_insert_type(ir_val_t val) { return to_type(val->ty
 static inline ir_type_t infer_let_type(ir_val_t body) { return to_type(body->type); }
 static inline ir_type_t infer_int_arith_op_type(ir_val_t left) { return to_type(left->type); }
 
-ir_type_t infer_type(struct ir_module* module, enum ir_node_tag tag, const ir_val_t* ops, size_t op_count, const struct debug_info* debug) {
+ir_type_t infer_ir_type(struct ir_module* module, enum ir_node_tag tag, const ir_val_t* ops, size_t op_count, const struct debug_info* debug) {
     switch (tag) {
         case IR_VAL_LET:     return infer_let_type(ops[op_count - 1]);
         case IR_VAL_TUPLE:   return infer_tuple_type(module, ops, op_count, debug);
@@ -400,6 +407,17 @@ ir_type_t infer_type(struct ir_module* module, enum ir_node_tag tag, const ir_va
             return infer_int_arith_op_type(ops[0]);
         default: return NULL;
     }
+}
+
+ir_type_t infer_ir_type_or_fail(struct ir_module* module, enum ir_node_tag tag, const ir_val_t* ops, size_t op_count, const struct debug_info* debug) {
+    ir_type_t type = infer_ir_type(module, tag, ops, op_count, debug);
+    if (!type)
+    {
+        if (module->error_mgr)
+            module->error_mgr->cannot_infer(module->error_mgr, tag, debug);
+        return to_type(make_error(module));
+    }
+    return type;
 }
 
 static inline void check_type(struct ir_module* module, ir_type_t type, ir_type_t expected, const struct debug_info* debug) {
@@ -421,6 +439,11 @@ static inline void check_type_or_kind(struct ir_module* module, ir_node_t type_o
 
 ir_node_t untie_var(struct ir_module* module, ir_node_t var) {
     return make_untied_var(module, var->type, var->data.var_index, var->debug);
+}
+
+ir_node_t tie_var(struct ir_module* module, ir_node_t var, ir_node_t val) {
+    assert(val->type == var->type);
+    return make_tied_var(module, var->type, var->data.var_index, val, var->debug);
 }
 
 ir_node_t make_error(struct ir_module* module) { return module->error; }
@@ -524,14 +547,14 @@ ir_node_t make_untied_var(struct ir_module* module, ir_node_t type, size_t var_i
     });
 }
 
-ir_node_t make_tied_var(struct ir_module* module, ir_node_t type, size_t var_index, ir_node_t value, const struct debug_info* debug) {
-    check_type_or_kind(module, value->type, type, debug);
+ir_node_t make_tied_var(struct ir_module* module, ir_node_t type, size_t var_index, ir_node_t val, const struct debug_info* debug) {
+    check_type_or_kind(module, val->type, type, debug);
     return insert_node(module, IR_NODE_WITH_N_OPS(1) {
         .tag = IR_VAR,
         .debug = debug,
         .type = type,
         .data = make_var_index_node_data(var_index),
-        .ops = { value },
+        .ops = { val },
         .op_count = 1
     });
 }
@@ -547,7 +570,15 @@ ir_node_t make_func(struct ir_module* module, ir_node_t var, ir_node_t body, con
     });
 }
 
-ir_val_t make_let(struct ir_module* module, const ir_val_t* vars, size_t var_count, ir_val_t body, const struct debug_info* debug) {
+static ir_val_t make_let_or_letrec(
+    struct ir_module* module,
+    enum ir_node_tag tag,
+    const ir_val_t* vars,
+    size_t var_count,
+    ir_val_t body,
+    const struct debug_info* debug)
+{
+    assert(tag == IR_VAL_LET || tag == IR_VAL_LETREC);
 #ifndef NDEBUG
     for (size_t i = 0; i < var_count; ++i)
         assert(is_tied_var(as_node(vars[i])));
@@ -556,14 +587,22 @@ ir_val_t make_let(struct ir_module* module, const ir_val_t* vars, size_t var_cou
         sizeof(struct ir_node) + sizeof(ir_node_t) * (var_count + 1));
     memcpy(node->ops, vars, sizeof(ir_node_t) * var_count);
     memset(&node->data, 0, sizeof(union ir_node_data));
-    node->tag = IR_VAL_LET;
-    node->type = as_node(infer_let_type(body));
+    node->tag = tag;
     node->op_count = var_count + 1;
     node->ops[var_count] = as_node(body);
     node->debug = debug;
+    node->type = as_node(infer_ir_type_or_fail(module, node->ops, node->op_count, ));
     ir_node_t inserted_node = insert_node(module, node);
     free(node);
     return to_val(inserted_node);
+}
+
+ir_val_t make_let(struct ir_module* module, const ir_val_t* vars, size_t var_count, ir_val_t body, const struct debug_info* debug) {
+    return make_let_or_letrec(module, IR_VAL_LET, vars, var_count, body, debug);
+}
+
+ir_val_t make_letrec(struct ir_module* module, const ir_val_t* vars, size_t var_count, ir_val_t body, const struct debug_info* debug) {
+    return make_let_or_letrec(module, IR_VAL_LETREC, vars, var_count, body, debug);
 }
 
 ir_val_t make_tuple(struct ir_module* module, const ir_val_t* args, size_t arg_count, const struct debug_info* debug) {
@@ -572,7 +611,7 @@ ir_val_t make_tuple(struct ir_module* module, const ir_val_t* args, size_t arg_c
     memcpy(node->ops, args, sizeof(ir_node_t) * arg_count);
     memset(&node->data, 0, sizeof(union ir_node_data));
     node->tag = IR_VAL_TUPLE;
-    node->type = as_node(infer_tuple_type(module, args, arg_count, debug));
+    node->type = as_node(infer_ir_type_or_fail(module, IR_VAL_TUPLE, args, arg_count, debug));
     node->op_count = arg_count;
     node->debug = debug;
     ir_node_t inserted_node = insert_node(module, node);

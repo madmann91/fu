@@ -10,9 +10,9 @@ bool contains_var(ir_var_set_t var_set, ir_node_t var) {
     while (i < j) {
         size_t m = (i + j) / 2;
         if (var < var_set->vars[m])
-            i = m + 1;
-        else if (var > var_set->vars[m])
             j = m;
+        else if (var > var_set->vars[m])
+            i = m + 1;
         else
             return true;
     }
@@ -20,8 +20,12 @@ bool contains_var(ir_var_set_t var_set, ir_node_t var) {
 }
 
 bool contains_any_var_of(ir_var_set_t var_set, ir_var_set_t other) {
-    for (size_t i = 0; i < other->var_count; ++i) {
-        if (contains_var(var_set, other->vars[i]))
+    for (size_t i = 0, j = 0; i < other->var_count && j < var_set->var_count;) {
+        if (var_set->vars[i] < other->vars[j])
+            i++;
+        else if (var_set->vars[i] > other->vars[j])
+            j++;
+        else
             return true;
     }
     return false;
@@ -41,6 +45,13 @@ MAKE_NODE_DATA(var_index, size_t, var_index)
 MAKE_NODE_DATA(fp_math, unsigned, fp_math)
 
 #undef MAKE_NODE_DATA
+
+struct ir_module* get_ir_module(ir_node_t node) {
+    while (node->type)
+        node = node->type;
+    assert(node->tag == IR_UNIVERSE);
+    return node->data.module;
+}
 
 ir_type_t to_type(ir_node_t node) {
     assert(is_type(node));
@@ -366,12 +377,12 @@ ir_val_t get_insert_elem(ir_val_t val) {
     return to_val(val->ops[is_vec_op(val->tag) ? 3 : 2]);
 }
 
-ir_val_t get_err(ir_val_t val) {
+ir_val_t get_input_err(ir_val_t val) {
     assert(has_err(val->tag));
     return to_val(val->ops[is_vec_op(val->tag) ? 1 : 0]);
 }
 
-ir_val_t get_mem(ir_val_t val) {
+ir_val_t get_input_mem(ir_val_t val) {
     assert(has_mem(val->tag));
     return to_val(val->ops[is_vec_op(val->tag) ? 1 : 0]);
 }
@@ -395,6 +406,11 @@ ir_val_t get_let_var(ir_val_t val, size_t i) {
     assert(val->tag == IR_VAL_LET);
     assert(i < get_let_var_count(val));
     return to_val(val->ops[i]);
+}
+
+const ir_val_t* get_let_vars(ir_val_t val) {
+    assert(val->tag == IR_VAL_LET);
+    return (const ir_val_t*)val->ops;
 }
 
 ir_val_t get_let_body(ir_val_t val) {

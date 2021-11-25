@@ -26,11 +26,15 @@ void print_ir(struct format_state* state, ir_node_t node, size_t depth) {
     switch (node->tag) {
         case IR_VAL_LET:
             format(state, "{$}let{$} ", (union format_arg[]) { { .style = keyword_style }, { .style = reset_style } });
-            for (size_t i = 0, n = node->op_count - 1; i < n; ++i) {
+            for (size_t i = 0, n = get_let_var_count(to_val(node)); i < n; ++i) {
                 print_var_name(state, node->ops[i]);
                 format(state, " : ", NULL);
                 print_ir(state, node->ops[i]->type, depth);
-                format(state, " = ", NULL);
+                if (i != n - 1)
+                    format(state, ", ", NULL);
+            }
+            format(state, " = ", NULL);
+            for (size_t i = 0, n = get_let_var_count(to_val(node)); i < n; ++i) {
                 print_ir(state, node->ops[i]->ops[0], decrease_depth(depth));
                 if (i != n - 1)
                     format(state, ", ", NULL);

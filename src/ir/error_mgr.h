@@ -4,6 +4,7 @@
 #include "ir/node.h"
 
 struct error_mgr {
+    void (*cannot_infer)(struct error_mgr*, enum ir_node_tag, const struct debug_info*);
     void (*invalid_type)(struct error_mgr*, ir_type_t, ir_type_t, const struct debug_info*);
     void (*invalid_kind)(struct error_mgr*, ir_kind_t, ir_kind_t, const struct debug_info*);
     void (*unexpected_node)(struct error_mgr*, ir_node_t, const char*, const struct debug_info*);

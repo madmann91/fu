@@ -9,6 +9,13 @@ static void format_ir(struct format_state* state, const void* p) {
     print_ir(state, p, is_type(p) ? SIZE_MAX : 1);
 }
 
+static void cannot_infer(struct error_mgr* error_mgr, enum ir_node_tag tag, const struct debug_info* debug) {
+    log_error(
+        get_log(error_mgr), &debug->loc,
+        "cannot infer type for '{s}'",
+        (union format_arg[]) { { .s = get_node_name(tag) } });
+}
+
 static void invalid_type(struct error_mgr* error_mgr, ir_type_t type, ir_type_t expected, const struct debug_info* debug) {
     if (type->tag != IR_ERROR && expected->tag != IR_ERROR) {
         log_error(
@@ -55,6 +62,7 @@ struct default_error_mgr get_default_error_mgr(struct log* log) {
     log->state.custom_format['n'] = format_ir;
     return (struct default_error_mgr) {
         .error_mgr = {
+            .cannot_infer = cannot_infer,
             .invalid_type = invalid_type,
             .invalid_kind = invalid_kind,
             .unexpected_node = unexpected_node,

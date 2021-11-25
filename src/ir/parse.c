@@ -1,13 +1,14 @@
+#include "ir/parse.h"
+#include "ir/node.h"
+#include "ir/module.h"
+#include "ir/node_list.h"
 #include "core/utils.h"
 #include "core/alloc.h"
 #include "core/mem_pool.h"
 #include "core/hash_table.h"
 #include "core/hash.h"
 #include "core/log.h"
-#include "ir/parse.h"
-#include "ir/node.h"
-#include "ir/module.h"
-#include "ir/node_list.h"
+#include "core/utf8.h"
 
 #include <stdlib.h>
 #include <stdint.h>
@@ -56,13 +57,6 @@
     f(LITERAL, "literal") \
     f(INVALID, "invalid token") \
     f(EOF, "end-of-file")
-
-enum {
-#define f(x, str) KEYWORD_##x,
-    KEYWORDS(f)
-#undef f
-    KEYWORD_COUNT
-} tag;
 
 struct literal {
     enum literal_tag {
@@ -117,31 +111,6 @@ static inline const char* token_tag_to_string(enum token_tag tag) {
 #undef f
     };
     return token_strs[tag];
-}
-
-static inline bool is_utf8_multibyte_begin(uint8_t first_byte) {
-    return first_byte & 0x80;
-}
-
-static inline size_t count_utf8_bytes(uint8_t first_byte) {
-    size_t n = 0;
-    while (first_byte & 0x80) first_byte <<= 1, n++;
-    return n;
-}
-
-static inline bool check_utf8_bytes(const uint8_t* ptr, size_t n) {
-    if (n > 4 || n < 2)
-        return false;
-    for (size_t i = 1; i < n; ++i) {
-        if ((ptr[i] & 0xC0) != 0x80)
-            return false;
-    }
-    return true;
-}
-
-static inline size_t eat_utf8_bytes(const uint8_t* ptr, const uint8_t* end) {
-    ptrdiff_t n = count_utf8_bytes(*ptr);
-    return n <= (end - ptr) && check_utf8_bytes(ptr, n) ? n : 1;
 }
 
 static inline bool is_eof_reached(const struct lexer* lexer) {
@@ -510,7 +479,7 @@ static ir_type_t parse_type(struct parser* parser) {
         ops = parse_many(parser, &op_count, TOKEN_COMMA, parse_type_op);
         expect_token(parser, TOKEN_R_BRACKET);
     }
-    ir_type_t type = to_type(make_node(parser->module, node_tag, as_node(make_star(parser->module)), ops, op_count, NULL,
+    ir_type_t type = to_type(make_ir_node(parser->module, node_tag, as_node(make_star(parser->module)), ops, op_count, NULL,
         &(struct debug_info) { .loc = make_loc(parser, &begin) }));
     free(ops);
     return type;
@@ -531,17 +500,23 @@ static ir_node_t parse_let_var(struct parser* parser) {
     eat_token(parser, TOKEN_LITERAL);
     expect_token(parser, TOKEN_COLON);
     ir_type_t type = parse_type(parser);
-    expect_token(parser, TOKEN_EQUAL);
-    ir_val_t val = parse_val(parser, type);
-    return make_tied_var(parser->module, as_node(type), var_index, as_node(val),
-        &(struct debug_info) { .loc = make_loc(parser, &begin) });
+    return make_untied_var(parser->module, as_node(type), var_index, &(struct debug_info) { .loc = make_loc(parser, &begin) });
 }
 
-static ir_val_t parse_let(struct parser* parser) {
+static ir_val_t parse_let_or_letrec(struct parser* parser) {
     struct file_pos begin = parser->ahead.loc.begin;
-    eat_token(parser, TOKEN_LET);
+    assert(parser->ahead.tag == TOKEN_LET || parser->ahead.tag == TOKEN_LETREC);
+    skip_token(parser);
     size_t var_count = 0;
     ir_val_t* vars = (ir_val_t*)parse_many(parser, &var_count, TOKEN_COMMA, parse_let_var);
+    expect_token(parser, TOKEN_EQUAL);
+    for (size_t i = 0; i < var_count; ++i)
+    {
+        ir_val_t val = parse_val(parser, to_type(vars[i]->type));
+        vars[i] = to_val(tie_var(parser->module, as_node(vars[i]), as_node(val)));
+        if (i != var_count - 1)
+            expect_token(parser, TOKEN_COMMA);
+    }
     expect_token(parser, TOKEN_IN);
     if (var_count == 0)
         return to_val(make_error(parser->module));
@@ -604,7 +579,8 @@ static ir_val_t parse_val(struct parser* parser, ir_type_t expected) {
         case TOKEN_HASH:
             return to_val(parse_var(parser));
         case TOKEN_LET:
-            return parse_let(parser);
+        case TOKEN_LETREC:
+            return parse_let_or_letrec(parser);
         case TOKEN_FUNC:
             return parse_func(parser);
         case TOKEN_CONST:
@@ -621,10 +597,10 @@ static ir_val_t parse_val(struct parser* parser, ir_type_t expected) {
         expect_token(parser, TOKEN_R_PAREN);
     }
     struct debug_info debug = { .loc = make_loc(parser, &begin) };
-    ir_type_t type = infer_type(parser->module, node_tag, (ir_val_t*)ops, op_count, &debug);
-    ir_val_t val = to_val(make_node(parser->module, node_tag, as_node(type), ops, op_count, NULL, &debug));
+    ir_type_t type = infer_ir_type(parser->module, node_tag, (ir_val_t*)ops, op_count, &debug);
+    ir_node_t node = type ? make_ir_node(parser->module, node_tag, as_node(type), ops, op_count, NULL, &debug) : make_error(parser->module);
     free(ops);
-    return val;
+    return to_val(node);
 }
 
 ir_node_t parse_ir(
@@ -635,6 +611,12 @@ ir_node_t parse_ir(
     size_t data_size,
     const char* file_name)
 {
+    enum {
+#define f(x, str) KEYWORD_##x,
+        KEYWORDS(f)
+#undef f
+        KEYWORD_COUNT
+    };
     struct file_pos begin = {
         .row = 1,
         .col = 1,

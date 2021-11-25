@@ -6,12 +6,7 @@ add_executable(fu
     core/mem_pool.c
     core/string_pool.c
     core/log.c
-    ir/node.c
-    ir/print.c
-    ir/parse.c
-    ir/module.c
-    ir/error_mgr.c
-    ir/simplify.c
+    lang/parse.c
     driver/main.c)
 target_include_directories(fu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(fu PROPERTIES

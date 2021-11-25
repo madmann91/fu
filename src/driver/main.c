@@ -2,10 +2,7 @@
 #include "core/alloc.h"
 #include "core/mem_pool.h"
 #include "core/string_pool.h"
-#include "ir/parse.h"
-#include "ir/print.h"
-#include "ir/module.h"
-#include "ir/error_mgr.h"
+#include "lang/parse.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -100,7 +97,7 @@ static char* read_file(const char* file_name, size_t* file_size) {
     return file_data;
 }
 
-static bool compile_file(struct ir_module* module, const char* file_name, const struct options* options) {
+static bool compile_file(const char* file_name, const struct options* options) {
     size_t file_size = 0;
     char* file_data = read_file(file_name, &file_size);
     if (!file_data) {
@@ -111,10 +108,7 @@ static bool compile_file(struct ir_module* module, const char* file_name, const 
     // TODO
     (void)options;
     struct mem_pool mem_pool = new_mem_pool();
-    ir_node_t node = parse_ir(&global_log, module, &mem_pool, file_data, file_size, file_name);
-    if (node)
-        print_ir(&global_log.state, node, SIZE_MAX);
-    format(&global_log.state, "\n", NULL);
+    parse_ast(&mem_pool, file_name, file_data, file_size, &global_log);
     free_mem_pool(&mem_pool);
     free(file_data);
     return true;
@@ -128,16 +122,13 @@ int main(int argc, char** argv) {
         .opt_level  = 0
     };
 
-    struct default_error_mgr error_mgr = get_default_error_mgr(&global_log);
-    struct ir_module* module = new_ir_module(&error_mgr.error_mgr);
-
     if (!parse_options(argc, argv, &options))
         goto failure;
 
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-')
             continue;
-        if (!compile_file(module, argv[i], &options))
+        if (!compile_file(argv[i], &options))
             goto failure;
     }
     goto success;
@@ -145,7 +136,6 @@ int main(int argc, char** argv) {
 failure:
     status = EXIT_FAILURE;
 success:
-    free_ir_module(module);
     print_format_bufs(global_log.state.first_buf, stdout);
     free_format_bufs(global_log.state.first_buf);
     return status;

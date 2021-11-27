@@ -38,7 +38,8 @@ struct ast {
         AST_TUPLE_PATTERN,
         AST_STRUCT_PATTERN,
         AST_FIELD_PATTERN,
-        AST_ARRAY_PATTERN
+        AST_ARRAY_PATTERN,
+        AST_CALL_PATTERN
     } tag;
     const struct type* type;
     struct file_loc loc;
@@ -118,7 +119,7 @@ struct ast {
         struct {
             struct ast* callee;
             struct ast* arg;
-        } call_expr;
+        } call_expr, call_pattern;
         struct {
             struct ast* match_val;
             struct ast* cases;

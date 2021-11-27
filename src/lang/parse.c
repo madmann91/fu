@@ -919,12 +919,25 @@ static struct ast* parse_expr_without_struct(struct parser* parser) {
     return parse_postfix_expr(parser, false);
 }
 
+static struct ast* parse_call_pattern(struct parser* parser, struct ast* callee) {
+    struct ast* arg = parse_tuple_pattern(parser);
+    return make_ast(parser, &callee->loc.begin, &(struct ast) {
+        .tag = AST_CALL_PATTERN,
+        .call_pattern = {
+            .callee = callee,
+            .arg = arg
+        }
+    });
+}
+
 static struct ast* parse_primary_pattern(struct parser* parser) {
     switch (parser->ahead->tag) {
         case TOKEN_IDENT: {
             struct ast* path = parse_path(parser);
-            if (parser->ahead->tag == TOKEN_L_BRACKET)
+            if (parser->ahead->tag == TOKEN_L_BRACE)
                 return parse_struct_pattern(parser, path);
+            if (parser->ahead->tag == TOKEN_L_PAREN)
+                return parse_call_pattern(parser, path);
             return path;
         }
         case TOKEN_L_PAREN:     return parse_tuple_pattern(parser);

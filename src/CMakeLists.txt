@@ -6,13 +6,7 @@ add_executable(fu
     core/mem_pool.c
     core/string_pool.c
     core/log.c
-    lang/parse.c
     lang/lexer.c
-    lang/type.c
-    lang/check.c
-    lang/bind.c
-    lang/env.c
-    lang/ast.c
     driver/main.c)
 
 target_include_directories(fu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

@@ -1,7 +1,1 @@
-*.swp
-build/
-Gemfile.lock
-_site
-vendor
-.bundle
-.jekyll-cache
+.swp

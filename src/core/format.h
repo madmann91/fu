@@ -5,8 +5,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-struct ir_node;
-
 struct format_buf {
     size_t size;
     size_t capacity;
@@ -34,14 +32,10 @@ struct format_style {
     } color;
 };
 
-struct type;
-struct ast;
-
 union format_arg {
     struct format_style style;
     bool b;
     const void* p;
-    const struct type* t;
     const char* s;
     uint8_t u8;
     uint16_t u16;

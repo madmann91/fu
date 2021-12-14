@@ -34,10 +34,14 @@ struct format_style {
     } color;
 };
 
+struct type;
+struct ast;
+
 union format_arg {
     struct format_style style;
     bool b;
     const void* p;
+    const struct type* t;
     const char* s;
     uint8_t u8;
     uint16_t u16;
@@ -62,7 +66,6 @@ struct format_state {
     bool ignore_style;
     size_t indent;
     const char* tab;
-    format_fn_t custom_format[256];
 };
 
 static const struct format_style reset_style    = { STYLE_NORMAL, COLOR_NORMAL };

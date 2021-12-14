@@ -3,6 +3,10 @@
 #include "core/mem_pool.h"
 #include "core/string_pool.h"
 #include "lang/parse.h"
+#include "lang/lexer.h"
+#include "lang/bind.h"
+#include "lang/check.h"
+#include "lang/type.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -108,8 +112,14 @@ static bool compile_file(const char* file_name, const struct options* options) {
     // TODO
     (void)options;
     struct mem_pool mem_pool = new_mem_pool();
-    parse_ast(&mem_pool, file_name, file_data, file_size, &global_log);
+    struct lexer lexer = new_lexer(file_name, file_data, file_size, &global_log);
+    struct ast* ast = parse_ast(&mem_pool, &lexer);
+    struct type_table* type_table = new_type_table();
+    bind_ast(ast, &global_log);
+    check_ast(ast, type_table, &global_log);
     free_mem_pool(&mem_pool);
+    free_type_table(type_table);
+    free_lexer(&lexer);
     free(file_data);
     return true;
 }

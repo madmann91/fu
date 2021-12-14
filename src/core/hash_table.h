@@ -43,7 +43,6 @@ void* find_in_hash_table(
     compare_fn compare);
 
 void remove_from_hash_table(struct hash_table*, void* elem, size_t elem_size);
-
 void clear_hash_table(struct hash_table*);
 
 #endif

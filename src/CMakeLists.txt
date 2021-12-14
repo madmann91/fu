@@ -7,7 +7,14 @@ add_executable(fu
     core/string_pool.c
     core/log.c
     lang/parse.c
+    lang/lexer.c
+    lang/type.c
+    lang/check.c
+    lang/bind.c
+    lang/env.c
+    lang/ast.c
     driver/main.c)
+
 target_include_directories(fu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(fu PROPERTIES
     C_STANDARD 11

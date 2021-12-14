@@ -1,7 +1,6 @@
 #include "core/alloc.h"
 #include "core/format.h"
-#include "ir/print.h"
-#include "ir/node.h"
+#include "lang/type.h"
 
 #include <assert.h>
 #include <stddef.h>
@@ -98,9 +97,11 @@ static const char* format_arg(struct format_state* state, const char* ptr, size_
         case 'p':
             chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%p", arg->p);
             break;
+        case 't':
+            print_type(state, arg->t);
+            break;
         default:
-            assert(state->custom_format[(unsigned char)c]);
-            state->custom_format[(unsigned char)c](state, arg->p);
+            assert(false && "unknown formatting command");
             break;
     }
     assert(chars_printed < MAX_FORMAT_CHARS);

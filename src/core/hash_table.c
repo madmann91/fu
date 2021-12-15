@@ -22,7 +22,7 @@ static inline bool needs_rehash(const struct hash_table* hash_table) {
 }
 
 struct hash_table new_hash_table(size_t capacity, size_t elem_size) {
-	capacity = next_prime(capacity);
+    capacity = next_prime(capacity);
     void* elems = malloc_or_die(capacity * elem_size);
     uint32_t* hashes = calloc_or_die(capacity, sizeof(uint32_t));
     return (struct hash_table) {

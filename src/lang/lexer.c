@@ -123,8 +123,6 @@ struct token advance_lexer(struct lexer* lexer) {
             hash_raw_bytes(hash_init(), name, len),
             sizeof(struct keyword),
             compare_keywords);
-        if (keyword)
-            printf("%s\n", token_to_string(keyword->tag));
         return keyword
             ? make_token(lexer, &begin, keyword->tag)
             : make_token(lexer, &begin, TOKEN_IDENT);

@@ -1,0 +1,5 @@
+# Index
+
+ - [Syntax](syntax.md)
+
+

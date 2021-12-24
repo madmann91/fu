@@ -6,7 +6,7 @@
 
 uint32_t hash_init() { return 0x811c9dc5; }
 
-uint32_t hash_pointer(uint32_t h, const void* ptr) {
+uint32_t hash_ptr(uint32_t h, const void* ptr) {
     return hash_uint64(h, (ptrdiff_t)ptr);
 }
 
@@ -26,7 +26,7 @@ uint32_t hash_uint64(uint32_t h, uint64_t x) {
     return hash_uint32(hash_uint32(h, x), x >> 32);
 }
 
-uint32_t hash_string(uint32_t h, const char* str) {
+uint32_t hash_str(uint32_t h, const char* str) {
     while (*str) h = hash_uint8(h, *(str++));
     return h;
 }

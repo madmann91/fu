@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <assert.h>
 
 #define must_succeed(...) \
@@ -37,5 +38,7 @@
 #define SKIP_7(x, ...) SKIP_6(__VA_ARGS__)
 #define SKIP_8(x, ...) SKIP_7(__VA_ARGS__)
 #define SKIP_9(x, ...) SKIP_8(__VA_ARGS__)
+
+bool convert_escape_seq(const char*, size_t, char*);
 
 #endif

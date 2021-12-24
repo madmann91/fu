@@ -4,8 +4,9 @@ add_executable(fu
     core/format.c
     core/hash_table.c
     core/mem_pool.c
-    core/string_pool.c
+    core/str_pool.c
     core/log.c
+    core/utils.c
     lang/lexer.c
     driver/main.c)
 

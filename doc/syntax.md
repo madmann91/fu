@@ -161,7 +161,7 @@ MATCH_EXPR ::= "match" , CONDITION , "{" , MATCH_CASES , "}"
 FUN_EXPR ::= "fun" , TUPLE_PATTERN , RET_TYPE? , "=>" , EXPR
 CALL_EXPR ::= PATH , "(" , EXPR_LIST , ")"
 
-FIELD_EXPR ::= IDENTIFIER , " = " , EXPR
+FIELD_EXPR ::= FIELD_NAMES , "=" , EXPR
 FIELD_EXPRS ::= FIELD_EXPR | FIELD_EXPR , "," , FIELD_EXPRS
 STRUCT_EXPR ::= PATH , "{" , FIELD_EXPRS? , "}"
 
@@ -187,7 +187,7 @@ PATTERN ::=
     STRUCT_PATTERN |
     ENUM_PATTERN
 
-FIELD_PATTERN ::= IDENTIFIER , "=" , PATTERN
+FIELD_PATTERN ::= FIELD_NAMES , "=" , PATTERN
 FIELD_PATTERNS ::= FIELD_PATTERN | FIELD_PATTERN , "," , FIELD_PATTERNS
 STRUCT_PATTERN ::= PATH , "{" , FIELD_PATTERNS , "}"
 
@@ -202,7 +202,7 @@ TUPLE_PATTERN ::= "(", ")" | "(" , PATTERN_LIST , ")"
 Statements appear as part of of block expressions, and do not produce a value.
 Note that the non-terminal `EXPR_WITHOUT_IF_OR_MATCH` is not given here for size reasons, but it is
 simply the same as `EXPR`, excluding `IF_EXPR` and `MATCH_EXPR`: This allows parsing `if` and `match`
-expressions without an ending semicolon as statements, even though they produce a value.
+expressions as statements without an ending semicolon, even though they produce a value.
 
 ```bnf
 STATEMENT ::=

@@ -5,14 +5,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-struct format_buf {
+typedef struct format_buf {
     size_t size;
     size_t capacity;
     struct format_buf* next;
     char data[];
-};
+} FormatBuf;
 
-struct format_style {
+typedef struct format_style {
     enum {
         STYLE_NORMAL = 0,
         STYLE_BOLD,
@@ -30,10 +30,10 @@ struct format_style {
         COLOR_YELLOW,
         COLOR_WHITE
     } color;
-};
+} FormatStyle;
 
-union format_arg {
-    struct format_style style;
+typedef union format_arg {
+    FormatStyle style;
     bool b;
     const void* p;
     const char* s;
@@ -48,29 +48,25 @@ union format_arg {
     float f32;
     double f64;
     size_t len;
-};
+} FormatArg;
 
-struct format_state;
-
-typedef void (*format_fn_t)(struct format_state*, const void*);
-
-struct format_state {
-    struct format_buf* cur_buf;
-    struct format_buf* first_buf;
+typedef struct format_state {
+    FormatBuf* cur_buf;
+    FormatBuf* first_buf;
     bool ignore_style;
     size_t indent;
     const char* tab;
-};
+} FormatState;
 
-static const struct format_style reset_style    = { STYLE_NORMAL, COLOR_NORMAL };
-static const struct format_style error_style    = { STYLE_BOLD,   COLOR_RED };
-static const struct format_style number_style   = { STYLE_NORMAL, COLOR_MAGENTA };
-static const struct format_style keyword_style  = { STYLE_BOLD,   COLOR_BLUE };
-static const struct format_style ellipsis_style = { STYLE_BOLD,   COLOR_WHITE };
+static const FormatStyle reset_style    = { STYLE_NORMAL, COLOR_NORMAL };
+static const FormatStyle error_style    = { STYLE_BOLD,   COLOR_RED };
+static const FormatStyle number_style   = { STYLE_NORMAL, COLOR_MAGENTA };
+static const FormatStyle keyword_style  = { STYLE_BOLD,   COLOR_BLUE };
+static const FormatStyle ellipsis_style = { STYLE_BOLD,   COLOR_WHITE };
 
-void format(struct format_state* state, const char* format_str, const union format_arg* args);
+void format(FormatState* state, const char* format_str, const FormatArg* args);
 
-void print_format_bufs(const struct format_buf*, FILE*);
-void free_format_bufs(struct format_buf*);
+void print_format_bufs(const FormatBuf*, FILE*);
+void free_format_bufs(FormatBuf*);
 
 #endif

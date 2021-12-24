@@ -5,27 +5,27 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct mem_block {
+typedef struct mem_block {
     size_t size;
     size_t capacity;
     struct mem_block* next;
     alignas(max_align_t) char data[];
-};
+} MemBlock;
 
 #define MIN_MEM_BLOCK_CAPACITY 1024
 
-struct mem_pool new_mem_pool(void) {
-    return (struct mem_pool) { NULL, NULL };
+MemPool new_mem_pool(void) {
+    return (MemPool) { NULL, NULL };
 }
 
-static size_t remaining_mem(struct mem_block* block) {
+static size_t remaining_mem(MemBlock* block) {
     assert(block->capacity >= block->size);
     return block->capacity - block->size;
 }
 
-static struct mem_block* alloc_mem_block(struct mem_block* prev, size_t capacity) {
+static MemBlock* alloc_mem_block(MemBlock* prev, size_t capacity) {
     if (capacity < MIN_MEM_BLOCK_CAPACITY) capacity = MIN_MEM_BLOCK_CAPACITY;
-    struct mem_block* block = malloc_or_die(sizeof(struct mem_block) + capacity);
+    MemBlock* block = malloc_or_die(sizeof(MemBlock) + capacity);
     block->capacity = capacity;
     block->size = 0;
     block->next = NULL;
@@ -39,7 +39,7 @@ static size_t align_to(size_t size, size_t align) {
     return offset != 0 ? size + align - offset : size;
 }
 
-void* alloc_from_mem_pool(struct mem_pool* mem_pool, size_t size) {
+void* alloc_from_mem_pool(MemPool* mem_pool, size_t size) {
     size = align_to(size, sizeof(max_align_t));
     if (!mem_pool->cur) {
         mem_pool->first = mem_pool->cur = alloc_mem_block(NULL, size);
@@ -60,8 +60,8 @@ void* alloc_from_mem_pool(struct mem_pool* mem_pool, size_t size) {
     return ptr;
 }
 
-void reset_mem_pool(struct mem_pool* mem_pool) {
-    struct mem_block* block = mem_pool->first;
+void reset_mem_pool(MemPool* mem_pool) {
+    MemBlock* block = mem_pool->first;
     while (block) {
         block->size = 0;
         block = block->next;
@@ -69,22 +69,22 @@ void reset_mem_pool(struct mem_pool* mem_pool) {
     mem_pool->cur = mem_pool->first;
 }
 
-void free_mem_pool(struct mem_pool* mem_pool) {
-    struct mem_block* block = mem_pool->first;
+void free_mem_pool(MemPool* mem_pool) {
+    MemBlock* block = mem_pool->first;
     while (block) {
-        struct mem_block* next = block->next;
+        MemBlock* next = block->next;
         free(block);
         block = next;
     }
     mem_pool->first = mem_pool->cur = NULL;
 }
 
-char* copy_string_with_mem_pool(struct mem_pool* mem_pool, const char* str) {
+char* copy_string_with_mem_pool(MemPool* mem_pool, const char* str) {
     size_t len = strlen(str);
     return copy_bytes_with_mem_pool(mem_pool, len + 1, str, len + 1);
 }
 
-void* copy_bytes_with_mem_pool(struct mem_pool* mem_pool, size_t size, const void* data, size_t data_size) {
+void* copy_bytes_with_mem_pool(MemPool* mem_pool, size_t size, const void* data, size_t data_size) {
     assert(data_size <= size);
     char* copy = alloc_from_mem_pool(mem_pool, size);
     memcpy(copy, data, data_size);

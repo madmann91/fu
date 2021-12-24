@@ -2,22 +2,21 @@
 #define FU_LANG_LEXER_H
 
 #include "lang/token.h"
+#include "core/log.h"
 #include "core/hash_table.h"
 
-struct log;
-
-struct lexer {
+typedef struct lexer {
     const char* file_name;
-    struct file_pos file_pos;
     const char* file_data;
     size_t file_size;
-    struct log* log;
-    struct hash_table keywords;
-};
+    FilePos file_pos;
+    Log* log;
+    HashTable keywords;
+} Lexer;
 
-struct lexer new_lexer(const char* file_name, const char* file_data, size_t file_size, struct log*);
-void free_lexer(struct lexer*);
+struct lexer new_lexer(const char* file_name, const char* file_data, size_t file_size, Log*);
+void free_lexer(Lexer*);
 
-struct token advance_lexer(struct lexer*);
+struct token advance_lexer(Lexer*);
 
 #endif

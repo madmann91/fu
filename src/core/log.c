@@ -2,18 +2,18 @@
 
 #include <string.h>
 
-enum log_msg_type {
+typedef enum log_msg_type {
     LOG_ERROR,
     LOG_WARNING,
     LOG_NOTE
-};
+} LogMsgType;
 
 static void log_msg(
     struct log* log,
-    enum log_msg_type msg_type,
-    const struct file_loc* loc,
+    LogMsgType msg_type,
+    const FileLoc* loc,
     const char* format_str,
-    const union format_arg* args)
+    const FormatArg* args)
 {
     static const struct format_style header_styles[] = {
         { STYLE_BOLD, COLOR_RED },
@@ -25,7 +25,7 @@ static void log_msg(
     if (msg_type == LOG_ERROR) log->error_count++;
     else if (msg_type == LOG_WARNING) log->warning_count++;
 
-    format(&log->state, "{$}{s}{$}: ", (union format_arg[]) {
+    format(&log->state, "{$}{s}{$}: ", (FormatArg[]) {
         { .style = header_styles[msg_type] },
         { .s = headers[msg_type] },
         { .style = reset_style } });
@@ -38,7 +38,7 @@ static void log_msg(
             memcmp(&loc->begin, &loc->end, sizeof(loc->begin))
                 ? "  in {$}{s}({u32}, {u32} -- {u32}, {u32}){$}\n"
                 : "  in {$}{s}({u32}, {u32}){$}\n",
-            (union format_arg[]) {
+            (FormatArg[]) {
                 { .style = loc_style },
                 { .s = loc->file_name ? loc->file_name : "<unknown>" },
                 { .u32 = loc->begin.row },
@@ -50,14 +50,14 @@ static void log_msg(
     }
 }
 
-void log_error(struct log* log, const struct file_loc* loc, const char* format_str, const union format_arg* args) {
+void log_error(struct log* log, const FileLoc* loc, const char* format_str, const FormatArg* args) {
     log_msg(log, LOG_ERROR, loc, format_str, args);
 }
 
-void log_warning(struct log* log, const struct file_loc* loc, const char* format_str, const union format_arg* args) {
+void log_warning(struct log* log, const FileLoc* loc, const char* format_str, const FormatArg* args) {
     log_msg(log, LOG_WARNING, loc, format_str, args);
 }
 
-void log_note(struct log* log, const struct file_loc* loc, const char* format_str, const union format_arg* args) {
+void log_note(struct log* log, const FileLoc* loc, const char* format_str, const FormatArg* args) {
     log_msg(log, LOG_NOTE, loc, format_str, args);
 }

@@ -39,7 +39,12 @@ static bool compile_file(const char* file_name) {
     char* file_data = read_file(file_name, &file_size);
     struct log log = { .state = { .tab = "    " } };
     struct lexer lexer = new_lexer(file_name, file_data, file_size, &log);
-    while (advance_lexer(&lexer).tag != TOKEN_EOF) ;
+    while (true) {
+        Token token = advance_lexer(&lexer);
+        if (token.tag == TOKEN_EOF)
+            break;
+        printf("%s\n", token_tag_to_str(token.tag));
+    }
     free_lexer(&lexer);
     print_format_bufs(log.state.first_buf, stdout);
     free_format_bufs(log.state.first_buf);

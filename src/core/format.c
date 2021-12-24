@@ -11,21 +11,21 @@
 #define MAX_FORMAT_CHARS 64
 #define DEFAULT_BUF_CAPACITY 1024
 
-static struct format_buf* alloc_buf(size_t capacity) {
-    struct format_buf* buf = malloc_or_die(sizeof(struct format_buf) + capacity);
+static FormatBuf* alloc_buf(size_t capacity) {
+    FormatBuf* buf = malloc_or_die(sizeof(FormatBuf) + capacity);
     buf->size = 0;
     buf->capacity = capacity;
     buf->next = NULL;
     return buf;
 }
 
-static char* reserve_buf(struct format_state* state, size_t size) {
+static char* reserve_buf(FormatState* state, size_t size) {
     if (state->cur_buf && state->cur_buf->size + size <= state->cur_buf->capacity)
         return state->cur_buf->data + state->cur_buf->size;
     size_t capacity = state->cur_buf ? state->cur_buf->size : DEFAULT_BUF_CAPACITY;
     if (capacity < size)
         capacity = size;
-    struct format_buf* buf = alloc_buf(capacity);
+    FormatBuf* buf = alloc_buf(capacity);
     if (state->cur_buf)
         state->cur_buf->next = buf;
     else
@@ -34,25 +34,25 @@ static char* reserve_buf(struct format_state* state, size_t size) {
     return buf->data;
 }
 
-static void advance_buf(struct format_buf* buf, size_t inc) {
+static void advance_buf(FormatBuf* buf, size_t inc) {
     assert(buf->capacity >= buf->size + inc);
     buf->size += inc;
 }
 
-static void write(struct format_state* state, const char* ptr, size_t size) {
+static void write(FormatState* state, const char* ptr, size_t size) {
     memcpy(reserve_buf(state, size), ptr, size);
     advance_buf(state->cur_buf, size);
 }
 
-static void write_char(struct format_state* state, char c) {
+static void write_char(FormatState* state, char c) {
     write(state, &c, 1);
 }
 
-static void write_string(struct format_state* state, const char* s) {
+static void write_str(FormatState* state, const char* s) {
     write(state, s, strlen(s));
 }
 
-static const char* format_arg(struct format_state* state, const char* ptr, size_t* index, const union format_arg* args) {
+static const char* format_arg(FormatState* state, const char* ptr, size_t* index, const FormatArg* args) {
     const union format_arg* arg = &args[(*index)++];
     char* buf_ptr = reserve_buf(state, MAX_FORMAT_CHARS);
     size_t chars_printed = 0;
@@ -88,10 +88,10 @@ static const char* format_arg(struct format_state* state, const char* ptr, size_
                 ptr++;
                 write(state, arg->s, args[(*index)++].len);
             } else
-                write_string(state, arg->s);
+                write_str(state, arg->s);
             break;
         case 'b':
-            write_string(state, arg->b ? "true" : "false");
+            write_str(state, arg->b ? "true" : "false");
             break;
         case 'p':
             chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%p", arg->p);
@@ -105,14 +105,14 @@ static const char* format_arg(struct format_state* state, const char* ptr, size_
     return ptr;
 }
 
-static void apply_style(struct format_state* state, const union format_arg* arg) {
+static void apply_style(FormatState* state, const FormatArg* arg) {
     if (arg->style.style == STYLE_NORMAL || arg->style.color == COLOR_NORMAL) {
-        write_string(state, "\33[0m");
+        write_str(state, "\33[0m");
         if (arg->style.style == STYLE_NORMAL && arg->style.color == COLOR_NORMAL)
             return;
     }
 
-    write_string(state, "\33[");
+    write_str(state, "\33[");
     switch (arg->style.style) {
         case STYLE_BOLD:      write_char(state, '1'); break;
         case STYLE_DIM:       write_char(state, '2'); break;
@@ -123,19 +123,19 @@ static void apply_style(struct format_state* state, const union format_arg* arg)
     if (arg->style.style != STYLE_NORMAL)
         write_char(state, ';');
     switch (arg->style.color) {
-        case COLOR_RED:     write_string(state, "31"); break;
-        case COLOR_GREEN:   write_string(state, "32"); break;
-        case COLOR_BLUE:    write_string(state, "34"); break;
-        case COLOR_CYAN:    write_string(state, "36"); break;
-        case COLOR_MAGENTA: write_string(state, "35"); break;
-        case COLOR_YELLOW:  write_string(state, "33"); break;
-        case COLOR_WHITE:   write_string(state, "37"); break;
+        case COLOR_RED:     write_str(state, "31"); break;
+        case COLOR_GREEN:   write_str(state, "32"); break;
+        case COLOR_BLUE:    write_str(state, "34"); break;
+        case COLOR_CYAN:    write_str(state, "36"); break;
+        case COLOR_MAGENTA: write_str(state, "35"); break;
+        case COLOR_YELLOW:  write_str(state, "33"); break;
+        case COLOR_WHITE:   write_str(state, "37"); break;
         default: break;
     }
     write_char(state, 'm');
 }
 
-void format(struct format_state* state, const char* format_str, const union format_arg* args) {
+void format(FormatState* state, const char* format_str, const FormatArg* args) {
     const char* ptr = format_str;
     size_t index = 0;
     while (*ptr) {
@@ -146,7 +146,7 @@ void format(struct format_state* state, const char* format_str, const union form
             ptr++;
             write_char(state, '\n');
             for (size_t i = 0, n = state->indent; i < n; ++i)
-                write_string(state, state->tab);
+                write_str(state, state->tab);
         } else if (*ptr == '{') {
             switch (*(++ptr)) {
                 case '{':
@@ -191,16 +191,16 @@ void format(struct format_state* state, const char* format_str, const union form
     }
 }
 
-void print_format_bufs(const struct format_buf* buf, FILE* out) {
+void print_format_bufs(const FormatBuf* buf, FILE* out) {
     while (buf) {
         fwrite(buf->data, 1, buf->size, out);
         buf = buf->next;
     }
 }
 
-void free_format_bufs(struct format_buf* buf) {
+void free_format_bufs(FormatBuf* buf) {
     while (buf) {
-        struct format_buf* next = buf->next;
+        FormatBuf* next = buf->next;
         free(buf);
         buf = next;
     }

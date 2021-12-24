@@ -17,22 +17,22 @@ static inline void* elem_at(void* elems, size_t elem_size, size_t index) {
     return ((char*)elems) + elem_size * index;
 }
 
-static inline bool needs_rehash(const struct hash_table* hash_table) {
+static inline bool needs_rehash(const HashTable* hash_table) {
     return hash_table->size * 100 >= hash_table->capacity * MAX_LOAD_FACTOR;
 }
 
-struct hash_table new_hash_table(size_t capacity, size_t elem_size) {
+HashTable new_hash_table(size_t capacity, size_t elem_size) {
     capacity = next_prime(capacity);
     void* elems = malloc_or_die(capacity * elem_size);
     uint32_t* hashes = calloc_or_die(capacity, sizeof(uint32_t));
-    return (struct hash_table) {
+    return (HashTable) {
         .elems    = elems,
         .hashes   = hashes,
         .capacity = capacity
     };
 }
 
-void free_hash_table(struct hash_table* hash_table) {
+void free_hash_table(HashTable* hash_table) {
     free(hash_table->elems);
     free(hash_table->hashes);
     hash_table->capacity = hash_table->size = 0;
@@ -42,7 +42,7 @@ bool is_bucket_occupied(uint32_t hash) {
 	return hash & OCCUPIED_MASK;
 }
 
-static inline void rehash_table(struct hash_table* hash_table, size_t elem_size) {
+static inline void rehash_table(HashTable* hash_table, size_t elem_size) {
     size_t new_capacity = next_prime(hash_table->capacity);
     if (new_capacity <= hash_table->capacity)
         new_capacity = hash_table->capacity * 2 + 1;
@@ -70,11 +70,11 @@ static inline void rehash_table(struct hash_table* hash_table, size_t elem_size)
 }
 
 bool insert_in_hash_table(
-    struct hash_table* hash_table,
+    HashTable* hash_table,
     const void* elem,
     uint32_t hash,
     size_t elem_size,
-    compare_fn compare)
+    CompareFn compare)
 {
 	hash |= OCCUPIED_MASK;
     size_t index = mod_prime(hash, hash_table->capacity);
@@ -93,11 +93,11 @@ bool insert_in_hash_table(
 }
 
 void* find_in_hash_table(
-    const struct hash_table* hash_table,
+    const HashTable* hash_table,
     const void* elem,
     uint32_t hash,
     size_t elem_size,
-    compare_fn compare)
+    CompareFn compare)
 {
     hash |= OCCUPIED_MASK;
     size_t index = mod_prime(hash, hash_table->capacity);
@@ -114,7 +114,7 @@ static inline size_t distance_in_bytes(const void* from, const void* to) {
     return (char*)to - (char*)from;
 }
 
-void remove_from_hash_table(struct hash_table* hash_table, void* elem, size_t elem_size) {
+void remove_from_hash_table(HashTable* hash_table, void* elem, size_t elem_size) {
     assert(elem >= hash_table->elems);
     assert(elem < elem_at(hash_table->elems, elem_size, hash_table->capacity));
     size_t index = distance_in_bytes(hash_table->elems, elem) / elem_size;
@@ -137,7 +137,7 @@ void remove_from_hash_table(struct hash_table* hash_table, void* elem, size_t el
     hash_table->size--;
 }
 
-void clear_hash_table(struct hash_table* hash_table) {
+void clear_hash_table(HashTable* hash_table) {
     hash_table->size = 0;
     memset(hash_table->hashes, 0, sizeof(uint32_t) * hash_table->capacity);
 }

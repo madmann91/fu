@@ -14,35 +14,23 @@
  * The collision resolution strategy is linear probing.
  */
 
-struct hash_table {
+typedef struct hash_table {
     size_t capacity;
     size_t size;
     uint32_t* hashes;
     void* elems;
-};
+} HashTable;
 
-typedef bool (*compare_fn) (const void*, const void*);
+typedef bool (*CompareFn) (const void*, const void*);
 
-struct hash_table new_hash_table(size_t capacity, size_t elem_size);
-void free_hash_table(struct hash_table*);
+HashTable new_hash_table(size_t capacity, size_t elem_size);
+void free_hash_table(HashTable*);
 
 bool is_bucket_occupied(uint32_t hash);
 
-bool insert_in_hash_table(
-    struct hash_table*,
-    const void* elem,
-    uint32_t hash,
-    size_t elem_size,
-    compare_fn compare);
-
-void* find_in_hash_table(
-    const struct hash_table*,
-    const void* elem,
-    uint32_t hash,
-    size_t elem_size,
-    compare_fn compare);
-
-void remove_from_hash_table(struct hash_table*, void* elem, size_t elem_size);
-void clear_hash_table(struct hash_table*);
+bool insert_in_hash_table(HashTable*, const void* elem, uint32_t hash, size_t elem_size, CompareFn compare);
+void* find_in_hash_table(const HashTable*, const void* elem, uint32_t hash, size_t elem_size, CompareFn compare);
+void remove_from_hash_table(HashTable*, void* elem, size_t elem_size);
+void clear_hash_table(HashTable*);
 
 #endif

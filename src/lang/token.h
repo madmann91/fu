@@ -27,7 +27,7 @@
     f(IDENT, "identifier") \
     f(INT_LITERAL, "integer literal") \
     f(FLOAT_LITERAL, "floating-point literal") \
-    f(CHAR_LITERAL, "char literal") \
+    f(CHAR_LITERAL, "character literal") \
     f(STRING_LITERAL, "string literal") \
     f(EOF, "end of file") \
     f(ERROR, "invalid token")

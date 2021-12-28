@@ -14,7 +14,7 @@
  * The collision resolution strategy is linear probing.
  */
 
-typedef struct hash_table {
+typedef struct {
     size_t capacity;
     size_t size;
     uint32_t* hashes;

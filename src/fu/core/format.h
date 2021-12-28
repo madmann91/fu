@@ -5,14 +5,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-typedef struct format_buf {
+typedef struct FormatBuf {
     size_t size;
     size_t capacity;
-    struct format_buf* next;
+    struct FormatBuf* next;
     char data[];
 } FormatBuf;
 
-typedef struct format_style {
+typedef struct {
     enum {
         STYLE_NORMAL = 0,
         STYLE_BOLD,
@@ -32,7 +32,7 @@ typedef struct format_style {
     } color;
 } FormatStyle;
 
-typedef union format_arg {
+typedef union {
     FormatStyle style;
     bool b;
     const void* p;
@@ -50,7 +50,7 @@ typedef union format_arg {
     size_t len;
 } FormatArg;
 
-typedef struct format_state {
+typedef struct {
     FormatBuf* cur_buf;
     FormatBuf* first_buf;
     bool ignore_style;

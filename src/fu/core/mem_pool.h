@@ -4,11 +4,11 @@
 #include <stdalign.h>
 #include <stddef.h>
 
-struct mem_block;
+struct MemBlock;
 
-typedef struct mem_pool {
-    struct mem_block* first;
-    struct mem_block* cur;
+typedef struct {
+    struct MemBlock* first;
+    struct MemBlock* cur;
 } MemPool;
 
 MemPool new_mem_pool(void);

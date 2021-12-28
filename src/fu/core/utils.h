@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <stddef.h>
 #include <assert.h>
 
@@ -39,6 +40,7 @@
 #define SKIP_8(x, ...) SKIP_7(__VA_ARGS__)
 #define SKIP_9(x, ...) SKIP_8(__VA_ARGS__)
 
-bool convert_escape_seq(const char*, size_t, char*);
+size_t convert_escape_seq(const char*, size_t, char*);
+bool is_color_supported(FILE*);
 
 #endif

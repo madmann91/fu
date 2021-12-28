@@ -1,7 +1,7 @@
 #ifndef FU_LANG_TOKEN_H
 #define FU_LANG_TOKEN_H
 
-#include "core/log.h"
+#include "fu/core/log.h"
 
 #define SYMBOL_LIST(f) \
     f(L_PAREN, "(") \
@@ -21,24 +21,27 @@
     f(WHILE, "while") \
     f(FUN, "fun")
 
-#define TOKEN_LIST(f) \
-    SYMBOL_LIST(f) \
-    KEYWORD_LIST(f) \
+#define SPECIAL_TOKEN_LIST(f) \
     f(IDENT, "identifier") \
     f(INT_LITERAL, "integer literal") \
     f(FLOAT_LITERAL, "floating-point literal") \
     f(CHAR_LITERAL, "character literal") \
-    f(STRING_LITERAL, "string literal") \
+    f(STR_LITERAL, "string literal") \
     f(EOF, "end of file") \
     f(ERROR, "invalid token")
 
-typedef enum token_tag {
+#define TOKEN_LIST(f) \
+    SYMBOL_LIST(f) \
+    KEYWORD_LIST(f) \
+    SPECIAL_TOKEN_LIST(f)
+
+typedef enum {
 #define f(name, str) TOKEN_##name,
     TOKEN_LIST(f)
 #undef f
 } TokenTag;
 
-typedef struct token {
+typedef struct {
     TokenTag tag;
     union {
         uintmax_t int_val;
@@ -55,6 +58,16 @@ static inline const char* token_tag_to_str(TokenTag tag) {
 #undef f
         default:
             return NULL;
+    }
+}
+
+static inline bool is_special_token(TokenTag tag) {
+    switch (tag) {
+#define f(name, ...) case TOKEN_##name: return true;
+        SPECIAL_TOKEN_LIST(f)
+#undef f
+        default:
+            return false;
     }
 }
 

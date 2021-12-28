@@ -3,19 +3,19 @@
 
 #include <stdint.h>
 
-#include "core/format.h"
+#include "fu/core/format.h"
 
-typedef struct file_pos {
+typedef struct {
     uint32_t row, col;
     size_t byte_offset;
 } FilePos;
 
-typedef struct file_loc {
+typedef struct {
     const char* file_name;
     FilePos begin, end;
 } FileLoc;
 
-typedef struct log {
+typedef struct {
     FormatState state;
     size_t error_count;
     size_t warning_count;

@@ -2,8 +2,10 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-#include "core/alloc.h"
-#include "lang/lexer.h"
+#include "fu/core/alloc.h"
+#include "fu/core/mem_pool.h"
+#include "fu/lang/lexer.h"
+#include "fu/lang/parser.h"
 
 static char* read_file(const char* file_name, size_t* file_size) {
     FILE* file = fopen(file_name, "rb");
@@ -37,16 +39,17 @@ static char* read_file(const char* file_name, size_t* file_size) {
 static bool compile_file(const char* file_name) {
     size_t file_size = 0;
     char* file_data = read_file(file_name, &file_size);
-    struct log log = { .state = { .tab = "    " } };
-    struct lexer lexer = new_lexer(file_name, file_data, file_size, &log);
-    while (true) {
-        Token token = advance_lexer(&lexer);
-        if (token.tag == TOKEN_EOF)
-            break;
-        printf("%s\n", token_tag_to_str(token.tag));
+    Log log = { .state = { .tab = "    " } };
+    MemPool mem_pool = new_mem_pool();
+    Lexer lexer = new_lexer(file_name, file_data, file_size, &log);
+    Parser parser = make_parser(&lexer, &mem_pool);
+    AstNode* program = parse_program(&parser);
+    if (program) {
+        dump_ast(program);
+        free_lexer(&lexer);
     }
-    free_lexer(&lexer);
-    print_format_bufs(log.state.first_buf, stdout);
+    free_mem_pool(&mem_pool);
+    print_format_bufs(log.state.first_buf, stderr);
     free_format_bufs(log.state.first_buf);
     return log.error_count == 0;
 }

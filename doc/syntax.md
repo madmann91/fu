@@ -58,7 +58,7 @@ ENUM_DECL ::= "enum" , IDENTIFIER , TYPE_PARAMS_LIST?, "{" , ENUM_OPTIONS, "}"
 ALIAS_DECL ::= "type" , IDENTIFIER , TYPE_PARAM_LIST? , "=" , TYPE , ";"
 
 RET_TYPE ::= "->", TYPE
-FUN_DECL ::= "fun" , IDENTIFIER , "(", PATTERN, ")" , RET_TYPE? , FUN_BODY
+FUN_DECL ::= "fun" , IDENTIFIER , TYPE_PARAM_LIST?, "(", PATTERN, ")" , RET_TYPE? , FUN_BODY
 FUN_BODY ::= "=" , EXPR , ";" | BLOCK_EXPR
 
 CONST_DECL ::= "const" , PATTERN , "=" , EXPR , ";"

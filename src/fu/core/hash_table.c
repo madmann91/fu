@@ -1,6 +1,6 @@
-#include "core/hash_table.h"
-#include "core/primes.h"
-#include "core/alloc.h"
+#include "fu/core/hash_table.h"
+#include "fu/core/primes.h"
+#include "fu/core/alloc.h"
 
 #include <stdlib.h>
 #include <string.h>

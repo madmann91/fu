@@ -1,10 +1,10 @@
 #ifndef FU_CORE_STR_POOL_H
 #define FU_CORE_STR_POOL_H
 
-#include "core/hash_table.h"
-#include "core/mem_pool.h"
+#include "fu/core/hash_table.h"
+#include "fu/core/mem_pool.h"
 
-typedef struct str_pool {
+typedef struct {
     MemPool mem_pool;
     HashTable hash_table;
 } StrPool;

@@ -1,5 +1,5 @@
-#include "core/alloc.h"
-#include "core/format.h"
+#include "fu/core/alloc.h"
+#include "fu/core/format.h"
 
 #include <assert.h>
 #include <stddef.h>
@@ -53,7 +53,7 @@ static void write_str(FormatState* state, const char* s) {
 }
 
 static const char* format_arg(FormatState* state, const char* ptr, size_t* index, const FormatArg* args) {
-    const union format_arg* arg = &args[(*index)++];
+    const FormatArg* arg = &args[(*index)++];
     char* buf_ptr = reserve_buf(state, MAX_FORMAT_CHARS);
     size_t chars_printed = 0;
     char c = *(ptr++);

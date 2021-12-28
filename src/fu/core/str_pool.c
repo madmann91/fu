@@ -1,6 +1,6 @@
-#include "core/str_pool.h"
-#include "core/hash.h"
-#include "core/utils.h"
+#include "fu/core/str_pool.h"
+#include "fu/core/hash.h"
+#include "fu/core/utils.h"
 
 #include <string.h>
 

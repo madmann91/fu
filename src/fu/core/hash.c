@@ -1,4 +1,4 @@
-#include "core/hash.h"
+#include "fu/core/hash.h"
 
 /* Note: This is an implementation of the FNV-1a hashing function.
  * See https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function

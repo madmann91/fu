@@ -1,7 +1,7 @@
-#include "lang/lexer.h"
-#include "lang/token.h"
-#include "core/hash.h"
-#include "core/utils.h"
+#include "fu/lang/lexer.h"
+#include "fu/lang/token.h"
+#include "fu/core/hash.h"
+#include "fu/core/utils.h"
 
 #include <assert.h>
 #include <ctype.h>
@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <inttypes.h>
 
-typedef struct keyword {
+typedef struct {
     const char* name;
     size_t len;
     TokenTag tag;
@@ -21,10 +21,10 @@ static bool compare_keywords(const void* left, const void* right) {
         !memcmp(((Keyword*)left)->name, ((Keyword*)right)->name, ((Keyword*)left)->len);
 }
 
-static void register_keywords(HashTable* hash_table) {
+static void register_keywords(HashTable* keywords) {
 #define f(name, str) \
     insert_in_hash_table( \
-        hash_table, \
+        keywords, \
         &(Keyword) { str, strlen(str), TOKEN_##name }, \
         hash_str(hash_init(), str), \
         sizeof(Keyword), \
@@ -107,7 +107,7 @@ static void skip_multi_line_comment(Lexer* lexer) {
     }
 }
 
-static Token make_token(Lexer* lexer, const FilePos* begin, enum token_tag tag) {
+static Token make_token(Lexer* lexer, const FilePos* begin, TokenTag tag) {
     return (Token) {
         .tag = tag,
         .file_loc = {
@@ -174,15 +174,17 @@ Token advance_lexer(Lexer* lexer) {
             }
             if (!accept_char(lexer, '\"'))
                 return make_invalid_token(lexer, &begin, "unterminated string literal");
-            return make_token(lexer, &begin, TOKEN_STRING_LITERAL);
+            return make_token(lexer, &begin, TOKEN_STR_LITERAL);
         }
 
         if (accept_char(lexer, '\'')) {
             const char* ptr = get_cur_ptr(lexer);
-            while (get_cur_char(lexer) != '\'' && get_cur_char(lexer) != '\n')
+            size_t char_count = 0;
+            for (; get_cur_char(lexer) != '\'' && get_cur_char(lexer) != '\n'; char_count++)
                 skip_char(lexer);
             Token token = make_token(lexer, &begin, TOKEN_CHAR_LITERAL);
-            if (!accept_char(lexer, '\'') || !convert_escape_seq(ptr, get_cur_ptr(lexer) - ptr, &token.char_val))
+            if (!accept_char(lexer, '\'') ||
+                convert_escape_seq(ptr, get_cur_ptr(lexer) - ptr, &token.char_val) != char_count)
                 return make_invalid_token(lexer, &begin, "invalid character literal");
             return token;
         }

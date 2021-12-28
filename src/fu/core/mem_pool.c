@@ -1,14 +1,14 @@
-#include "core/mem_pool.h"
-#include "core/alloc.h"
+#include "fu/core/mem_pool.h"
+#include "fu/core/alloc.h"
 
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct mem_block {
+typedef struct MemBlock {
     size_t size;
     size_t capacity;
-    struct mem_block* next;
+    struct MemBlock* next;
     alignas(max_align_t) char data[];
 } MemBlock;
 

@@ -1,21 +1,21 @@
-#include "core/log.h"
+#include "fu/core/log.h"
 
 #include <string.h>
 
-typedef enum log_msg_type {
+typedef enum {
     LOG_ERROR,
     LOG_WARNING,
     LOG_NOTE
 } LogMsgType;
 
 static void log_msg(
-    struct log* log,
+    Log* log,
     LogMsgType msg_type,
     const FileLoc* loc,
     const char* format_str,
     const FormatArg* args)
 {
-    static const struct format_style header_styles[] = {
+    static const FormatStyle header_styles[] = {
         { STYLE_BOLD, COLOR_RED },
         { STYLE_BOLD, COLOR_YELLOW },
         { STYLE_BOLD, COLOR_BLUE }
@@ -32,7 +32,7 @@ static void log_msg(
     format(&log->state, format_str, args);
     format(&log->state, "\n", NULL);
     if (loc && loc->file_name) {
-        static const struct format_style loc_style = { STYLE_BOLD, COLOR_WHITE };
+        static const FormatStyle loc_style = { STYLE_BOLD, COLOR_WHITE };
         format(
             &log->state,
             memcmp(&loc->begin, &loc->end, sizeof(loc->begin))
@@ -50,14 +50,14 @@ static void log_msg(
     }
 }
 
-void log_error(struct log* log, const FileLoc* loc, const char* format_str, const FormatArg* args) {
+void log_error(Log* log, const FileLoc* loc, const char* format_str, const FormatArg* args) {
     log_msg(log, LOG_ERROR, loc, format_str, args);
 }
 
-void log_warning(struct log* log, const FileLoc* loc, const char* format_str, const FormatArg* args) {
+void log_warning(Log* log, const FileLoc* loc, const char* format_str, const FormatArg* args) {
     log_msg(log, LOG_WARNING, loc, format_str, args);
 }
 
-void log_note(struct log* log, const FileLoc* loc, const char* format_str, const FormatArg* args) {
+void log_note(Log* log, const FileLoc* loc, const char* format_str, const FormatArg* args) {
     log_msg(log, LOG_NOTE, loc, format_str, args);
 }

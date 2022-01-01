@@ -78,15 +78,3 @@ void free_mem_pool(MemPool* mem_pool) {
     }
     mem_pool->first = mem_pool->cur = NULL;
 }
-
-char* copy_string_with_mem_pool(MemPool* mem_pool, const char* str) {
-    size_t len = strlen(str);
-    return copy_bytes_with_mem_pool(mem_pool, len + 1, str, len + 1);
-}
-
-void* copy_bytes_with_mem_pool(MemPool* mem_pool, size_t size, const void* data, size_t data_size) {
-    assert(data_size <= size);
-    char* copy = alloc_from_mem_pool(mem_pool, size);
-    memcpy(copy, data, data_size);
-    return copy;
-}

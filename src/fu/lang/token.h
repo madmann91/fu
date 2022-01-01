@@ -10,16 +10,68 @@
     f(R_BRACKET, "]") \
     f(L_BRACE, "{") \
     f(R_BRACE, "}") \
-    f(SLASH, "/") \
-    f(LESS_EQUAL, "<=") \
+    f(BANG, "!") \
+    f(DOT, ".") \
+    f(COMMA, ",") \
+    f(COLON, ":") \
+    f(SEMICOLON, ";") \
+    f(EQUAL, "=") \
+    f(DOUBLE_EQUAL, "==") \
+    f(BANG_EQUAL, "!=") \
+    f(FAT_ARROW, "=>") \
+    f(THIN_ARROW, "->") \
     f(LESS, "<") \
-    f(COMMA, ",")
+    f(LESS_EQUAL, "<=") \
+    f(DOUBLE_LESS, "<<") \
+    f(DOUBLE_LESS_EQUAL, "<<=") \
+    f(GREATER, ">") \
+    f(GREATER_EQUAL, ">=") \
+    f(DOUBLE_GREATER, ">>") \
+    f(DOUBLE_GREATER_EQUAL, ">>=") \
+    f(PLUS, "+") \
+    f(MINUS, "-") \
+    f(STAR, "*") \
+    f(SLASH, "/") \
+    f(PERCENT, "%") \
+    f(AMP, "&") \
+    f(HAT, "^") \
+    f(PIPE, "|") \
+    f(DOUBLE_AMP, "&&") \
+    f(DOUBLE_PIPE, "||") \
+    f(DOUBLE_PLUS, "++") \
+    f(DOUBLE_MINUS, "--") \
+    f(PLUS_EQUAL, "+=") \
+    f(MINUS_EQUAL, "-=") \
+    f(STAR_EQUAL, "*=") \
+    f(SLASH_EQUAL, "/=") \
+    f(PERCENT_EQUAL, "%=") \
+    f(AMP_EQUAL, "&=") \
+    f(HAT_EQUAL, "^=") \
+    f(PIPE_EQUAL, "|=")
 
 #define KEYWORD_LIST(f) \
+    f(TRUE, "true") \
+    f(FALSE, "false") \
     f(IF, "if") \
     f(ELSE, "else") \
+    f(MATCH, "match") \
+    f(FOR, "for") \
+    f(IN, "in") \
     f(WHILE, "while") \
-    f(FUN, "fun")
+    f(FUN, "fun") \
+    f(VAR, "var") \
+    f(CONST, "const") \
+    f(TYPE, "type") \
+    f(STRUCT, "struct") \
+    f(ENUM, "enum") \
+    f(INT_8, "Int8") \
+    f(INT_16, "Int16") \
+    f(INT_32, "Int32") \
+    f(INT_64, "Int64") \
+    f(WORD_8, "Word8") \
+    f(WORD_16, "Word16") \
+    f(WORD_32, "Word32") \
+    f(WORD_64, "Word64")
 
 #define SPECIAL_TOKEN_LIST(f) \
     f(IDENT, "identifier") \
@@ -54,20 +106,13 @@ typedef struct {
 static inline const char* token_tag_to_str(TokenTag tag) {
     switch (tag) {
 #define f(name, str) case TOKEN_##name: return str;
-        TOKEN_LIST(f)
-#undef f
-        default:
-            return NULL;
-    }
-}
-
-static inline bool is_special_token(TokenTag tag) {
-    switch (tag) {
-#define f(name, ...) case TOKEN_##name: return true;
+#define g(name, str) case TOKEN_##name: return "'"str"'";
+        SYMBOL_LIST(g)
+        KEYWORD_LIST(g)
         SPECIAL_TOKEN_LIST(f)
 #undef f
         default:
-            return false;
+            return NULL;
     }
 }
 

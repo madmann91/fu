@@ -16,7 +16,11 @@ typedef struct {
 
 Parser make_parser(Lexer*, MemPool*);
 
+AstNode* parse_stmt(Parser*);
 AstNode* parse_decl(Parser*);
+AstNode* parse_pattern(Parser*);
+AstNode* parse_expr(Parser*);
+AstNode* parse_type(Parser*);
 AstNode* parse_program(Parser*);
 
 #endif

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+#include "fu/core/utils.h"
 #include "fu/core/alloc.h"
 #include "fu/core/mem_pool.h"
 #include "fu/lang/lexer.h"
@@ -39,7 +40,7 @@ static char* read_file(const char* file_name, size_t* file_size) {
 static bool compile_file(const char* file_name) {
     size_t file_size = 0;
     char* file_data = read_file(file_name, &file_size);
-    Log log = { .state = { .tab = "    " } };
+    Log log = { .state = { .tab = "    ", .ignore_style = !is_color_supported(stderr) } };
     MemPool mem_pool = new_mem_pool();
     Lexer lexer = new_lexer(file_name, file_data, file_size, &log);
     Parser parser = make_parser(&lexer, &mem_pool);

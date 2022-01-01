@@ -33,7 +33,12 @@ TYPE ::=
     STRUCT_DECL |
     ENUM_DECL
 
-PRIM_TYPE ::= "bool" | "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64"
+PRIM_TYPE ::=
+    "Bool" |
+    "Int8" | "Int16" | "Int32" | "Int64" |
+    "Word8" | "Word16" | "Word32" | "Word64" |
+    "Float32" | "Float64"
+
 TYPE_ARGS ::= TYPE | TYPE , "," , TYPE_ARGS
 TUPLE_TYPE ::= "(" , TYPE_ARGS , ")"
 ```
@@ -43,7 +48,8 @@ TUPLE_TYPE ::= "(" , TYPE_ARGS , ")"
 Declarations can declare either values (functions, constants and variables) or types (aliases, structures, and enumerations).
 
 ```bnf
-TYPE_PARAMS ::= IDENTIFIER | IDENTIFIER , "," , TYPE_PARAMS
+TYPE_PARAM ::= IDENTIFIER
+TYPE_PARAMS ::= TYPE_PARAM | TYPE_PARAM , "," , TYPE_PARAMS
 TYPE_PARAM_LIST ::= "[", TYPE_PARAMS, "]"
 
 FIELD_NAMES ::= IDENTIFIER | IDENTIFIER , "," , FIELD_NAMES
@@ -76,8 +82,8 @@ conditions in `if` or `match` expressions are given as the `CONDITION` non-termi
 like `EXPR` but excluding structure expressions.
 
 ```bnf
-EXPR ::= LOGIC_OR_EXPR
-    
+EXPR ::= ASSIGN_EXPR
+
 MUL_OR_DIV_EXPR ::=
     UNARY_EXPR |
     UNARY_EXPR , "*" , UNARY_EXPR |
@@ -113,16 +119,17 @@ LOGIC_AND_EXPR ::= OR_EXPR | OR_EXPR , "&&" , OR_EXPR
 LOGIC_OR_EXPR ::= LOGIC_AND_EXPR | LOGIC_AND_EXPR , "||" , LOGIC_AND_EXPR
 
 ASSIGN_EXPR ::=
-    UNARY_EXPR , "=" , ASSIGN_EXPR |
-    UNARY_EXPR , "+=" , ASSIGN_EXPR |
-    UNARY_EXPR , "-=" , ASSIGN_EXPR |
-    UNARY_EXPR , "*=" , ASSIGN_EXPR |
-    UNARY_EXPR , "/=" , ASSIGN_EXPR |
-    UNARY_EXPR , ">>=" , ASSIGN_EXPR |
-    UNARY_EXPR , "<<=" , ASSIGN_EXPR |
-    UNARY_EXPR , "&=" , ASSIGN_EXPR |
-    UNARY_EXPR , "|=" , ASSIGN_EXPR |
-    UNARY_EXPR , "^=" , ASSIGN_EXPR
+    LOGIC_OR_EXPR |
+    PRIMARY_EXPR , "=" , ASSIGN_EXPR |
+    PRIMARY_EXPR , "+=" , ASSIGN_EXPR |
+    PRIMARY_EXPR , "-=" , ASSIGN_EXPR |
+    PRIMARY_EXPR , "*=" , ASSIGN_EXPR |
+    PRIMARY_EXPR , "/=" , ASSIGN_EXPR |
+    PRIMARY_EXPR , ">>=" , ASSIGN_EXPR |
+    PRIMARY_EXPR , "<<=" , ASSIGN_EXPR |
+    PRIMARY_EXPR , "&=" , ASSIGN_EXPR |
+    PRIMARY_EXPR , "|=" , ASSIGN_EXPR |
+    PRIMARY_EXPR , "^=" , ASSIGN_EXPR
 
 UNARY_EXPR ::=
     PRIMARY_EXPR |
@@ -185,14 +192,14 @@ PATTERN ::=
     STRING_LITERAL |
     TUPLE_PATTERN |
     STRUCT_PATTERN |
-    ENUM_PATTERN
+    CTOR_PATTERN
 
 FIELD_PATTERN ::= FIELD_NAMES , "=" , PATTERN
 FIELD_PATTERNS ::= FIELD_PATTERN | FIELD_PATTERN , "," , FIELD_PATTERNS
 STRUCT_PATTERN ::= PATH , "{" , FIELD_PATTERNS , "}"
 
 PATTERN_LIST ::= PATTERN | PATTERN , "," , PATTERN_LIST
-ENUM_PATTERN ::= PATH | PATH , "(" , PATTERN_LIST , ")"
+CTOR_PATTERN ::= PATH | PATH , "(" , PATTERN_LIST , ")"
 
 TUPLE_PATTERN ::= "(", ")" | "(" , PATTERN_LIST , ")"
 ```

@@ -150,6 +150,34 @@ Token advance_lexer(Lexer* lexer) {
         if (accept_char(lexer, ']')) return make_token(lexer, &begin, TOKEN_R_BRACKET);
         if (accept_char(lexer, '{')) return make_token(lexer, &begin, TOKEN_L_BRACE);
         if (accept_char(lexer, '}')) return make_token(lexer, &begin, TOKEN_R_BRACE);
+        if (accept_char(lexer, '.')) return make_token(lexer, &begin, TOKEN_DOT);
+        if (accept_char(lexer, ',')) return make_token(lexer, &begin, TOKEN_COMMA);
+        if (accept_char(lexer, ':')) return make_token(lexer, &begin, TOKEN_COLON);
+        if (accept_char(lexer, ';')) return make_token(lexer, &begin, TOKEN_SEMICOLON);
+
+        if (accept_char(lexer, '<')) {
+            if (accept_char(lexer, '<'))
+                return make_token(lexer, &begin, TOKEN_DOUBLE_LESS);
+            if (accept_char(lexer, '='))
+                return make_token(lexer, &begin, TOKEN_LESS_EQUAL);
+            return make_token(lexer, &begin, TOKEN_LESS);
+        }
+
+        if (accept_char(lexer, '>')) {
+            if (accept_char(lexer, '>'))
+                return make_token(lexer, &begin, TOKEN_DOUBLE_GREATER);
+            if (accept_char(lexer, '='))
+                return make_token(lexer, &begin, TOKEN_GREATER_EQUAL);
+            return make_token(lexer, &begin, TOKEN_GREATER);
+        }
+
+        if (accept_char(lexer, '=')) {
+            if (accept_char(lexer, '='))
+                return make_token(lexer, &begin, TOKEN_DOUBLE_EQUAL);
+            if (accept_char(lexer, '>'))
+                return make_token(lexer, &begin, TOKEN_FAT_ARROW);
+            return make_token(lexer, &begin, TOKEN_EQUAL);
+        }
 
         if (accept_char(lexer, '/')) {
             if (accept_char(lexer, '/')) {
@@ -187,12 +215,6 @@ Token advance_lexer(Lexer* lexer) {
                 convert_escape_seq(ptr, get_cur_ptr(lexer) - ptr, &token.char_val) != char_count)
                 return make_invalid_token(lexer, &begin, "invalid character literal");
             return token;
-        }
-
-        if (accept_char(lexer, '<')) {
-            if (accept_char(lexer, '='))
-                return make_token(lexer, &begin, TOKEN_LESS_EQUAL);
-            return make_token(lexer, &begin, TOKEN_LESS);
         }
 
         if (get_cur_char(lexer) == '_' || isalpha(get_cur_char(lexer))) {

@@ -179,8 +179,8 @@ void format(FormatState* state, const char* format_str, const FormatArg* args) {
                 default:
                     if (*ptr == '$') {
                         if (!state->ignore_style)
-                            apply_style(state, &args[index++]);
-                        ptr++;
+                            apply_style(state, &args[index]);
+                        index++, ptr++;
                     } else
                         ptr = format_arg(state, ptr, &index, args);
                     break;

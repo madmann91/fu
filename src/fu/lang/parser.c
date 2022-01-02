@@ -136,6 +136,33 @@ static inline AstNode* parse_tuple_expr(Parser* parser) {
     return parse_tuple(parser, AST_TUPLE_EXPR, parse_expr);
 }
 
+static AstNode* parse_array(Parser* parser, AstNodeTag tag, AstNode* (*parse_elem)(Parser*)) {
+    FilePos begin = parser->ahead->file_loc.begin;
+    eat_token(parser, TOKEN_L_BRACKET);
+    AstNode* elems = parse_many(parser, TOKEN_R_BRACKET, TOKEN_COMMA, parse_elem);
+    expect_token(parser, TOKEN_R_BRACKET);
+    return make_ast_node(parser, &begin, &(AstNode) { .tag = tag, .array_expr.elems = elems });
+}
+
+static inline AstNode* parse_array_expr(Parser* parser) {
+    return parse_array(parser, AST_ARRAY_EXPR, parse_expr);
+}
+
+static inline AstNode* parse_array_pattern(Parser* parser) {
+    return parse_array(parser, AST_ARRAY_PATTERN, parse_pattern);
+}
+
+static inline AstNode* parse_array_type(Parser* parser) {
+    FilePos begin = parser->ahead->file_loc.begin;
+    eat_token(parser, TOKEN_L_BRACKET);
+    AstNode* elem_type = parse_type(parser);
+    expect_token(parser, TOKEN_R_BRACKET);
+    return make_ast_node(parser, &begin, &(AstNode) {
+        .tag = AST_ARRAY_TYPE,
+        .array_type.elem_type = elem_type
+    });
+}
+
 static inline AstNode* parse_path_elem(Parser* parser) {
     FilePos begin = parser->ahead->file_loc.begin;
     const char* name = parse_ident(parser);
@@ -352,10 +379,11 @@ AstNode* parse_type(Parser* parser) {
 #define f(name, ...) case TOKEN_##name: return parse_prim_type(parser, AST_TYPE_##name);
         AST_PRIM_TYPE_LIST(f)
 #undef f
-        case TOKEN_IDENT:   return parse_path(parser);
-        case TOKEN_L_PAREN: return parse_tuple_type(parser);
-        case TOKEN_STRUCT:  return parse_struct_decl(parser);
-        case TOKEN_ENUM:    return parse_enum_decl(parser);
+        case TOKEN_IDENT:     return parse_path(parser);
+        case TOKEN_L_PAREN:   return parse_tuple_type(parser);
+        case TOKEN_L_BRACKET: return parse_array_type(parser);
+        case TOKEN_STRUCT:    return parse_struct_decl(parser);
+        case TOKEN_ENUM:      return parse_enum_decl(parser);
         default:
             return parse_error(parser, "type");
     }
@@ -568,8 +596,10 @@ static inline AstNode* parse_if_expr(Parser* parser) {
     AstNode* cond = parse_expr_without_structs(parser);
     AstNode* if_true = parse_block_expr_or_error(parser);
     AstNode* if_false = NULL;
-    if (accept_token(parser, TOKEN_ELSE))
-        if_false = parse_block_expr_or_error(parser);
+    if (accept_token(parser, TOKEN_ELSE)) {
+        if_false = parser->ahead->tag == TOKEN_IF
+            ? parse_if_expr(parser) : parse_block_expr_or_error(parser);
+    }
     return make_ast_node(parser, &begin, &(AstNode) {
         .tag = AST_IF_EXPR,
         .if_expr = { .cond = cond, .if_true = if_true, .if_false = if_false }
@@ -621,6 +651,8 @@ static inline AstNode* parse_untyped_expr(Parser* parser, bool allow_structs) {
             return parse_tuple_expr(parser);
         case TOKEN_L_BRACE:
             return parse_block_expr(parser);
+        case TOKEN_L_BRACKET:
+            return parse_array_expr(parser);
         case TOKEN_BREAK:
         case TOKEN_CONTINUE:
         case TOKEN_RETURN: {
@@ -673,6 +705,8 @@ static AstNode* parse_untyped_pattern(Parser* parser) {
         }
         case TOKEN_L_PAREN:
             return parse_tuple_pattern(parser);
+        case TOKEN_L_BRACKET:
+            return parse_array_pattern(parser);
         default:
             return parse_error(parser, "pattern");
     }

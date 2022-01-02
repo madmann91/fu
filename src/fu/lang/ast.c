@@ -194,6 +194,13 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
         case AST_TUPLE_EXPR:
             print_many_with_delim(state, "(", ", ", ")", ast_node->tuple_type.args);
             break;
+        case AST_ARRAY_TYPE:
+            print_with_delim(state, "[", "]", ast_node->array_type.elem_type);
+            break;
+        case AST_ARRAY_PATTERN:
+        case AST_ARRAY_EXPR:
+            print_many_with_delim(state, "[", ", ", "]", ast_node->array_expr.elems);
+            break;
         case AST_TYPED_PATTERN:
         case AST_TYPED_EXPR:
             print_ast(state, ast_node->typed_pattern.left);

@@ -81,6 +81,7 @@ typedef enum {
     AST_PATH,
     // Types
     AST_TUPLE_TYPE,
+    AST_ARRAY_TYPE,
 #define f(name, ...) AST_TYPE_##name,
     AST_PRIM_TYPE_LIST(f)
 #undef f
@@ -118,6 +119,7 @@ typedef enum {
     AST_TYPED_EXPR,
     AST_MATCH_CASE,
     AST_MATCH_EXPR,
+    AST_ARRAY_EXPR,
     AST_BREAK_EXPR,
     AST_CONTINUE_EXPR,
     AST_RETURN_EXPR,
@@ -129,7 +131,8 @@ typedef enum {
     AST_STRUCT_PATTERN,
     AST_CTOR_PATTERN,
     AST_TUPLE_PATTERN,
-    AST_TYPED_PATTERN
+    AST_TYPED_PATTERN,
+    AST_ARRAY_PATTERN
 } AstNodeTag;
 
 typedef struct AstNode AstNode;
@@ -163,6 +166,12 @@ struct AstNode {
         struct {
             AstNode* args;
         } tuple_type, tuple_expr, tuple_pattern;
+        struct {
+            AstNode* elem_type;
+        } array_type;
+        struct {
+            AstNode* elems;
+        } array_expr, array_pattern;
         struct {
             const char* name;
             AstNode* kind;

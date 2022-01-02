@@ -40,7 +40,8 @@
 #define SKIP_8(x, ...) SKIP_7(__VA_ARGS__)
 #define SKIP_9(x, ...) SKIP_8(__VA_ARGS__)
 
-size_t convert_escape_seq(const char*, size_t, char*);
+size_t convert_escape_seq(const char* str, size_t n, char* res);
 bool is_color_supported(FILE*);
+char* read_file(const char* file_name, size_t* file_size);
 
 #endif

@@ -1,4 +1,5 @@
 #include "fu/core/utils.h"
+#include "fu/core/alloc.h"
 
 #include <ctype.h>
 #include <stdlib.h>
@@ -47,4 +48,33 @@ size_t convert_escape_seq(const char* ptr, size_t n, char* res) {
 
 bool is_color_supported(FILE* file) {
     return isatty(fileno(file));
+}
+
+char* read_file(const char* file_name, size_t* file_size) {
+    FILE* file = fopen(file_name, "rb");
+    if (!file)
+        return NULL;
+
+    size_t chunk_size = 4096;
+    char* file_data = NULL;
+    *file_size = 0;
+    while (true) {
+        if (ferror(file)) {
+            fclose(file);
+            free(file_data);
+            return NULL;
+        }
+        file_data = realloc_or_die(file_data, *file_size + chunk_size);
+        size_t read_count = fread(file_data + *file_size, 1, chunk_size, file);
+        *file_size += read_count;
+        if (read_count < chunk_size)
+            break;
+        chunk_size *= 2;
+    }
+    fclose(file);
+
+    // Add terminator
+    file_data = realloc_or_die(file_data, *file_size + 1);
+    file_data[*file_size] = 0;
+    return file_data;
 }

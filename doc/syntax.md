@@ -85,10 +85,10 @@ like `EXPR` but excluding structure expressions.
 EXPR ::= ASSIGN_EXPR
 
 MUL_OR_DIV_EXPR ::=
-    UNARY_EXPR |
-    UNARY_EXPR , "*" , UNARY_EXPR |
-    UNARY_EXPR , "/" , UNARY_EXPR |
-    UNARY_EXPR , "%" , UNARY_EXPR
+    PREFIX_EXPR |
+    PREFIX_EXPR , "*" , PREFIX_EXPR |
+    PREFIX_EXPR , "/" , PREFIX_EXPR |
+    PREFIX_EXPR , "%" , PREFIX_EXPR
 
 ADD_OR_SUB_EXPR ::=
     MUL_OR_DIV_EXPR |
@@ -131,24 +131,30 @@ ASSIGN_EXPR ::=
     PRIMARY_EXPR , "|=" , ASSIGN_EXPR |
     PRIMARY_EXPR , "^=" , ASSIGN_EXPR
 
-UNARY_EXPR ::=
-    PRIMARY_EXPR |
-    "--" , UNARY_EXPR |
-    "++" , UNARY_EXPR |
-    PRIMARY_EXPR , "--" |
-    PRIMARY_EXPR , "++" |
-    "-" , UNARY_EXPR |
-    "+" , UNARY_EXPR |
-    "!" , UNARY_EXPR
+PREFIX_EXPR ::=
+    POSTFIX_EXPR |
+    "--" , POSTFIX_EXPR |
+    "++" , POSTFIX_EXPR |
+    "-" , POSTFIX_EXPR |
+    "+" , POSTFIX_EXPR |
+    "!" , POSTFIX_EXPR
 
-PRIMARY_EXPR ::=
+POSTFIX_EXPR ::=
+    TYPED_EXPR |
+    POSTFIX_EXPR , "--" |
+    POSTFIX_EXPR , "++" |
+    CALL_EXPR
+
+CALL_EXPR ::= POSTFIX_EXPR , "(" , EXPR_LIST , ")"
+PRIMARY_EXPR ::= TYPED_EXPR | UNTYPED_EXPR
+TYPED_EXPR ::= UNTYPED_EXPR , ":" , TYPE
+
+UNTYPED_EXPR ::=
     PATH | "break" | "continue" | "return" |
-    CALL_EXPR |
     TUPLE_EXPR |
     IF_EXPR |
     MATCH_EXPR |
     FUN_EXPR |
-    CALL_EXPR |
     BLOCK_EXPR |
     STRUCT_EXPR |
     CHAR_LITERAL |
@@ -166,7 +172,6 @@ MATCH_CASES ::= MATCH_CASE | MATCH_CASE , "," , MATCH_CASES
 MATCH_EXPR ::= "match" , CONDITION , "{" , MATCH_CASES , "}"
 
 FUN_EXPR ::= "fun" , TUPLE_PATTERN , RET_TYPE? , "=>" , EXPR
-CALL_EXPR ::= PATH , "(" , EXPR_LIST , ")"
 
 FIELD_EXPR ::= FIELD_NAMES , "=" , EXPR
 FIELD_EXPRS ::= FIELD_EXPR | FIELD_EXPR , "," , FIELD_EXPRS
@@ -185,7 +190,10 @@ any expression of the type of the pattern. In practice, this means that a _bindi
 contain an enumeration pattern, or a literal.
 
 ```bnf
-PATTERN ::=
+PATTERN ::= TYPED_PATTERN | UNTYPED_PATTERN
+TYPED_PATTERN ::= UNTYPED_PATTERN , ":" , TYPE
+
+UNTYPED_PATTERN ::=
     IDENTIFIER |
     INT_LITERAL |
     CHAR_LITERAL |

@@ -59,23 +59,29 @@
     AST_PREFIX_EXPR_LIST(f) \
     AST_POSTFIX_EXPR_LIST(f)
 
+#define AST_PRIM_TYPE_LIST(f) \
+    f(BOOL, "bool") \
+    f(I8,   "i8") \
+    f(I16,  "i16") \
+    f(I32,  "i32") \
+    f(I64,  "i64") \
+    f(U8,   "u8") \
+    f(U16,  "u16") \
+    f(U32,  "u32") \
+    f(U64,  "u64") \
+    f(F32,  "f32") \
+    f(F64,  "f64")
+
 typedef enum {
     AST_ERROR,
     AST_PROGRAM,
+    AST_NAME,
     AST_TYPE_PARAM,
+#define f(name, ...) AST_TYPE_##name,
+    AST_PRIM_TYPE_LIST(f)
+#undef f
     AST_PATH_ELEM,
     AST_PATH,
-    AST_BOOL,
-    AST_INT_8,
-    AST_INT_16,
-    AST_INT_32,
-    AST_INT_64,
-    AST_WORD_8,
-    AST_WORD_16,
-    AST_WORD_32,
-    AST_WORD_64,
-    AST_FLOAT_32,
-    AST_FLOAT_64,
     AST_TUPLE_TYPE,
     AST_BOOL_LITERAL,
     AST_INT_LITERAL,
@@ -105,6 +111,7 @@ typedef enum {
     AST_STRUCT_EXPR,
     AST_TUPLE_EXPR,
     AST_CALL_EXPR,
+    AST_TYPED_EXPR,
     AST_MATCH_CASE,
     AST_MATCH_EXPR,
     AST_WHILE_LOOP,
@@ -113,6 +120,7 @@ typedef enum {
     AST_STRUCT_PATTERN,
     AST_CTOR_PATTERN,
     AST_TUPLE_PATTERN,
+    AST_TYPED_PATTERN,
 } AstNodeTag;
 
 typedef struct AstNode AstNode;
@@ -141,6 +149,9 @@ struct AstNode {
             const char* val;
         } str_literal;
         struct {
+            const char* ident;
+        } name;
+        struct {
             AstNode* args;
         } tuple_type, tuple_expr, tuple_pattern;
         struct {
@@ -167,9 +178,13 @@ struct AstNode {
             AstNode* init;
         } const_decl, var_decl;
         struct {
-            const char* name;
+            AstNode* names;
             AstNode* type;
-        } field_decl, option_decl;
+        } field_decl;
+        struct {
+            const char* name;
+            AstNode* param_type;
+        } option_decl;
         struct {
             const char* name;
             AstNode* type_params;
@@ -219,7 +234,7 @@ struct AstNode {
             AstNode* cases;
         } match_expr;
         struct {
-            const char* name;
+            AstNode* names;
             AstNode* val;
             size_t index;
         } field_expr, field_pattern;
@@ -227,6 +242,10 @@ struct AstNode {
             AstNode* path;
             AstNode* fields;
         } struct_expr, struct_pattern;
+        struct {
+            AstNode* left;
+            AstNode* type;
+        } typed_expr, typed_pattern;
         struct {
             AstNode* path;
             AstNode* arg;
@@ -246,7 +265,14 @@ struct AstNode {
 void print_ast(FormatState*, const AstNode*);
 void dump_ast(const AstNode*);
 
-bool needs_semicolon(const AstNode*);
+bool needs_semicolon(AstNodeTag);
+bool is_tuple(AstNodeTag);
+bool is_binary_expr(AstNodeTag);
+
+const char* ast_node_tag_to_prim_type_name(AstNodeTag);
+const char* ast_node_tag_to_binary_expr_op(AstNodeTag);
+const char* ast_node_tag_to_assign_expr_op(AstNodeTag);
+
 int max_precedence();
 int precedence(AstNodeTag);
 

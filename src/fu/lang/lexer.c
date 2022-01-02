@@ -155,17 +155,81 @@ Token advance_lexer(Lexer* lexer) {
         if (accept_char(lexer, ':')) return make_token(lexer, &begin, TOKEN_COLON);
         if (accept_char(lexer, ';')) return make_token(lexer, &begin, TOKEN_SEMICOLON);
 
+        if (accept_char(lexer, '!')) {
+            if (accept_char(lexer, '='))
+                return make_token(lexer, &begin, TOKEN_BANG_EQUAL);
+            return make_token(lexer, &begin, TOKEN_BANG);
+        }
+
+        if (accept_char(lexer, '+')) {
+            if (accept_char(lexer, '+'))
+                return make_token(lexer, &begin, TOKEN_DOUBLE_PLUS);
+            if (accept_char(lexer, '='))
+                return make_token(lexer, &begin, TOKEN_PLUS_EQUAL);
+            return make_token(lexer, &begin, TOKEN_PLUS);
+        }
+
+        if (accept_char(lexer, '-')) {
+            if (accept_char(lexer, '-'))
+                return make_token(lexer, &begin, TOKEN_DOUBLE_MINUS);
+            if (accept_char(lexer, '='))
+                return make_token(lexer, &begin, TOKEN_MINUS_EQUAL);
+            if (accept_char(lexer, '>'))
+                return make_token(lexer, &begin, TOKEN_THIN_ARROW);
+            return make_token(lexer, &begin, TOKEN_MINUS);
+        }
+
+        if (accept_char(lexer, '*')) {
+            if (accept_char(lexer, '='))
+                return make_token(lexer, &begin, TOKEN_STAR_EQUAL);
+            return make_token(lexer, &begin, TOKEN_STAR);
+        }
+
+        if (accept_char(lexer, '%')) {
+            if (accept_char(lexer, '='))
+                return make_token(lexer, &begin, TOKEN_PERCENT_EQUAL);
+            return make_token(lexer, &begin, TOKEN_PERCENT);
+        }
+
+        if (accept_char(lexer, '&')) {
+            if (accept_char(lexer, '&'))
+                return make_token(lexer, &begin, TOKEN_DOUBLE_AMP);
+            if (accept_char(lexer, '='))
+                return make_token(lexer, &begin, TOKEN_AMP_EQUAL);
+            return make_token(lexer, &begin, TOKEN_AMP);
+        }
+
+        if (accept_char(lexer, '|')) {
+            if (accept_char(lexer, '|'))
+                return make_token(lexer, &begin, TOKEN_DOUBLE_PIPE);
+            if (accept_char(lexer, '='))
+                return make_token(lexer, &begin, TOKEN_PIPE_EQUAL);
+            return make_token(lexer, &begin, TOKEN_PIPE);
+        }
+
+        if (accept_char(lexer, '^')) {
+            if (accept_char(lexer, '='))
+                return make_token(lexer, &begin, TOKEN_HAT_EQUAL);
+            return make_token(lexer, &begin, TOKEN_HAT);
+        }
+
         if (accept_char(lexer, '<')) {
-            if (accept_char(lexer, '<'))
+            if (accept_char(lexer, '<')) {
+                if (accept_char(lexer, '='))
+                    return make_token(lexer, &begin, TOKEN_DOUBLE_LESS_EQUAL);
                 return make_token(lexer, &begin, TOKEN_DOUBLE_LESS);
+            }
             if (accept_char(lexer, '='))
                 return make_token(lexer, &begin, TOKEN_LESS_EQUAL);
             return make_token(lexer, &begin, TOKEN_LESS);
         }
 
         if (accept_char(lexer, '>')) {
-            if (accept_char(lexer, '>'))
+            if (accept_char(lexer, '>')) {
+                if (accept_char(lexer, '='))
+                    return make_token(lexer, &begin, TOKEN_DOUBLE_GREATER_EQUAL);
                 return make_token(lexer, &begin, TOKEN_DOUBLE_GREATER);
+            }
             if (accept_char(lexer, '='))
                 return make_token(lexer, &begin, TOKEN_GREATER_EQUAL);
             return make_token(lexer, &begin, TOKEN_GREATER);
@@ -187,6 +251,8 @@ Token advance_lexer(Lexer* lexer) {
                 skip_multi_line_comment(lexer);
                 continue;
             }
+            if (accept_char(lexer, '='))
+                return make_token(lexer, &begin, TOKEN_SLASH_EQUAL);
             return make_token(lexer, &begin, TOKEN_SLASH);
         }
 

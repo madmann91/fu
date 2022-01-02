@@ -64,14 +64,17 @@
     f(TYPE, "type") \
     f(STRUCT, "struct") \
     f(ENUM, "enum") \
-    f(INT_8, "Int8") \
-    f(INT_16, "Int16") \
-    f(INT_32, "Int32") \
-    f(INT_64, "Int64") \
-    f(WORD_8, "Word8") \
-    f(WORD_16, "Word16") \
-    f(WORD_32, "Word32") \
-    f(WORD_64, "Word64")
+    f(BOOL, "bool") \
+    f(I8, "i8") \
+    f(I16, "i16") \
+    f(I32, "i32") \
+    f(I64, "i64") \
+    f(U8, "u8") \
+    f(U16, "u16") \
+    f(U32, "u32") \
+    f(U64, "u64") \
+    f(F32, "f32") \
+    f(F64, "f64") \
 
 #define SPECIAL_TOKEN_LIST(f) \
     f(IDENT, "identifier") \

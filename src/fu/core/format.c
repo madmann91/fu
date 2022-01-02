@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 
 #define MAX_FORMAT_CHARS 64
 #define DEFAULT_BUF_CAPACITY 1024
@@ -61,6 +62,7 @@ static const char* format_arg(FormatState* state, const char* ptr, size_t* index
         case 'u':
             switch (*(ptr++)) {
                 case '8': chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu8, arg->u8);  break;
+                case 'm': chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIuMAX, arg->um); break;
                 case '1': assert(*ptr == '6'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu16, arg->u16); break;
                 case '3': assert(*ptr == '2'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu32, arg->u32); break;
                 case '6': assert(*ptr == '4'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu64, arg->u64); break;

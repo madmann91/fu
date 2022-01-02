@@ -52,6 +52,7 @@ static bool compile_file(const char* file_name) {
     free_mem_pool(&mem_pool);
     print_format_bufs(log.state.first_buf, stderr);
     free_format_bufs(log.state.first_buf);
+    free(file_data);
     return log.error_count == 0;
 }
 

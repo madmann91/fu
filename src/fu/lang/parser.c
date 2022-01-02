@@ -8,9 +8,9 @@
 typedef struct {
     AstNode* first;
     AstNode* last;
-} AstList;
+} AstNodeList;
 
-static inline void add_ast_node_to_list(AstList* list, AstNode* node) {
+static inline void add_ast_node_to_list(AstNodeList* list, AstNode* node) {
     if (!list->last)
         list->first = node;
     else {
@@ -88,7 +88,7 @@ static inline bool expect_token(Parser* parser, TokenTag tag) {
 }
 
 static AstNode* parse_many(Parser* parser, TokenTag end, TokenTag sep, AstNode* (*parse_one)(Parser*)) {
-    AstList list = { NULL };
+    AstNodeList list = { NULL };
     while (true) {
         if (end != TOKEN_ERROR && parser->ahead->tag == end)
             break;
@@ -159,7 +159,7 @@ static inline AstNode* parse_path(Parser* parser) {
 static inline AstNode* parse_block_expr(Parser* parser) {
     FilePos begin = parser->ahead->file_loc.begin;
     eat_token(parser, TOKEN_L_BRACE);
-    AstList stmt_list = { NULL };
+    AstNodeList stmt_list = { NULL };
     bool ends_with_semicolon = false;
     while (parser->ahead->tag != TOKEN_R_BRACE) {
         AstNode* stmt = parse_stmt(parser);

@@ -425,7 +425,7 @@ static inline AstNode* parse_postfix_expr(Parser* parser, AstNode* (*parse_prima
             case TOKEN_DOUBLE_MINUS: tag = AST_POST_DEC_EXPR; break;
             case TOKEN_L_PAREN:
                 operand = parse_call_expr(parser, operand);
-                break;
+                continue;
             default:
                 return operand;
         }
@@ -488,7 +488,7 @@ static inline AstNodeTag token_tag_to_assign_expr_tag(TokenTag tag) {
 }
 
 static inline AstNode* parse_assign_expr(Parser* parser, AstNode* (*parse_primary_expr)(Parser*)) {
-    AstNode* left = parse_primary_expr(parser);
+    AstNode* left = parse_prefix_expr(parser, parse_primary_expr);
     AstNodeTag tag = token_tag_to_assign_expr_tag(parser->ahead->tag);
     if (tag != AST_ERROR) {
         skip_token(parser);
@@ -621,6 +621,17 @@ static inline AstNode* parse_untyped_expr(Parser* parser, bool allow_structs) {
             return parse_tuple_expr(parser);
         case TOKEN_L_BRACE:
             return parse_block_expr(parser);
+        case TOKEN_BREAK:
+        case TOKEN_CONTINUE:
+        case TOKEN_RETURN: {
+            FilePos begin = parser->ahead->file_loc.begin;
+            AstNodeTag tag =
+                parser->ahead->tag == TOKEN_BREAK ? AST_BREAK_EXPR :
+                parser->ahead->tag == TOKEN_CONTINUE ? AST_CONTINUE_EXPR :
+                AST_RETURN_EXPR;
+            skip_token(parser);
+            return make_ast_node(parser, &begin, &(AstNode) { .tag = tag });
+        }
         default:
             return parse_error(parser, "expression");
     }

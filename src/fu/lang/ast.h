@@ -77,17 +77,20 @@ typedef enum {
     AST_PROGRAM,
     AST_NAME,
     AST_TYPE_PARAM,
+    AST_PATH_ELEM,
+    AST_PATH,
+    // Types
+    AST_TUPLE_TYPE,
 #define f(name, ...) AST_TYPE_##name,
     AST_PRIM_TYPE_LIST(f)
 #undef f
-    AST_PATH_ELEM,
-    AST_PATH,
-    AST_TUPLE_TYPE,
+    // Literals
     AST_BOOL_LITERAL,
     AST_INT_LITERAL,
     AST_FLOAT_LITERAL,
     AST_CHAR_LITERAL,
     AST_STR_LITERAL,
+    // Declarations
     AST_FUN_DECL,
     AST_CONST_DECL,
     AST_VAR_DECL,
@@ -96,6 +99,7 @@ typedef enum {
     AST_OPTION_DECL,
     AST_STRUCT_DECL,
     AST_ENUM_DECL,
+    // Expressions
 #define f(name, ...) AST_##name##_EXPR,
     AST_BINARY_EXPR_LIST(f)
     AST_UNARY_EXPR_LIST(f)
@@ -114,13 +118,18 @@ typedef enum {
     AST_TYPED_EXPR,
     AST_MATCH_CASE,
     AST_MATCH_EXPR,
+    AST_BREAK_EXPR,
+    AST_CONTINUE_EXPR,
+    AST_RETURN_EXPR,
+    // Loops
     AST_WHILE_LOOP,
     AST_FOR_LOOP,
+    // Patterns
     AST_FIELD_PATTERN,
     AST_STRUCT_PATTERN,
     AST_CTOR_PATTERN,
     AST_TUPLE_PATTERN,
-    AST_TYPED_PATTERN,
+    AST_TYPED_PATTERN
 } AstNodeTag;
 
 typedef struct AstNode AstNode;
@@ -246,6 +255,12 @@ struct AstNode {
             AstNode* left;
             AstNode* type;
         } typed_expr, typed_pattern;
+        struct {
+            AstNode* loop;
+        } break_expr, continue_expr;
+        struct {
+            AstNode* fun;
+        } return_expr;
         struct {
             AstNode* path;
             AstNode* arg;

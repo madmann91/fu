@@ -167,10 +167,9 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
                 print_with_delim(state, "->", "", ast_node->fun_decl.ret_type);
             format(state, " ", NULL);
             if (ast_node->fun_decl.body->tag != AST_BLOCK_EXPR)
-                format(state, "= ", NULL);
-            print_ast(state, ast_node->fun_decl.body);
-            if (ast_node->fun_decl.body->tag != AST_BLOCK_EXPR)
-                format(state, ";", NULL);
+                print_with_delim(state, "= ", ";", ast_node->fun_decl.body);
+            else
+                print_ast(state, ast_node->fun_decl.body);
             break;
         case AST_CONST_DECL:
         case AST_VAR_DECL:
@@ -204,8 +203,6 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
         case AST_BLOCK_EXPR:
             if (!ast_node->block_expr.stmts)
                 format(state, "{{}", NULL);
-            else if (!ast_node->block_expr.stmts->next)
-                print_with_delim(state, "{{ ", " }", ast_node->block_expr.stmts);
             else {
                 format(state, "{{{>}\n", NULL);
                 for (AstNode* stmt = ast_node->block_expr.stmts; stmt; stmt = stmt->next) {
@@ -253,8 +250,11 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
         case AST_WHILE_LOOP:
             print_keyword(state, "while");
             print_with_delim(state, " ", " ", ast_node->while_loop.cond);
-            print_ast(state, ast_node->for_loop.body);
+            print_ast(state, ast_node->while_loop.body);
             break;
+        case AST_BREAK_EXPR:    print_keyword(state, "break"); break;
+        case AST_CONTINUE_EXPR: print_keyword(state, "continue"); break;
+        case AST_RETURN_EXPR:   print_keyword(state, "return"); break;
         default:
             assert(false && "invalid node tag");
             break;

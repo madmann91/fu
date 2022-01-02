@@ -58,6 +58,9 @@
     f(FOR, "for") \
     f(IN, "in") \
     f(WHILE, "while") \
+    f(BREAK, "break") \
+    f(RETURN, "return") \
+    f(CONTINUE, "continue") \
     f(FUN, "fun") \
     f(VAR, "var") \
     f(CONST, "const") \

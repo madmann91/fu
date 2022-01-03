@@ -10,6 +10,7 @@
     f(R_BRACKET, "]") \
     f(L_BRACE, "{") \
     f(R_BRACE, "}") \
+    f(HASH, "#") \
     f(BANG, "!") \
     f(DOT, ".") \
     f(COMMA, ",") \

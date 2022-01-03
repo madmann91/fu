@@ -89,6 +89,8 @@ static inline void print_decl_head(FormatState* state, const char* keyword, cons
 }
 
 void print_ast(FormatState* state, const AstNode* ast_node) {
+    if (ast_node->attrs)
+        print_many_with_delim(state, "#[", ", ", "] ", ast_node->attrs);
     switch (ast_node->tag) {
         case AST_BOOL_LITERAL:
             print_keyword(state, ast_node->bool_literal.val ? "true" : "false");
@@ -125,6 +127,15 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
         AST_PRIM_TYPE_LIST(f)
 #undef f
             print_prim_type(state, ast_node->tag);
+            break;
+        case AST_ATTR:
+            format(state, "{s}", (FormatArg[]) { { .s = ast_node->attr.name } });
+            if (ast_node->attr.val) {
+                if (ast_node->attr.val->tag == AST_ATTR)
+                    print_many_with_delim(state, "(", ", ", ")", ast_node->attr.val);
+                else
+                    print_with_delim(state, " = ", "", ast_node->attr.val);
+            }
             break;
         case AST_PATH:
             print_many(state, ".", ast_node->path.elems);

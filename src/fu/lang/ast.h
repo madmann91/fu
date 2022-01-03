@@ -77,6 +77,8 @@ typedef enum {
     AST_PROGRAM,
     AST_NAME,
     AST_TYPE_PARAM,
+    AST_ATTR,
+    // Path
     AST_PATH_ELEM,
     AST_PATH,
     // Types
@@ -141,6 +143,7 @@ struct AstNode {
     AstNodeTag tag;
     FileLoc file_loc;
     AstNode* next;
+    AstNode* attrs;
     union {
         struct {
             AstNode* decls;
@@ -160,6 +163,10 @@ struct AstNode {
         struct {
             const char* val;
         } str_literal;
+        struct {
+            const char* name;
+            AstNode* val;
+        } attr;
         struct {
             const char* ident;
         } name;

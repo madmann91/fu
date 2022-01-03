@@ -1,6 +1,6 @@
 # Syntax
 
-The syntax of Fu is divided in 5 categories: types, declarations, expressions, patterns, and statements.
+The syntax of Fu is divided in 5 main categories: types, declarations, expressions, patterns, and statements.
 The grammar is given in the following sections, assuming that the following terminals are the result
 of lexing:
 
@@ -18,7 +18,7 @@ Paths are formed when accessing the fields of a compound object or type.
 
 ```bnf
 PATH_ELEM ::= IDENTIFIER | IDENTIFIER , "[" , TYPE_ARGS , "]"
-PATH ::= PATH_ELEM | PATH_ELEM , "." , PATH_ELEM
+PATH ::= PATH_ELEM | PATH_ELEM , "." , PATH
 ```
 
 ## Types
@@ -35,10 +35,10 @@ TYPE ::=
     ENUM_DECL
 
 PRIM_TYPE ::=
-    "Bool" |
-    "Int8" | "Int16" | "Int32" | "Int64" |
-    "Word8" | "Word16" | "Word32" | "Word64" |
-    "Float32" | "Float64"
+    "bool" |
+    "i8" | "i16" | "i32" | "i64" |
+    "u8" | "u16" | "u32" | "u64" |
+    "f32" | "f64"
 
 TYPE_ARGS ::= TYPE | TYPE , "," , TYPE_ARGS
 TUPLE_TYPE ::= "(" , TYPE_ARGS , ")"
@@ -55,7 +55,7 @@ TYPE_PARAMS ::= TYPE_PARAM | TYPE_PARAM , "," , TYPE_PARAMS
 TYPE_PARAM_LIST ::= "[", TYPE_PARAMS, "]"
 
 FIELD_NAMES ::= IDENTIFIER | IDENTIFIER , "," , FIELD_NAMES
-STRUCT_FIELD ::= FIELD_NAMES , ":", TYPE
+STRUCT_FIELD ::= FIELD_NAMES , ":" , TYPE
 STRUCT_FIELDS ::= STRUCT_FIELD | STRUCT_FIELD , "," , STRUCT_FIELDS
 STRUCT_DECL ::= "struct" , IDENTIFIER , TYPE_PARAMS_LIST?, "{" , STRUCT_FIELDS, "}"
 
@@ -66,7 +66,7 @@ ENUM_DECL ::= "enum" , IDENTIFIER , TYPE_PARAMS_LIST?, "{" , ENUM_OPTIONS, "}"
 ALIAS_DECL ::= "type" , IDENTIFIER , TYPE_PARAM_LIST? , "=" , TYPE , ";"
 
 RET_TYPE ::= "->", TYPE
-FUN_DECL ::= "fun" , IDENTIFIER , TYPE_PARAM_LIST?, "(", PATTERN, ")" , RET_TYPE? , FUN_BODY
+FUN_DECL ::= "fun" , IDENTIFIER , TYPE_PARAM_LIST?, TUPLE_PATTERN , RET_TYPE? , FUN_BODY
 FUN_BODY ::= "=" , EXPR , ";" | BLOCK_EXPR
 
 CONST_DECL ::= "const" , PATTERN , "=" , EXPR , ";"
@@ -142,7 +142,7 @@ PREFIX_EXPR ::=
     "!" , POSTFIX_EXPR
 
 POSTFIX_EXPR ::=
-    TYPED_EXPR |
+    PRIMARY_EXPR |
     POSTFIX_EXPR , "--" |
     POSTFIX_EXPR , "++" |
     CALL_EXPR
@@ -170,7 +170,7 @@ TUPLE_EXPR ::= "(" , ")", | "(" , EXPR_LIST , ")"
 ARRAY_EXPR ::= "[" , EXPR_LIST , "]"
 
 IF_EXPR ::= "if" , CONDITION , BLOCK_EXPR , ELSE_BRANCH?
-ELSE_BRANCH = "else" , BLOCK_EXPR | "else" , IF_EXPR
+ELSE_BRANCH ::= "else" , BLOCK_EXPR | "else" , IF_EXPR
 
 MATCH_CASE ::= PATTERN , "=>" , EXPR
 MATCH_CASES ::= MATCH_CASE | MATCH_CASE , "," , MATCH_CASES
@@ -236,4 +236,21 @@ STATEMENT ::=
 
 WHILE_LOOP ::= "while" , CONDITION , BLOCK_EXPR
 FOR_LOOP ::= "for" , PATTERN , "in" , CALL_EXPR , BLOCK_EXPR
+```
+
+## Attributes
+
+Attributes can appear before declarations to modify their behavior.
+
+```bnf
+ATTR_LIST ::= "#" , "[" , ATTRS , "]"
+ATTRS ::= ATTR | ATTR , "," , ATTRS
+ATTR ::=
+    IDENTIFIER |
+    IDENTIFIER , "=" , BOOL_LITERAL |
+    IDENTIFIER , "=" , INT_LITERAL |
+    IDENTIFIER , "=" , CHAR_LITERAL |
+    IDENTIFIER , "=" , FLOAT_LITERAL |
+    IDENTIFIER , "=" , STRING_LITERAL |
+    IDENTIFIER , "(" , ATTRS , ")"
 ```

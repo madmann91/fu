@@ -154,6 +154,7 @@ Token advance_lexer(Lexer* lexer) {
         if (accept_char(lexer, ',')) return make_token(lexer, &begin, TOKEN_COMMA);
         if (accept_char(lexer, ':')) return make_token(lexer, &begin, TOKEN_COLON);
         if (accept_char(lexer, ';')) return make_token(lexer, &begin, TOKEN_SEMICOLON);
+        if (accept_char(lexer, '#')) return make_token(lexer, &begin, TOKEN_HASH);
 
         if (accept_char(lexer, '!')) {
             if (accept_char(lexer, '='))

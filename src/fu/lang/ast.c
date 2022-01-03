@@ -153,6 +153,9 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
 #undef f
             print_assign_expr(state, ast_node);
             break;
+        case AST_TYPE_PARAM:
+            format(state, "{s}", (FormatArg[]) { { .s = ast_node->type_param.name } });
+            break;
         case AST_TYPE_DECL:
             print_decl_head(state, "type", ast_node->type_decl.name, ast_node->type_decl.type_params);
             print_with_delim(state, " = ", ";", ast_node->type_decl.aliased_type);

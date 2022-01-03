@@ -64,8 +64,16 @@ static bool compile_file(const char* file_name, const Options* options, Log* log
     AstNode* program = parse_file(file_name, &mem_pool, log);
     if (!program)
         return false;
-    if (options->print_ast)
-        dump_ast(program);
+    if (options->print_ast) {
+        FormatState state = {
+            .tab = "    ",
+            .ignore_style = options->no_color || !is_color_supported(stdout)
+        };
+        print_ast(&state, program);
+        print_format_bufs(state.first_buf, stdout);
+        free_format_bufs(state.first_buf);
+        printf("\n");
+    }
     free_mem_pool(&mem_pool);
     return log->error_count == 0;
 }

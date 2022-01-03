@@ -194,7 +194,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             print_decl_head(state, "fun", ast_node->fun_decl.name, ast_node->fun_decl.type_params);
             print_as_tuple(state, ast_node->fun_decl.param);
             if (ast_node->fun_decl.ret_type)
-                print_with_delim(state, "->", "", ast_node->fun_decl.ret_type);
+                print_with_delim(state, " -> ", "", ast_node->fun_decl.ret_type);
             format(state, " ", NULL);
             if (ast_node->fun_decl.body->tag != AST_BLOCK_EXPR)
                 print_with_delim(state, "= ", ";", ast_node->fun_decl.body);
@@ -226,6 +226,11 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             break;
         case AST_ARRAY_TYPE:
             print_with_delim(state, "[", "]", ast_node->array_type.elem_type);
+            break;
+        case AST_FUN_TYPE:
+            print_keyword(state, "fun");
+            print_as_tuple(state, ast_node->fun_type.dom_type);
+            print_with_delim(state, " -> ", "", ast_node->fun_type.codom_type);
             break;
         case AST_ARRAY_PATTERN:
         case AST_ARRAY_EXPR:
@@ -276,6 +281,13 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
         case AST_CTOR_PATTERN:
             print_ast(state, ast_node->ctor_pattern.path);
             print_as_tuple(state, ast_node->ctor_pattern.arg);
+            break;
+        case AST_FUN_EXPR:
+            print_keyword(state, "fun");
+            print_as_tuple(state, ast_node->fun_expr.param);
+            if (ast_node->fun_expr.ret_type)
+                print_with_delim(state, " -> ", "", ast_node->fun_expr.ret_type);
+            print_with_delim(state, " => ", "", ast_node->fun_expr.body);
             break;
         case AST_FOR_LOOP:
             print_keyword(state, "for");

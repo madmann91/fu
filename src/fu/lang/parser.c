@@ -118,6 +118,10 @@ static inline AstNode* parse_tuple(Parser* parser, AstNodeTag tag, AstNode* (*pa
     return make_ast_node(parser, &begin, &(AstNode) { .tag = tag, .tuple_expr.args = args });
 }
 
+static inline AstNode* parse_tuple_or_error(Parser* parser, const char* msg, AstNode* (*parse_tuple)(Parser*)) {
+    return parser->ahead->tag == TOKEN_L_PAREN ? parse_tuple(parser) : parse_error(parser, msg);
+}
+
 static inline AstNode* parse_tuple_type(Parser* parser) {
     return parse_tuple(parser, AST_TUPLE_TYPE, parse_type);
 }
@@ -196,11 +200,6 @@ static inline AstNode* parse_block_expr(Parser* parser) {
     });
 }
 
-static inline AstNode* parse_param(Parser* parser) {
-    return parser->ahead->tag == TOKEN_L_PAREN
-        ? parse_tuple_pattern(parser) : parse_error(parser, "function parameter");
-}
-
 static AstNode* parse_type_param(Parser* parser) {
     FilePos begin = parser->ahead->file_loc.begin;
     const char* name = parse_ident(parser);
@@ -224,7 +223,7 @@ static inline AstNode* parse_fun_decl(Parser* parser) {
     FilePos begin = parser->ahead->file_loc.begin;
     eat_token(parser, TOKEN_FUN);
     const char* name = parse_ident(parser);
-    AstNode* param = parse_param(parser);
+    AstNode* param = parse_tuple_or_error(parser, "function parameter", parse_tuple_pattern);
     AstNode* type_params = parse_type_params(parser);
     AstNode* ret_type = NULL;
     if (accept_token(parser, TOKEN_THIN_ARROW))
@@ -355,6 +354,18 @@ static inline AstNode* parse_prim_type(Parser* parser, AstNodeTag tag) {
     return make_ast_node(parser, &begin, &(AstNode) { .tag = tag });
 }
 
+static inline AstNode* parse_fun_type(Parser* parser) {
+    FilePos begin = parser->ahead->file_loc.begin;
+    eat_token(parser, TOKEN_FUN);
+    AstNode* dom_type = parse_tuple_or_error(parser, "function type domain", parse_tuple_type);
+    expect_token(parser, TOKEN_THIN_ARROW);
+    AstNode* codom_type = parse_type(parser);
+    return make_ast_node(parser, &begin, &(AstNode) {
+        .tag = AST_FUN_TYPE,
+        .fun_type = { .dom_type = dom_type, .codom_type = codom_type }
+    });
+}
+
 AstNode* parse_type(Parser* parser) {
     switch (parser->ahead->tag) {
 #define f(name, ...) case TOKEN_##name: return parse_prim_type(parser, AST_TYPE_##name);
@@ -363,6 +374,7 @@ AstNode* parse_type(Parser* parser) {
         case TOKEN_IDENT:     return parse_path(parser);
         case TOKEN_L_PAREN:   return parse_tuple_type(parser);
         case TOKEN_L_BRACKET: return parse_array_type(parser);
+        case TOKEN_FUN:       return parse_fun_type(parser);
         case TOKEN_STRUCT:    return parse_struct_decl(parser);
         case TOKEN_ENUM:      return parse_enum_decl(parser);
         default:
@@ -649,6 +661,21 @@ static inline AstNode* parse_match_expr(Parser* parser) {
     });
 }
 
+static inline AstNode* parse_fun_expr(Parser* parser) {
+    FilePos begin = parser->ahead->file_loc.begin;
+    eat_token(parser, TOKEN_FUN);
+    AstNode* param = parse_tuple_or_error(parser, "anonymous function parameter", parse_tuple_pattern);
+    AstNode* ret_type = NULL;
+    if (accept_token(parser, TOKEN_THIN_ARROW))
+        ret_type = parse_type(parser);
+    expect_token(parser, TOKEN_FAT_ARROW);
+    AstNode* body = parse_expr(parser);
+    return make_ast_node(parser, &begin, &(AstNode) {
+        .tag = AST_FUN_EXPR,
+        .fun_expr = { .param = param, .ret_type = ret_type, .body = body }
+    });
+}
+
 static inline AstNode* parse_untyped_expr(Parser* parser, bool allow_structs) {
     switch (parser->ahead->tag) {
         case TOKEN_TRUE:          return parse_bool_literal(parser, true);
@@ -662,6 +689,7 @@ static inline AstNode* parse_untyped_expr(Parser* parser, bool allow_structs) {
         case TOKEN_L_PAREN:       return parse_tuple_expr(parser);
         case TOKEN_L_BRACE:       return parse_block_expr(parser);
         case TOKEN_L_BRACKET:     return parse_array_expr(parser);
+        case TOKEN_FUN:           return parse_fun_expr(parser);
         case TOKEN_IDENT: {
             AstNode* path = parse_path(parser);
             if (allow_structs && parser->ahead->tag == TOKEN_L_BRACE)
@@ -770,7 +798,13 @@ AstNode* parse_stmt(Parser* parser) {
         case TOKEN_ENUM:   return parse_enum_decl(parser);
         case TOKEN_VAR:    return parse_var_decl(parser);
         case TOKEN_CONST:  return parse_const_decl(parser);
-        case TOKEN_FUN:    return parse_fun_decl(parser);
+        case TOKEN_FUN:
+            // This test here prevents an ambiguity with anonymous function expressions.
+            // Those also start with `fun`, just like function declarations,
+            // but do not have an identifier after that.
+            if (parser->ahead[1].tag == TOKEN_IDENT)
+                return parse_fun_decl(parser);
+            // fallthrough
         default:
             return parse_expr(parser);
     }

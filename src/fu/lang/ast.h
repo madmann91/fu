@@ -84,6 +84,7 @@ typedef enum {
     // Types
     AST_TUPLE_TYPE,
     AST_ARRAY_TYPE,
+    AST_FUN_TYPE,
 #define f(name, ...) AST_TYPE_##name,
     AST_PRIM_TYPE_LIST(f)
 #undef f
@@ -176,6 +177,10 @@ struct AstNode {
         struct {
             AstNode* elem_type;
         } array_type;
+        struct {
+            AstNode* dom_type;
+            AstNode* codom_type;
+        } fun_type;
         struct {
             AstNode* elems;
         } array_expr, array_pattern;

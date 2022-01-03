@@ -44,6 +44,7 @@ PRIM_TYPE ::=
 TYPE_ARGS ::= TYPE | TYPE , "," , TYPE_ARGS
 TUPLE_TYPE ::= "(" , TYPE_ARGS , ")"
 ARRAY_TYPE ::= "[" , TYPE , "]"
+FUN_TYPE ::= "fun" , TUPLE_TYPE , "->" , TYPE
 ```
 
 ## Declarations

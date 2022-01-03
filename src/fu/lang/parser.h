@@ -5,7 +5,7 @@
 #include "fu/lang/ast.h"
 #include "fu/core/mem_pool.h"
 
-#define LOOK_AHEAD 3
+#define LOOK_AHEAD 2
 
 typedef struct {
     Lexer* lexer;

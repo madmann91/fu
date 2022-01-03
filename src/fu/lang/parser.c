@@ -32,18 +32,12 @@ Parser make_parser(Lexer* lexer, MemPool* mem_pool) {
     return parser;
 }
 
-static inline FileLoc make_file_loc(Parser* parser, FilePos* begin) {
-    return (FileLoc) {
-        .file_name = parser->lexer->file_name,
-        .begin = *begin,
-        .end = parser->prev_end
-    };
-}
-
 static inline AstNode* make_ast_node(Parser* parser, FilePos* begin, const AstNode* node) {
     AstNode* copy = alloc_from_mem_pool(parser->mem_pool, sizeof(AstNode));
     memcpy(copy, node, sizeof(AstNode));
-    copy->file_loc = make_file_loc(parser, begin);
+    copy->file_loc.file_name = parser->lexer->file_name;
+    copy->file_loc.begin = *begin;
+    copy->file_loc.end = parser->prev_end;
     return copy;
 }
 

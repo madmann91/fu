@@ -625,28 +625,23 @@ static inline AstNode* parse_match_expr(Parser* parser) {
 
 static inline AstNode* parse_untyped_expr(Parser* parser, bool allow_structs) {
     switch (parser->ahead->tag) {
-        case TOKEN_TRUE:  return parse_bool_literal(parser, true);
-        case TOKEN_FALSE: return parse_bool_literal(parser, false);
+        case TOKEN_TRUE:          return parse_bool_literal(parser, true);
+        case TOKEN_FALSE:         return parse_bool_literal(parser, false);
         case TOKEN_STR_LITERAL:   return parse_str_literal(parser);
         case TOKEN_CHAR_LITERAL:  return parse_char_literal(parser);
         case TOKEN_INT_LITERAL:   return parse_int_literal(parser);
         case TOKEN_FLOAT_LITERAL: return parse_float_literal(parser);
+        case TOKEN_IF:            return parse_if_expr(parser);
+        case TOKEN_MATCH:         return parse_match_expr(parser);
+        case TOKEN_L_PAREN:       return parse_tuple_expr(parser);
+        case TOKEN_L_BRACE:       return parse_block_expr(parser);
+        case TOKEN_L_BRACKET:     return parse_array_expr(parser);
         case TOKEN_IDENT: {
             AstNode* path = parse_path(parser);
             if (allow_structs && parser->ahead->tag == TOKEN_L_BRACE)
                 return parse_struct(parser, AST_STRUCT_EXPR, path, parse_field_expr);
             return path;
         }
-        case TOKEN_IF:
-            return parse_if_expr(parser);
-        case TOKEN_MATCH:
-            return parse_match_expr(parser);
-        case TOKEN_L_PAREN:
-            return parse_tuple_expr(parser);
-        case TOKEN_L_BRACE:
-            return parse_block_expr(parser);
-        case TOKEN_L_BRACKET:
-            return parse_array_expr(parser);
         case TOKEN_BREAK:
         case TOKEN_CONTINUE:
         case TOKEN_RETURN: {
@@ -677,12 +672,14 @@ static inline AstNode* parse_primary_expr(Parser* parser, bool allow_structs) {
 
 static AstNode* parse_untyped_pattern(Parser* parser) {
     switch (parser->ahead->tag) {
-        case TOKEN_TRUE:  return parse_bool_literal(parser, true);
-        case TOKEN_FALSE: return parse_bool_literal(parser, false);
+        case TOKEN_TRUE:          return parse_bool_literal(parser, true);
+        case TOKEN_FALSE:         return parse_bool_literal(parser, false);
         case TOKEN_STR_LITERAL:   return parse_str_literal(parser);
         case TOKEN_CHAR_LITERAL:  return parse_char_literal(parser);
         case TOKEN_INT_LITERAL:   return parse_int_literal(parser);
         case TOKEN_FLOAT_LITERAL: return parse_float_literal(parser);
+        case TOKEN_L_PAREN:       return parse_tuple_pattern(parser);
+        case TOKEN_L_BRACKET:     return parse_array_pattern(parser);
         case TOKEN_IDENT: {
             AstNode* path = parse_path(parser);
             if (parser->ahead->tag == TOKEN_L_BRACE)
@@ -697,10 +694,6 @@ static AstNode* parse_untyped_pattern(Parser* parser) {
                 return path->path.elems;
             return path;
         }
-        case TOKEN_L_PAREN:
-            return parse_tuple_pattern(parser);
-        case TOKEN_L_BRACKET:
-            return parse_array_pattern(parser);
         default:
             return parse_error(parser, "pattern");
     }

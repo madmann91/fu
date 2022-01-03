@@ -10,7 +10,6 @@
 #include <string.h>
 
 typedef struct {
-    bool help;
     bool print_ast;
     bool no_color;
 } Options;

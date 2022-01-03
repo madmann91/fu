@@ -249,27 +249,27 @@ static inline AstNode* parse_fun_decl(Parser* parser) {
     });
 }
 
-static AstNode* parse_name(Parser* parser) {
+static AstNode* parse_field_name(Parser* parser) {
     FilePos begin = parser->ahead->file_loc.begin;
-    const char* ident = parse_ident(parser);
-    return make_ast_node(parser, &begin, &(AstNode) { .tag = AST_NAME, .name.ident = ident });
+    const char* name = parse_ident(parser);
+    return make_ast_node(parser, &begin, &(AstNode) { .tag = AST_FIELD_NAME, .field_name.name = name });
 }
 
-static AstNode* parse_names(Parser* parser, TokenTag stop) {
-    AstNode* names = parse_many(parser, stop, TOKEN_COMMA, parse_name);
-    if (!names)
+static AstNode* parse_field_names(Parser* parser, TokenTag stop) {
+    AstNode* field_names = parse_many(parser, stop, TOKEN_COMMA, parse_field_name);
+    if (!field_names)
         expect_fail(parser, "name", token_tag_to_str(parser->ahead->tag), &parser->ahead->file_loc);
-    return names;
+    return field_names;
 }
 
 static AstNode* parse_field_decl(Parser* parser) {
     FilePos begin = parser->ahead->file_loc.begin;
-    AstNode* names = parse_names(parser, TOKEN_COLON);
+    AstNode* field_names = parse_field_names(parser, TOKEN_COLON);
     expect_token(parser, TOKEN_COLON);
     AstNode* type = parse_type(parser);
     return make_ast_node(parser, &begin, &(AstNode) {
         .tag = AST_FIELD_DECL,
-        .field_decl = { .names = names, .type = type }
+        .field_decl = { .field_names = field_names, .type = type }
     });
 }
 
@@ -382,12 +382,12 @@ static AstNode* parse_struct(Parser* parser, AstNodeTag tag, AstNode* path, AstN
 
 static AstNode* parse_field(Parser* parser, AstNodeTag tag, AstNode* (*parse_val)(Parser*)) {
     FilePos begin = parser->ahead->file_loc.begin;
-    AstNode* names = parse_names(parser, TOKEN_EQUAL);
+    AstNode* field_names = parse_field_names(parser, TOKEN_EQUAL);
     expect_token(parser, TOKEN_EQUAL);
     AstNode* val = parse_val(parser);
     return make_ast_node(parser, &begin, &(AstNode) {
         .tag = tag,
-        .field_expr = { .names = names, .val = val }
+        .field_expr = { .field_names = field_names, .val = val }
     });
 }
 

@@ -151,8 +151,8 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
         case AST_ERROR:
             print_with_style(state, "<error>", error_style);
             break;
-        case AST_NAME:
-            format(state, "{s}", (FormatArg[]) { { .s = ast_node->name.ident } });
+        case AST_FIELD_NAME:
+            format(state, "{s}", (FormatArg[]) { { .s = ast_node->field_name.name } });
             break;
 #define f(name, ...) case AST_##name##_EXPR:
         AST_BINARY_EXPR_LIST(f)
@@ -172,7 +172,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             print_with_delim(state, " = ", ";", ast_node->type_decl.aliased_type);
             break;
         case AST_FIELD_DECL:
-            print_many_with_delim(state, "", ", ", " : ", ast_node->field_decl.names);
+            print_many_with_delim(state, "", ", ", " : ", ast_node->field_decl.field_names);
             print_ast(state, ast_node->field_decl.type);
             break;
         case AST_STRUCT_DECL:
@@ -211,7 +211,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             break;
         case AST_FIELD_PATTERN:
         case AST_FIELD_EXPR:
-            print_many_with_delim(state, "", ", ", " = ", ast_node->field_pattern.names);
+            print_many_with_delim(state, "", ", ", " = ", ast_node->field_pattern.field_names);
             print_ast(state, ast_node->field_pattern.val);
             break;
         case AST_STRUCT_PATTERN:

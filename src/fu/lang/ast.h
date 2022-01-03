@@ -75,7 +75,7 @@
 typedef enum {
     AST_ERROR,
     AST_PROGRAM,
-    AST_NAME,
+    AST_FIELD_NAME,
     AST_TYPE_PARAM,
     AST_ATTR,
     // Path
@@ -168,8 +168,8 @@ struct AstNode {
             AstNode* val;
         } attr;
         struct {
-            const char* ident;
-        } name;
+            const char* name;
+        } field_name;
         struct {
             AstNode* args;
         } tuple_type, tuple_expr, tuple_pattern;
@@ -203,7 +203,7 @@ struct AstNode {
             AstNode* init;
         } const_decl, var_decl;
         struct {
-            AstNode* names;
+            AstNode* field_names;
             AstNode* type;
         } field_decl;
         struct {
@@ -259,7 +259,7 @@ struct AstNode {
             AstNode* cases;
         } match_expr;
         struct {
-            AstNode* names;
+            AstNode* field_names;
             AstNode* val;
             size_t index;
         } field_expr, field_pattern;

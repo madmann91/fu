@@ -61,7 +61,7 @@ typedef struct {
 
 static const FormatStyle reset_style    = { STYLE_NORMAL, COLOR_NORMAL };
 static const FormatStyle error_style    = { STYLE_BOLD,   COLOR_RED };
-static const FormatStyle number_style   = { STYLE_NORMAL, COLOR_MAGENTA };
+static const FormatStyle literal_style  = { STYLE_NORMAL, COLOR_MAGENTA };
 static const FormatStyle keyword_style  = { STYLE_BOLD,   COLOR_BLUE };
 static const FormatStyle ellipsis_style = { STYLE_BOLD,   COLOR_WHITE };
 

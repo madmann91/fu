@@ -94,16 +94,32 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             print_keyword(state, ast_node->bool_literal.val ? "true" : "false");
             break;
         case AST_CHAR_LITERAL:
-            format(state, "{u8}", (FormatArg[]) { { .u8 = ast_node->char_literal.val } });
+            format(state, "{$}{u8}{$}", (FormatArg[]) {
+                { .style = literal_style },
+                { .u8 = ast_node->char_literal.val },
+                { .style = reset_style }
+            });
             break;
         case AST_STR_LITERAL:
-            format(state, "\"{s}\"", (FormatArg[]) { { .s = ast_node->str_literal.val } });
+            format(state, "{$}\"{s}\"{$}", (FormatArg[]) {
+                { .style = literal_style },
+                { .s = ast_node->str_literal.val },
+                { .style = reset_style }
+            });
             break;
         case AST_INT_LITERAL:
-            format(state, "{um}", (FormatArg[]) { { .um = ast_node->int_literal.val } });
+            format(state, "{$}{um}{$}", (FormatArg[]) {
+                { .style = literal_style },
+                { .um = ast_node->int_literal.val },
+                { .style = reset_style }
+            });
             break;
         case AST_FLOAT_LITERAL:
-            format(state, "{f64}", (FormatArg[]) { { .f64 = ast_node->float_literal.val } });
+            format(state, "{f64}", (FormatArg[]) {
+                { .style = literal_style },
+                { .f64 = ast_node->float_literal.val },
+                { .style = reset_style }
+            });
             break;
 #define f(name, ...) case AST_TYPE_##name:
         AST_PRIM_TYPE_LIST(f)

@@ -42,7 +42,7 @@ static bool parse_options(int argc, char** argv, Options* options, Log* log) {
             return false;
         }
     }
-    return options;
+    return true;
 }
 
 static AstNode* parse_file(const char* file_name, MemPool* mem_pool, Log* log) {

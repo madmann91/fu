@@ -75,10 +75,12 @@ static bool compile_file(const char* file_name, const Options* options, Log* log
         free_format_bufs(state.first_buf);
         printf("\n");
     }
-    Env env = new_env(log);
-    bind_program(&env, program);
-    free_env(&env);
-    free_mem_pool(&mem_pool);
+    if (log->error_count == 0) {
+        Env env = new_env(log);
+        bind_program(&env, program);
+        free_env(&env);
+        free_mem_pool(&mem_pool);
+    }
     return log->error_count == 0;
 }
 

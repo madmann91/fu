@@ -138,6 +138,8 @@ void remove_from_hash_table(HashTable* hash_table, void* elem, size_t elem_size)
 }
 
 void clear_hash_table(HashTable* hash_table) {
+    if (hash_table->size == 0)
+        return;
     hash_table->size = 0;
     memset(hash_table->hashes, 0, sizeof(uint32_t) * hash_table->capacity);
 }

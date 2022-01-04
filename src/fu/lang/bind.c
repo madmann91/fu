@@ -24,17 +24,25 @@ static bool compare_symbols(const void* left, const void* right) {
     return !strcmp(((Symbol*)left)->name, ((Symbol*)right)->name);
 }
 
+static Scope* new_scope(Scope* prev) {
+    Scope* scope = malloc_or_die(sizeof(Scope));
+    scope->prev = prev;
+    scope->next = NULL;
+    scope->symbols = new_hash_table(DEFAULT_SCOPE_CAPACITY, sizeof(Symbol));
+    return scope;
+}
+
 Env new_env(Log* log) {
-    return (Env) { .log = log };
+    return (Env) { .log = log, .first_scope = new_scope(NULL) };
 }
 
 void free_env(Env* env) {
-    Scope* first = env->first_scope;
-    while (first) {
-        Scope* next = first->next;
-        free_hash_table(&first->symbols);
-        free(first);
-        first = next;
+    Scope* scope = env->first_scope;
+    while (scope) {
+        Scope* next = scope->next;
+        free_hash_table(&scope->symbols);
+        free(scope);
+        scope = next;
     }
 }
 
@@ -61,21 +69,14 @@ static AstNode* find_symbol(Env* env, const char* name) {
     return NULL;
 }
 
-static Scope* new_scope(Scope* prev) {
-    Scope* scope = malloc_or_die(sizeof(Scope));
-    scope->prev = prev;
-    scope->next = NULL;
-    scope->symbols = new_hash_table(DEFAULT_SCOPE_CAPACITY, sizeof(Symbol));
-    return scope;
-}
-
 static void push_scope(Env* env) {
-    if (env->cur_scope && env->cur_scope->next) {
+    if (!env->cur_scope)
+        env->cur_scope = env->first_scope;
+    else if (env->cur_scope->next)
         env->cur_scope = env->cur_scope->next;
-        clear_hash_table(&env->cur_scope->symbols);
-    }
     else
         env->cur_scope = new_scope(env->cur_scope);
+    clear_hash_table(&env->cur_scope->symbols);
 }
 
 static void pop_scope(Env* env) {

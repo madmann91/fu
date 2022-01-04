@@ -1,8 +1,10 @@
 #include "fu/core/utils.h"
 #include "fu/core/alloc.h"
 #include "fu/core/mem_pool.h"
+#include "fu/lang/ast.h"
 #include "fu/lang/lexer.h"
 #include "fu/lang/parser.h"
+#include "fu/lang/bind.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -73,6 +75,9 @@ static bool compile_file(const char* file_name, const Options* options, Log* log
         free_format_bufs(state.first_buf);
         printf("\n");
     }
+    Env env = new_env(log);
+    bind_program(&env, program);
+    free_env(&env);
     free_mem_pool(&mem_pool);
     return log->error_count == 0;
 }

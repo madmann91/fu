@@ -9,6 +9,7 @@ add_library(libfu
     core/utils.c
     lang/lexer.c
     lang/parser.c
+    lang/bind.c
     lang/ast.c)
 
 add_executable(fu driver/main.c)

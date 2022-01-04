@@ -5,7 +5,7 @@
 #include "fu/core/log.h"
 #include "fu/core/hash_table.h"
 
-typedef struct {
+typedef struct Lexer {
     const char* file_name;
     const char* file_data;
     size_t file_size;

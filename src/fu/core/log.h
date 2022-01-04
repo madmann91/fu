@@ -15,7 +15,7 @@ typedef struct {
     FilePos begin, end;
 } FileLoc;
 
-typedef struct {
+typedef struct Log {
     FormatState state;
     size_t error_count;
     size_t warning_count;

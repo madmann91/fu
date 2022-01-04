@@ -1,12 +1,11 @@
 #ifndef FU_CORE_MEM_POOL_H
 #define FU_CORE_MEM_POOL_H
 
-#include <stdalign.h>
 #include <stddef.h>
 
 struct MemBlock;
 
-typedef struct {
+typedef struct MemPool {
     struct MemBlock* first;
     struct MemBlock* cur;
 } MemPool;

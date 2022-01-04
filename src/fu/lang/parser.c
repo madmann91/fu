@@ -1,4 +1,7 @@
 #include "fu/lang/parser.h"
+#include "fu/lang/ast.h"
+#include "fu/lang/lexer.h"
+#include "fu/core/mem_pool.h"
 #include "fu/core/alloc.h"
 
 #include <string.h>

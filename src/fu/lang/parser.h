@@ -1,11 +1,14 @@
 #ifndef FU_LANG_PARSER_H
 #define FU_LANG_PARSER_H
 
-#include "fu/lang/lexer.h"
-#include "fu/lang/ast.h"
-#include "fu/core/mem_pool.h"
+#include "fu/lang/token.h"
+#include "fu/core/log.h"
 
 #define LOOK_AHEAD 2
+
+typedef struct MemPool MemPool;
+typedef struct Lexer Lexer;
+typedef struct AstNode AstNode;
 
 typedef struct {
     Lexer* lexer;

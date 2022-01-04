@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdalign.h>
 
 typedef struct MemBlock {
     size_t size;

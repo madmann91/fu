@@ -50,6 +50,7 @@ static inline const char* copy_file_data(Parser* parser, size_t begin, size_t en
 }
 
 static inline void skip_token(Parser* parser) {
+    parser->prev_end = parser->ahead->file_loc.end;
     for (size_t i = 0; i < LOOK_AHEAD - 1; ++i)
         parser->ahead[i] = parser->ahead[i + 1];
     parser->ahead[LOOK_AHEAD - 1] = advance_lexer(parser->lexer);

@@ -27,9 +27,12 @@ static void usage() {
 }
 
 static bool parse_options(int argc, char** argv, Options* options, Log* log) {
+    int file_count = 0;
     for (int i = 1; i < argc; ++i) {
-        if (argv[i][0] != '-')
+        if (argv[i][0] != '-') {
+            file_count++;
             continue;
+        }
         if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
             usage();
             return false;
@@ -41,6 +44,10 @@ static bool parse_options(int argc, char** argv, Options* options, Log* log) {
             log_error(log, NULL, "invalid option '{s}'", (FormatArg[]) { { .s = argv[i] } });
             return false;
         }
+    }
+    if (file_count == 0) {
+        log_error(log, NULL, "no input file", NULL);
+        return false;
     }
     return true;
 }

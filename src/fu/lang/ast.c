@@ -34,7 +34,9 @@ static inline void print_with_delim(
 }
 
 static inline void print_many_inside_block(FormatState* state, const char* sep, const AstNode* elems) {
-    if (!elems->next)
+    if (!elems)
+        format(state, "{{}", NULL);
+    else if (!elems->next)
         print_with_delim(state, "{{ ", " }", elems);
     else
         print_many_with_delim(state, "{{{>}\n", sep, "{<}\n}", elems);
@@ -117,7 +119,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             });
             break;
         case AST_FLOAT_LITERAL:
-            format(state, "{f64}", (FormatArg[]) {
+            format(state, "{$}{f64}{$}", (FormatArg[]) {
                 { .style = literal_style },
                 { .f64 = ast_node->float_literal.val },
                 { .style = reset_style }
@@ -159,6 +161,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
 #undef f
             print_binary_expr(state, ast_node);
             break;
+        case AST_ASSIGN_EXPR:
 #define f(name, ...) case AST_##name##_ASSIGN_EXPR:
         AST_ASSIGN_EXPR_LIST(f)
 #undef f
@@ -172,7 +175,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             print_with_delim(state, " = ", ";", ast_node->type_decl.aliased_type);
             break;
         case AST_FIELD_DECL:
-            print_many_with_delim(state, "", ", ", " : ", ast_node->field_decl.field_names);
+            print_many_with_delim(state, "", ", ", ": ", ast_node->field_decl.field_names);
             print_ast(state, ast_node->field_decl.type);
             break;
         case AST_STRUCT_DECL:
@@ -215,10 +218,12 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             print_ast(state, ast_node->field_pattern.val);
             break;
         case AST_STRUCT_PATTERN:
-        case AST_STRUCT_EXPR:
-            print_with_delim(state, "", " ", ast_node->struct_pattern.path);
+        case AST_STRUCT_EXPR: {
+            bool is_path = ast_node->struct_pattern.left->tag == AST_PATH;
+            print_with_delim(state, "", is_path ? " " : ".", ast_node->struct_pattern.left);
             print_many_inside_block(state, ",\n", ast_node->struct_pattern.fields);
             break;
+        }
         case AST_TUPLE_TYPE:
         case AST_TUPLE_PATTERN:
         case AST_TUPLE_EXPR:
@@ -239,7 +244,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
         case AST_TYPED_PATTERN:
         case AST_TYPED_EXPR:
             print_ast(state, ast_node->typed_pattern.left);
-            format(state, " : ", NULL);
+            format(state, ": ", NULL);
             print_ast(state, ast_node->typed_pattern.type);
             break;
         case AST_BLOCK_EXPR:
@@ -288,6 +293,10 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             if (ast_node->fun_expr.ret_type)
                 print_with_delim(state, " -> ", "", ast_node->fun_expr.ret_type);
             print_with_delim(state, " => ", "", ast_node->fun_expr.body);
+            break;
+        case AST_MEMBER_EXPR:
+            print_ast(state, ast_node->member_expr.left);
+            print_with_delim(state, ".", "", ast_node->member_expr.path_elem);
             break;
         case AST_FOR_LOOP:
             print_keyword(state, "for");
@@ -379,6 +388,7 @@ const char* ast_node_tag_to_binary_expr_op(AstNodeTag tag) {
 
 const char* ast_node_tag_to_assign_expr_op(AstNodeTag tag) {
     switch (tag) {
+        case AST_ASSIGN_EXPR: return "=";
 #define f(name, prec, tok, str) case AST_##name##_ASSIGN_EXPR: return str"=";
         AST_ASSIGN_EXPR_LIST(f)
 #undef f

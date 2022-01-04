@@ -1,0 +1,33 @@
+enum E[T] { A(T) }
+struct S { x : i32 }
+fun test() {
+    const y = 1;
+    var x = 0;
+    x = x + y;
+    x = x - y;
+    x = x * y;
+    x = x / y;
+    x = x & y;
+    x = x | y;
+    x = x ^ y;
+    x = x >> y;
+    x = x << y;
+    x += y;
+    x -= y;
+    x *= y;
+    x /= y;
+    x &= y;
+    x |= y;
+    x ^= y;
+    x >>= y;
+    x <<= y;
+    x = if x > 0 { x } else { x };
+    x = if x >= 0 { x } else { x };
+    x = if x < 0 { x } else { x };
+    x = if x <= 0 { x } else { x };
+    x = match x { 1 => x, _ => x };
+    x = S { x = x }.x;
+    x = S { x = x }.{ x = x }.x;
+    x = match E[i32].A(1) { E[i32].A(x) => x, _ => x };
+    x
+}

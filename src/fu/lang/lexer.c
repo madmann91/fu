@@ -319,7 +319,7 @@ Token advance_lexer(Lexer* lexer) {
                     while (isxdigit(get_cur_char(lexer)))
                         skip_char(lexer);
                     return make_int_literal(lexer, &begin, strtoumax(ptr, NULL, 16));
-                } else {
+                } else if (accept_char(lexer, 'o')) {
                     // Octal literal
                     ptr = get_cur_ptr(lexer);
                     while (get_cur_char(lexer) >= '0' && get_cur_char(lexer) <= '7')

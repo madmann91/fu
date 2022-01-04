@@ -1,0 +1,6 @@
+enum E0 { A }
+enum E1 { A, B(i32) }
+enum E2[T] { A, B(T) }
+enum E3[T, U] { A, B(T, U) }
+enum E4[T] { A, B(T), C }
+enum E5[T, U] { A, B(T), C(T, U) }

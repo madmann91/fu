@@ -123,6 +123,7 @@ typedef enum {
     AST_MATCH_CASE,
     AST_MATCH_EXPR,
     AST_ARRAY_EXPR,
+    AST_MEMBER_EXPR,
     AST_BREAK_EXPR,
     AST_CONTINUE_EXPR,
     AST_RETURN_EXPR,
@@ -184,6 +185,10 @@ struct AstNode {
         struct {
             AstNode* elems;
         } array_expr, array_pattern;
+        struct {
+            AstNode* left;
+            AstNode* path_elem;
+        } member_expr;
         struct {
             const char* name;
             AstNode* kind;
@@ -269,7 +274,7 @@ struct AstNode {
             size_t index;
         } field_expr, field_pattern;
         struct {
-            AstNode* path;
+            AstNode* left;
             AstNode* fields;
         } struct_expr, struct_pattern;
         struct {

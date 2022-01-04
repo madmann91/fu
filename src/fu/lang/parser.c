@@ -382,13 +382,13 @@ AstNode* parse_type(Parser* parser) {
     }
 }
 
-static AstNode* parse_struct(Parser* parser, AstNodeTag tag, AstNode* path, AstNode* (*parse_field)(Parser*)) {
+static AstNode* parse_struct(Parser* parser, AstNodeTag tag, AstNode* left, AstNode* (*parse_field)(Parser*)) {
     eat_token(parser, TOKEN_L_BRACE);
     AstNode* fields = parse_many(parser, TOKEN_R_BRACE, TOKEN_COMMA, parse_field);
     expect_token(parser, TOKEN_R_BRACE);
-    return make_ast_node(parser, &path->file_loc.begin, &(AstNode) {
+    return make_ast_node(parser, &left->file_loc.begin, &(AstNode) {
         .tag = tag,
-        .struct_expr = { .path = path, .fields = fields }
+        .struct_expr = { .left = left, .fields = fields }
     });
 }
 
@@ -437,6 +437,14 @@ static inline AstNode* parse_call_expr(Parser* parser, AstNode* callee) {
     });
 }
 
+static inline AstNode* parse_member_expr(Parser* parser, AstNode* left) {
+    AstNode* path_elem = parse_path_elem(parser);
+    return make_ast_node(parser, &left->file_loc.begin, &(AstNode) {
+        .tag = AST_MEMBER_EXPR,
+        .member_expr = { .left = left, .path_elem = path_elem }
+    });
+}
+
 static inline AstNode* parse_postfix_expr(Parser* parser, AstNode* (*parse_primary_expr)(Parser*)) {
     AstNode* operand = parse_primary_expr(parser);
     while (true) {
@@ -444,6 +452,13 @@ static inline AstNode* parse_postfix_expr(Parser* parser, AstNode* (*parse_prima
         switch (parser->ahead->tag) {
             case TOKEN_DOUBLE_PLUS:  tag = AST_POST_INC_EXPR; break;
             case TOKEN_DOUBLE_MINUS: tag = AST_POST_DEC_EXPR; break;
+            case TOKEN_DOT:
+                eat_token(parser, TOKEN_DOT);
+                if (parser->ahead->tag == TOKEN_L_BRACE)
+                    operand = parse_struct(parser, AST_STRUCT_EXPR, operand, parse_field_expr);
+                else
+                    operand = parse_member_expr(parser, operand);
+                continue;
             case TOKEN_L_PAREN:
                 operand = parse_call_expr(parser, operand);
                 continue;
@@ -731,7 +746,6 @@ static AstNode* parse_untyped_pattern(Parser* parser) {
         case TOKEN_STR_LITERAL:   return parse_str_literal(parser);
         case TOKEN_CHAR_LITERAL:  return parse_char_literal(parser);
         case TOKEN_INT_LITERAL:   return parse_int_literal(parser);
-        case TOKEN_FLOAT_LITERAL: return parse_float_literal(parser);
         case TOKEN_L_PAREN:       return parse_tuple_pattern(parser);
         case TOKEN_L_BRACKET:     return parse_array_pattern(parser);
         case TOKEN_IDENT: {
@@ -740,14 +754,20 @@ static AstNode* parse_untyped_pattern(Parser* parser) {
                 return parse_struct(parser, AST_STRUCT_PATTERN, path, parse_field_pattern);
             if (parser->ahead->tag == TOKEN_L_PAREN)
                 return parse_ctor_pattern(parser, path);
-            if (path->path.elems->next)
-                expect_fail(parser, "pattern", "path", &path->file_loc);
-            else if (path->path.elems->path_elem.type_args)
-                expect_fail(parser, "pattern", "type application", &path->file_loc);
-            else
-                return path->path.elems;
             return path;
         }
+        case TOKEN_MINUS:
+        case TOKEN_PLUS:
+            // Accept `-` and `+` in front of integer literals
+            if (parser->ahead[1].tag == TOKEN_INT_LITERAL) {
+                bool is_minus = parser->ahead->tag == TOKEN_MINUS;
+                skip_token(parser);
+                AstNode* literal = parse_int_literal(parser);
+                if (is_minus)
+                    literal->int_literal.val = -literal->int_literal.val;
+                return literal;
+            }
+            // fallthrough
         default:
             return parse_error(parser, "pattern");
     }

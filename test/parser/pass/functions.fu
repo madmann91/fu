@@ -1,0 +1,4 @@
+fun f() = 1;
+fun g(i: i32) = i;
+fun h(i: i32, j: i64) -> i64 { j }
+const k = fun (i: i32, (j: i64, k: i16)) -> i16 => k;

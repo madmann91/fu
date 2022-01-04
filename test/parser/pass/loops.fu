@@ -1,0 +1,12 @@
+fun test() {
+    while false {
+        continue()
+    }
+    while true {
+        break()
+    }
+    for i in range(0, 10) {
+        const x = break;
+        while true { x() }
+    }
+}

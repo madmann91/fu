@@ -83,9 +83,13 @@ static void pop_scope(Env* env) {
     env->cur_scope = env->cur_scope->prev;
 }
 
+// TODO
 void bind_stmt(Env*, AstNode*);
+
 void bind_decl(Env* env, AstNode* decl) {
 }
+
+// TODO
 void bind_pattern(Env*, AstNode*);
 void bind_expr(Env*, AstNode*);
 void bind_type(Env*, AstNode*);

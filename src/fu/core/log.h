@@ -21,8 +21,8 @@ typedef struct Log {
     size_t warning_count;
 } Log;
 
-void log_error  (Log*, const FileLoc*, const char*, const FormatArg*);
+void log_error(Log*, const FileLoc*, const char*, const FormatArg*);
 void log_warning(Log*, const FileLoc*, const char*, const FormatArg*);
-void log_note   (Log*, const FileLoc*, const char*, const FormatArg*);
+void log_note(Log*, const FileLoc*, const char*, const FormatArg*);
 
 #endif

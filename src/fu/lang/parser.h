@@ -4,6 +4,12 @@
 #include "fu/lang/token.h"
 #include "fu/core/log.h"
 
+/*
+ * The parser is LL(2), which means that it requires at most two tokens of look-ahead.
+ * It is a simple recursive descent parser, implemented by hand, which allocates nodes
+ * and strings on a memory pool.
+ */
+
 #define LOOK_AHEAD 2
 
 typedef struct MemPool MemPool;

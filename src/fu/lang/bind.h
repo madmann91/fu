@@ -1,6 +1,13 @@
 #ifndef FU_LANG_BIND_H
 #define FU_LANG_BIND_H
 
+/*
+ * The name binding algorithm requires an environment to be able to register symbols and find
+ * out the declaration sites of identifiers.
+ * The environment is just a linked list of scopes, each containing a hash table that maps all
+ * of the symbols declared in the scope to their actual AST node.
+ */
+
 typedef struct AstNode AstNode;
 typedef struct Scope Scope;
 typedef struct Log Log;

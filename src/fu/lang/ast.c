@@ -68,6 +68,14 @@ static inline void print_operand(FormatState* state, const AstNode* ast_node, in
         print_ast(state, ast_node);
 }
 
+static inline void print_prefix_expr(FormatState* state, const AstNode* ast_node) {
+    print_with_delim(state, ast_node_tag_to_unary_expr_op(ast_node->tag), "", ast_node->unary_expr.operand);
+}
+
+static inline void print_postfix_expr(FormatState* state, const AstNode* ast_node) {
+    print_with_delim(state, "", ast_node_tag_to_unary_expr_op(ast_node->tag), ast_node->unary_expr.operand);
+}
+
 static inline void print_binary_or_assign_expr(FormatState* state, const AstNode* ast_node, const char* op) {
     int prec = precedence(ast_node->tag);
     print_operand(state, ast_node->binary_expr.left, prec);
@@ -112,8 +120,9 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             });
             break;
         case AST_INT_LITERAL:
-            format(state, "{$}{um}{$}", (FormatArg[]) {
+            format(state, "{$}{s}{um}{$}", (FormatArg[]) {
                 { .style = literal_style },
+                { .s = ast_node->int_literal.has_minus ? "-" : "" },
                 { .um = ast_node->int_literal.val },
                 { .style = reset_style }
             });
@@ -155,6 +164,16 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             break;
         case AST_FIELD_NAME:
             format(state, "{s}", (FormatArg[]) { { .s = ast_node->field_name.name } });
+            break;
+#define f(name, ...) case AST_##name##_EXPR:
+        AST_PREFIX_EXPR_LIST(f)
+#undef f
+            print_prefix_expr(state, ast_node);
+            break;
+#define f(name, ...) case AST_##name##_EXPR:
+        AST_POSTFIX_EXPR_LIST(f)
+#undef f
+            print_postfix_expr(state, ast_node);
             break;
 #define f(name, ...) case AST_##name##_EXPR:
         AST_BINARY_EXPR_LIST(f)
@@ -257,6 +276,8 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
                     if (stmt->next)
                         format(state, needs_semicolon(stmt->tag) ? ";\n" : "\n", NULL);
                 }
+                if (ast_node->block_expr.ends_with_semicolon)
+                    format(state, ";", NULL);
                 format(state, "{<}\n}", NULL);
             }
             break;
@@ -382,6 +403,17 @@ const char* ast_node_tag_to_binary_expr_op(AstNodeTag tag) {
 #undef f
         default:
             assert(false && "invalid binary expression");
+            return "";
+    }
+}
+
+const char* ast_node_tag_to_unary_expr_op(AstNodeTag tag) {
+    switch (tag) {
+#define f(name, tok, str) case AST_##name##_EXPR: return str;
+        AST_UNARY_EXPR_LIST(f)
+#undef f
+        default:
+            assert(false && "invalid unary expression");
             return "";
     }
 }

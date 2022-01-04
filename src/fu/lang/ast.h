@@ -155,6 +155,7 @@ struct AstNode {
         } bool_literal;
         struct {
             uintmax_t val;
+            bool has_minus;
         } int_literal;
         struct {
             double val;
@@ -311,6 +312,7 @@ bool is_tuple(AstNodeTag);
 bool is_binary_expr(AstNodeTag);
 
 const char* ast_node_tag_to_prim_type_name(AstNodeTag);
+const char* ast_node_tag_to_unary_expr_op(AstNodeTag);
 const char* ast_node_tag_to_binary_expr_op(AstNodeTag);
 const char* ast_node_tag_to_assign_expr_op(AstNodeTag);
 

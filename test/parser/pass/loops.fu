@@ -1,3 +1,9 @@
+fun range(i: i32, j: i32, body: fun (i32) -> ()) {
+    while i < j {
+        body(i++);
+    }
+}
+
 fun test() {
     while false {
         continue()

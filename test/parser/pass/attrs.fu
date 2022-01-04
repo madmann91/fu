@@ -1,1 +1,2 @@
+struct Bar {}
 #[x, y = 1, z(x = 1, z = "abc")] type Foo = Bar;

@@ -73,8 +73,14 @@ static inline bool accept_token(Parser* parser, TokenTag tag) {
     return false;
 }
 
-static void expect_fail(Parser* parser, const char* expected_msg, const char* found_msg, const FileLoc* loc) {
-    log_error(parser->lexer->log, loc, "expected {s}, but got {s}", (FormatArg[]) { { .s = expected_msg }, { .s = found_msg } });
+static void expect_fail(
+    Parser* parser,
+    const char* expected_msg,
+    const char* found_msg,
+    const FileLoc* file_loc)
+{
+    log_error(parser->lexer->log, file_loc, "expected {s}, but got {s}",
+        (FormatArg[]) { { .s = expected_msg }, { .s = found_msg } });
 }
 
 static inline bool expect_token(Parser* parser, TokenTag tag) {
@@ -764,11 +770,10 @@ static AstNode* parse_untyped_pattern(Parser* parser) {
         case TOKEN_PLUS:
             // Accept `-` and `+` in front of integer literals
             if (parser->ahead[1].tag == TOKEN_INT_LITERAL) {
-                bool is_minus = parser->ahead->tag == TOKEN_MINUS;
+                bool has_minus = parser->ahead->tag == TOKEN_MINUS;
                 skip_token(parser);
                 AstNode* literal = parse_int_literal(parser);
-                if (is_minus)
-                    literal->int_literal.val = -literal->int_literal.val;
+                literal->int_literal.has_minus = has_minus;
                 return literal;
             }
             // fallthrough

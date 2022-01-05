@@ -13,12 +13,12 @@
 
 typedef struct {
     const char* name;
-    AstNode* ast_node;
+    AstNode* decl_site;
 } Symbol;
 
 struct Scope {
     HashTable symbols;
-    AstNode* ast_node;
+    AstNode* decl_site;
     struct Scope* prev, *next;
 };
 
@@ -50,16 +50,60 @@ void free_env(Env* env) {
     }
 }
 
-static void insert_symbol(Env* env, const char* name, AstNode* ast_node) {
+static void insert_symbol(Env* env, const char* name, AstNode* decl_site) {
     assert(env->cur_scope);
-    bool was_inserted = insert_in_hash_table(&env->cur_scope->symbols,
-        &(Symbol) { .name = name, .ast_node = ast_node },
-        hash_str(hash_init(), name), sizeof(Symbol),
-        compare_symbols);
+    Symbol symbol = { .name = name, .decl_site = decl_site };
+    uint32_t hash = hash_str(hash_init(), name);
+    bool was_inserted = insert_in_hash_table(&env->cur_scope->symbols, &symbol, hash, sizeof(Symbol), compare_symbols);
     if (!was_inserted) {
-        log_error(env->log, &ast_node->file_loc, "redefinition of symbol '{s}'",
+        log_error(env->log, &decl_site->file_loc, "redefinition of symbol '{s}'",
             (FormatArg[]) { { .s = name } });
+        const Symbol* prev_symbol = find_in_hash_table(&env->cur_scope->symbols, &symbol, hash, sizeof(Symbol), compare_symbols);
+        assert(prev_symbol);
+        log_note(env->log, &prev_symbol->decl_site->file_loc, "previously declared here", NULL);
     }
+}
+
+static size_t levenshtein_distance(const char* left, const char* right) {
+    if (!*left)  return strlen(right);
+    if (!*right) return strlen(left);
+    if (left[0] == right[0])
+        return levenshtein_distance(left + 1, right + 1);
+    else {
+        size_t a = levenshtein_distance(left + 1, right);
+        size_t b = levenshtein_distance(left, right + 1);
+        size_t c = levenshtein_distance(left + 1, right + 1);
+        size_t min = a;
+        min = min < b ? min : b;
+        min = min < c ? min : c;
+        return 1 + min;
+    }
+}
+
+static void suggest_similar_symbol(Env* env, const char* name) {
+    size_t min_dist = 2;
+
+    // Do not suggest similar symbols for identifiers that are too short
+    if (strlen(name) <= min_dist)
+        return;
+
+    const char* similar_name = NULL;
+
+    for (Scope* scope = env->cur_scope; scope; scope = scope->prev) {
+        Symbol* symbols = scope->symbols.elems;
+        for (size_t i = 0; i < scope->symbols.capacity; i++) {
+            if (!is_bucket_occupied(&scope->symbols, i))
+                continue;
+            size_t dist = levenshtein_distance(name, symbols[i].name);
+            if (dist < min_dist) {
+                min_dist = dist;
+                similar_name = symbols[i].name;
+            }
+        }
+    }
+
+    if (similar_name)
+        log_note(env->log, NULL, "did you mean '{s}'?", (FormatArg[]) { { .s = similar_name } });
 }
 
 static AstNode* find_symbol(Env* env, const char* name, const FileLoc* file_loc) {
@@ -70,45 +114,50 @@ static AstNode* find_symbol(Env* env, const char* name, const FileLoc* file_loc)
             hash, sizeof(Symbol),
             compare_symbols);
         if (symbol)
-            return symbol->ast_node;
+            return symbol->decl_site;
     }
     log_error(env->log, file_loc, "unknown identifier '{s}'", (FormatArg[]) { { .s = name } });
+    suggest_similar_symbol(env, name);
+    return NULL;
+}
+
+static inline AstNode* find_enclosing_scope(
+    Env* env,
+    const char* keyword,
+    const char* context,
+    AstNodeTag fst_tag,
+    AstNodeTag snd_tag,
+    const FileLoc* file_loc)
+{
+    for (Scope* scope = env->cur_scope; scope; scope = scope->prev) {
+        if (scope->decl_site->tag == fst_tag || scope->decl_site->tag == snd_tag)
+            return scope->decl_site;
+    }
+    log_error(env->log, file_loc, "use of '{$}{s}{$}' outside of a {s}", (FormatArg[]) {
+        { .style = keyword_style },
+        { .s = keyword },
+        { .style = reset_style },
+        { .s = context },
+    });
     return NULL;
 }
 
 static inline AstNode* find_enclosing_loop(Env* env, const char* keyword, const FileLoc* file_loc) {
-    for (Scope* scope = env->cur_scope; scope; scope = scope->prev) {
-        if (scope->ast_node->tag == AST_WHILE_LOOP || scope->ast_node->tag == AST_FOR_LOOP)
-            return scope->ast_node;
-    }
-    log_error(env->log, file_loc, "use of '{$}{s}{$}' outside of a loop", (FormatArg[]) {
-        { .style = keyword_style },
-        { .s = keyword },
-        { .style = reset_style },
-    });
-    return NULL;
+    return find_enclosing_scope(env, keyword, "loop", AST_WHILE_LOOP, AST_FOR_LOOP, file_loc);
 }
 
 static inline AstNode* find_enclosing_fun(Env* env, const FileLoc* file_loc) {
-    for (Scope* scope = env->cur_scope; scope; scope = scope->prev) {
-        if (scope->ast_node->tag == AST_FUN_EXPR || scope->ast_node->tag == AST_FUN_DECL)
-            return scope->ast_node;
-    }
-    log_error(env->log, file_loc, "use of '{$}return{$}' outside of a function", (FormatArg[]) {
-        { .style = keyword_style },
-        { .style = reset_style },
-    });
-    return NULL;
+    return find_enclosing_scope(env, "return", "function", AST_FUN_EXPR, AST_FUN_DECL, file_loc);
 }
 
-static inline void push_scope(Env* env, AstNode* ast_node) {
+static inline void push_scope(Env* env, AstNode* decl_site) {
     if (!env->cur_scope)
         env->cur_scope = env->first_scope;
     else if (env->cur_scope->next)
         env->cur_scope = env->cur_scope->next;
     else
         env->cur_scope = new_scope(env->cur_scope);
-    env->cur_scope->ast_node = ast_node;
+    env->cur_scope->decl_site = decl_site;
     clear_hash_table(&env->cur_scope->symbols);
 }
 
@@ -232,7 +281,10 @@ static void bind_path(Env* env, AstNode* path) {
     // Only bind the base of the path
     // (the other elements cannot be bound because types are not yet known).
     AstNode* base = path->path.elems;
-    base->path_elem.target = find_symbol(env, base->path_elem.name, &base->file_loc);
+    base->path_elem.decl_site = find_symbol(env, base->path_elem.name, &base->file_loc);
+
+    for (AstNode* elem = path->path.elems; elem; elem = elem->next)
+        bind_many(env, elem->path_elem.type_args, bind_type);
 }
 
 void bind_pattern(Env* env, AstNode* pattern) {

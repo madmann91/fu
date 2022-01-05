@@ -197,7 +197,7 @@ struct AstNode {
         struct {
             const char* name;
             AstNode* type_args;
-            AstNode* target;
+            AstNode* decl_site;
         } path_elem;
         struct {
             AstNode* elems;

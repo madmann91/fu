@@ -64,8 +64,8 @@ static size_t find_line_begin(FILE* file, size_t offset) {
         size_t range = offset > LINE_SEARCH_RANGE ? LINE_SEARCH_RANGE : offset;
         offset -= range;
         fseek(file, offset, SEEK_SET);
-        size_t read_count = fread(data, 1, LINE_SEARCH_RANGE, file);
-        for (size_t i = read_count; i --> 0;) {
+        fread(data, 1, range, file);
+        for (size_t i = range; i --> 0;) {
             if (data[i] == '\n')
                 return offset + i + 1;
         }

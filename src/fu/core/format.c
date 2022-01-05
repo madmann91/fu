@@ -137,6 +137,21 @@ static void apply_style(FormatState* state, const FormatArg* arg) {
     write_char(state, 'm');
 }
 
+FormatState new_format_state(const char* tab, bool ignore_style) {
+    return (FormatState) {
+        .tab = tab,
+        .ignore_style = ignore_style
+    };
+}
+
+void free_format_state(FormatState* state) {
+    FormatBuf* next = NULL;
+    for (FormatBuf* buf = state->first_buf; buf; buf = next) {
+        next = buf->next;
+        free(buf);
+    }
+}
+
 void format(FormatState* state, const char* format_str, const FormatArg* args) {
     const char* ptr = format_str;
     size_t index = 0;
@@ -193,17 +208,7 @@ void format(FormatState* state, const char* format_str, const FormatArg* args) {
     }
 }
 
-void print_format_bufs(const FormatBuf* buf, FILE* out) {
-    while (buf) {
-        fwrite(buf->data, 1, buf->size, out);
-        buf = buf->next;
-    }
-}
-
-void free_format_bufs(FormatBuf* buf) {
-    while (buf) {
-        FormatBuf* next = buf->next;
-        free(buf);
-        buf = next;
-    }
+void write_format_state(FormatState* state, FILE* file) {
+    for (FormatBuf* buf = state->first_buf; buf; buf = buf->next)
+        fwrite(buf->data, 1, buf->size, file);
 }

@@ -341,10 +341,10 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
 }
 
 void dump_ast(const AstNode* ast_node) {
-    FormatState state = { .tab = "    ", .ignore_style = !is_color_supported(stdout) };
+    FormatState state = new_format_state("    ", !is_color_supported(stdout));
     print_ast(&state, ast_node);
-    print_format_bufs(state.first_buf, stdout);
-    free_format_bufs(state.first_buf);
+    write_format_state(&state, stdout);
+    free_format_state(&state);
     printf("\n");
 }
 

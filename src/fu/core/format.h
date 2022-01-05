@@ -63,11 +63,13 @@ static const FormatStyle reset_style    = { STYLE_NORMAL, COLOR_NORMAL };
 static const FormatStyle error_style    = { STYLE_BOLD,   COLOR_RED };
 static const FormatStyle literal_style  = { STYLE_NORMAL, COLOR_MAGENTA };
 static const FormatStyle keyword_style  = { STYLE_BOLD,   COLOR_BLUE };
-static const FormatStyle ellipsis_style = { STYLE_BOLD,   COLOR_WHITE };
+static const FormatStyle ellipsis_style = { STYLE_NORMAL, COLOR_WHITE };
+static const FormatStyle loc_style      = { STYLE_BOLD,   COLOR_WHITE };
+
+FormatState new_format_state(const char* tab, bool ignore_style);
+void free_format_state(FormatState*);
 
 void format(FormatState* state, const char* format_str, const FormatArg* args);
-
-void print_format_bufs(const FormatBuf*, FILE*);
-void free_format_bufs(FormatBuf*);
+void write_format_state(FormatState*, FILE*);
 
 #endif

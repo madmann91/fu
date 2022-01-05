@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "fu/core/format.h"
+#include "fu/core/hash_table.h"
 
 typedef struct {
     uint32_t row, col;
@@ -16,10 +17,15 @@ typedef struct {
 } FileLoc;
 
 typedef struct Log {
-    FormatState state;
+    HashTable file_cache;
+    FormatState* state;
     size_t error_count;
     size_t warning_count;
+    bool show_diagnostics;
 } Log;
+
+Log new_log(FormatState*);
+void free_log(Log*);
 
 void log_error(Log*, const FileLoc*, const char*, const FormatArg*);
 void log_warning(Log*, const FileLoc*, const char*, const FormatArg*);

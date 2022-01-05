@@ -73,13 +73,10 @@ static bool compile_file(const char* file_name, const Options* options, Log* log
     if (!program)
         return false;
     if (options->print_ast) {
-        FormatState state = {
-            .tab = "    ",
-            .ignore_style = options->no_color || !is_color_supported(stdout)
-        };
+        FormatState state = new_format_state("    ", !is_color_supported(stdout));
         print_ast(&state, program);
-        print_format_bufs(state.first_buf, stdout);
-        free_format_bufs(state.first_buf);
+        write_format_state(&state, stdout);
+        free_format_state(&state);
         printf("\n");
     }
     if (log->error_count == 0) {
@@ -92,7 +89,8 @@ static bool compile_file(const char* file_name, const Options* options, Log* log
 }
 
 int main(int argc, char** argv) {
-    Log log = { .state = { .tab = "    ", .ignore_style = !is_color_supported(stderr) } };
+    FormatState state = new_format_state("    ", !is_color_supported(stderr));
+    Log log = new_log(&state);
     bool status = true;
 
     Options options = { 0 };
@@ -101,7 +99,7 @@ int main(int argc, char** argv) {
         goto exit;
     }
 
-    log.state.ignore_style = options.no_color;
+    state.ignore_style = options.no_color;
 
     for (int i = 1; i < argc && status; ++i) {
         if (argv[i][0] == '-')
@@ -110,7 +108,8 @@ int main(int argc, char** argv) {
     }
 
 exit:
-    print_format_bufs(log.state.first_buf, stderr);
-    free_format_bufs(log.state.first_buf);
+    write_format_state(&state, stderr);
+    free_format_state(&state);
+    free_log(&log);
     return status ? EXIT_SUCCESS : EXIT_FAILURE;
 }

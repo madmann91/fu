@@ -26,7 +26,7 @@ typedef bool (*CompareFn) (const void*, const void*);
 HashTable new_hash_table(size_t capacity, size_t elem_size);
 void free_hash_table(HashTable*);
 
-bool is_bucket_occupied(uint32_t hash);
+bool is_bucket_occupied(const HashTable*, size_t);
 
 bool insert_in_hash_table(HashTable*, const void* elem, uint32_t hash, size_t elem_size, CompareFn compare);
 void* find_in_hash_table(const HashTable*, const void* elem, uint32_t hash, size_t elem_size, CompareFn compare);

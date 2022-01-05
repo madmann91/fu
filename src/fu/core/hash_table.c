@@ -38,8 +38,12 @@ void free_hash_table(HashTable* hash_table) {
     hash_table->capacity = hash_table->size = 0;
 }
 
-bool is_bucket_occupied(uint32_t hash) {
+static inline bool is_occupied_hash(uint32_t hash) {
 	return hash & OCCUPIED_MASK;
+}
+
+bool is_bucket_occupied(const HashTable* hash_table, size_t i) {
+	return is_occupied_hash(hash_table->hashes[i]);
 }
 
 static inline void rehash_table(HashTable* hash_table, size_t elem_size) {
@@ -50,10 +54,10 @@ static inline void rehash_table(HashTable* hash_table, size_t elem_size) {
     uint32_t* new_hashes = calloc_or_die(new_capacity, elem_size);
     for (size_t i = 0, n = hash_table->capacity; i < n; ++i) {
         uint32_t hash = hash_table->hashes[i];
-        if (!is_bucket_occupied(hash))
+        if (!is_occupied_hash(hash))
             continue;
         size_t index = mod_prime(hash, new_capacity);
-        while (is_bucket_occupied(new_hashes[index]))
+        while (is_occupied_hash(new_hashes[index]))
             index = increment_wrap(new_capacity, index);
 
         memcpy(
@@ -78,7 +82,7 @@ bool insert_in_hash_table(
 {
 	hash |= OCCUPIED_MASK;
     size_t index = mod_prime(hash, hash_table->capacity);
-    while (is_bucket_occupied(hash_table->hashes[index])) {
+    while (is_bucket_occupied(hash_table, index)) {
         if (hash_table->hashes[index] == hash &&
             compare(elem_at(hash_table->elems, elem_size, index), elem))
             return false;
@@ -101,7 +105,7 @@ void* find_in_hash_table(
 {
     hash |= OCCUPIED_MASK;
     size_t index = mod_prime(hash, hash_table->capacity);
-    while (is_bucket_occupied(hash_table->hashes[index])) {
+    while (is_bucket_occupied(hash_table, index)) {
         void* target_elem = elem_at(hash_table->elems, elem_size, index);
         if (hash_table->hashes[index] == hash && compare(target_elem, elem))
             return target_elem;
@@ -118,9 +122,9 @@ void remove_from_hash_table(HashTable* hash_table, void* elem, size_t elem_size)
     assert(elem >= hash_table->elems);
     assert(elem < elem_at(hash_table->elems, elem_size, hash_table->capacity));
     size_t index = distance_in_bytes(hash_table->elems, elem) / elem_size;
-    assert(is_bucket_occupied(hash_table->hashes[index]));
+    assert(is_bucket_occupied(hash_table, index));
     size_t next_index = increment_wrap(hash_table->capacity, index);
-    while (is_bucket_occupied(hash_table->hashes[next_index])) {
+    while (is_bucket_occupied(hash_table, next_index)) {
         uint32_t next_hash = hash_table->hashes[next_index];
         size_t desired_index = mod_prime(next_hash, hash_table->capacity);
         // If the next element is part of the collision chain, move it

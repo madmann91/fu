@@ -1,4 +1,5 @@
 #include "fu/core/str_pool.h"
+#include "fu/core/mem_pool.h"
 #include "fu/core/hash.h"
 #include "fu/core/utils.h"
 
@@ -6,16 +7,14 @@
 
 #define DEFAULT_STRING_POOL_CAPACITY 1024
 
-StrPool new_str_pool() {
+StrPool new_str_pool(MemPool* mem_pool) {
     return (StrPool) {
-        .mem_pool = new_mem_pool(),
+        .mem_pool = mem_pool,
         .hash_table = new_hash_table(DEFAULT_STRING_POOL_CAPACITY, sizeof(char*))
     };
 }
 
-void free_str_pool(StrPool* str_pool)
-{
-    free_mem_pool(&str_pool->mem_pool);
+void free_str_pool(StrPool* str_pool) {
     free_hash_table(&str_pool->hash_table);
 }
 
@@ -32,7 +31,7 @@ const char* make_str(StrPool* str_pool, const char* str) {
     if (str_ptr)
         return *str_ptr;
     size_t len = strlen(str);
-    char* new_str = alloc_from_mem_pool(&str_pool->mem_pool, len + 1);
+    char* new_str = alloc_from_mem_pool(str_pool->mem_pool, len + 1);
     memcpy(new_str, str, len);
     new_str[len] = 0;
     must_succeed(insert_in_hash_table(&str_pool->hash_table, &new_str, hash, sizeof(char*), compare_strs));

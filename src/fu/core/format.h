@@ -69,7 +69,11 @@ static const FormatStyle loc_style      = { STYLE_BOLD,   COLOR_WHITE };
 FormatState new_format_state(const char* tab, bool ignore_style);
 void free_format_state(FormatState*);
 
-void format(FormatState* state, const char* format_str, const FormatArg* args);
+void format(FormatState*, const char* format_str, const FormatArg* args);
+
+void print_with_style(FormatState*, const char*, FormatStyle);
+void print_keyword(FormatState*, const char*);
+
 void write_format_state(FormatState*, FILE*);
 
 #endif

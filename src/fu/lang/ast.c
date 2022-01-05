@@ -42,14 +42,6 @@ static inline void print_many_inside_block(FormatState* state, const char* sep, 
         print_many_with_delim(state, "{{{>}\n", sep, "{<}\n}", elems);
 }
 
-static inline void print_with_style(FormatState* state, const char* str, FormatStyle style) {
-    format(state, "{$}{s}{$}", (FormatArg[]) { { .style = style }, { .s = str }, { .style = reset_style } });
-}
-
-static void print_keyword(FormatState* state, const char* keyword) {
-    print_with_style(state, keyword, keyword_style);
-}
-
 static inline void print_as_tuple(FormatState* state, const AstNode* ast_node) {
     if (is_tuple(ast_node->tag))
         print_ast(state, ast_node);

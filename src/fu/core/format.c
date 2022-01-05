@@ -208,6 +208,14 @@ void format(FormatState* state, const char* format_str, const FormatArg* args) {
     }
 }
 
+void print_with_style(FormatState* state, const char* str, FormatStyle style) {
+    format(state, "{$}{s}{$}", (FormatArg[]) { { .style = style }, { .s = str }, { .style = reset_style } });
+}
+
+void print_keyword(FormatState* state, const char* keyword) {
+    print_with_style(state, keyword, keyword_style);
+}
+
 void write_format_state(FormatState* state, FILE* file) {
     for (FormatBuf* buf = state->first_buf; buf; buf = buf->next)
         fwrite(buf->data, 1, buf->size, file);

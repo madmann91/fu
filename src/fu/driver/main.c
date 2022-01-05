@@ -5,6 +5,8 @@
 #include "fu/lang/lexer.h"
 #include "fu/lang/parser.h"
 #include "fu/lang/bind.h"
+#include "fu/lang/check.h"
+#include "fu/lang/types.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,6 +74,7 @@ static bool compile_file(const char* file_name, const Options* options, Log* log
     AstNode* program = parse_file(file_name, &mem_pool, log);
     if (!program)
         return false;
+
     if (options->print_ast) {
         FormatState state = new_format_state("    ", !is_color_supported(stdout));
         print_ast(&state, program);
@@ -79,12 +82,23 @@ static bool compile_file(const char* file_name, const Options* options, Log* log
         free_format_state(&state);
         printf("\n");
     }
+
+    // Bind names to their declaration sites
     if (log->error_count == 0) {
         Env env = new_env(log);
         bind_program(&env, program);
         free_env(&env);
-        free_mem_pool(&mem_pool);
     }
+
+    // Check types
+    if (log->error_count == 0) {
+        TypeTable type_table = new_type_table(&mem_pool);
+        TypingContext typing_context = make_typing_context(&type_table, log);
+        check_program(&typing_context, program);
+        free_type_table(&type_table);
+    }
+
+    free_mem_pool(&mem_pool);
     return log->error_count == 0;
 }
 

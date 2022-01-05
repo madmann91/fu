@@ -190,6 +190,11 @@ static void print_msg(
     const char* format_str,
     const FormatArg* args)
 {
+    if (msg_type == LOG_ERROR && log->error_count > 0)
+        format(log->state, "\n", NULL);
+    else if (msg_type == LOG_WARNING && log->warning_count > 0)
+        format(log->state, "\n", NULL);
+
     static const FormatStyle header_styles[] = {
         { STYLE_BOLD, COLOR_RED },
         { STYLE_BOLD, COLOR_YELLOW },
@@ -224,8 +229,6 @@ static void print_msg(
         if (log->show_diagnostics)
             print_diagnostic(log, header_styles[msg_type], file_loc);
     }
-    if (msg_type != LOG_NOTE)
-        format(log->state, "\n", NULL);
 }
 
 void log_error(Log* log, const FileLoc* file_loc, const char* format_str, const FormatArg* args) {

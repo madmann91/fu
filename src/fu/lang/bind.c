@@ -126,7 +126,7 @@ static void insert_decl_in_env(Env* env, AstNode* decl) {
     const char* name = NULL;
     switch (decl->tag) {
         case AST_STRUCT_DECL: name = decl->struct_decl.name; break;
-        case AST_ENUM_DECL:   name = decl->struct_decl.name; break;
+        case AST_ENUM_DECL:   name = decl->enum_decl.name; break;
         case AST_FUN_DECL:    name = decl->fun_decl.name; break;
         case AST_TYPE_DECL:   name = decl->type_decl.name; break;
         default:

@@ -158,6 +158,18 @@ const Type* make_array_type(TypeTable* type_table, const Type* elem_type) {
     });
 }
 
+static void print_type_params(FormatState* state, const Type* type_params) {
+    if (type_params) {
+        format(state, "[", NULL);
+        for (; type_params; type_params = type_params->sibling_type) {
+            print_type(state, type_params);
+            if (type_params->sibling_type)
+                format(state, ", ", NULL);
+        }
+        format(state, "]", NULL);
+    }
+}
+
 void print_type(FormatState* state, const Type* type) {
     switch (type->tag) {
 #define f(name, str) case TYPE_##name: print_keyword(state, str); break;
@@ -198,10 +210,17 @@ void print_type(FormatState* state, const Type* type) {
         case TYPE_ENUM:
             print_keyword(state, "enum");
             format(state, " {s}", (FormatArg[]) { { .s = type->enum_type.name } });
+            print_type_params(state, type->enum_type.type_params);
             break;
         case TYPE_STRUCT:
             print_keyword(state, "struct");
             format(state, " {s}", (FormatArg[]) { { .s = type->struct_type.name } });
+            print_type_params(state, type->struct_type.type_params);
+            break;
+        case TYPE_ALIAS:
+            print_keyword(state, "type");
+            format(state, " {s}", (FormatArg[]) { { .s = type->alias_type.name } });
+            print_type_params(state, type->alias_type.type_params);
             break;
         default:
             assert(false && "invalid type");

@@ -22,6 +22,7 @@ typedef enum {
     TYPE_ARRAY,
     TYPE_FUN,
     TYPE_PARAM,
+    TYPE_ALIAS,
     TYPE_STRUCT,
     TYPE_ENUM
 } TypeTag;
@@ -52,7 +53,13 @@ struct Type {
             const char** member_names;
             size_t member_count;
             const Type* child_types;
+            const Type* type_params;
         } enum_type, struct_type;
+        struct {
+            const char* name;
+            const Type* type_params;
+            const Type* aliased_type;
+        } alias_type;
     };
 };
 
@@ -71,6 +78,7 @@ void free_type_table(TypeTable*);
 
 Type* make_struct_type(TypeTable*, const char* name, size_t field_count);
 Type* make_enum_type(TypeTable*, const char* name, size_t option_count);
+Type* make_alias_type(TypeTable*, const char* name);
 
 const Type* make_prim_type(TypeTable*, TypeTag);
 const Type* make_unknown_type(TypeTable*);

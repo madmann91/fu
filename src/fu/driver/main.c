@@ -77,7 +77,7 @@ static bool compile_file(const char* file_name, const Options* options, Log* log
 
     if (options->print_ast) {
         FormatState state = new_format_state("    ", !is_color_supported(stdout));
-        print_ast(&state, program);
+        print_ast_node(&state, program);
         write_format_state(&state, stdout);
         free_format_state(&state);
         printf("\n");

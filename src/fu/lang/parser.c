@@ -73,7 +73,7 @@ static inline bool accept_token(Parser* parser, TokenTag tag) {
     return false;
 }
 
-static void expect_fail(
+static void fail_expect(
     Parser* parser,
     const char* expected_msg,
     const char* found_msg,
@@ -85,14 +85,14 @@ static void expect_fail(
 
 static inline bool expect_token(Parser* parser, TokenTag tag) {
     if (!accept_token(parser, tag)) {
-        expect_fail(parser, token_tag_to_str(tag), token_tag_to_str(parser->ahead->tag), &parser->ahead->file_loc);
+        fail_expect(parser, token_tag_to_str(tag), token_tag_to_str(parser->ahead->tag), &parser->ahead->file_loc);
         return false;
     }
     return true;
 }
 
 static AstNode* parse_many(Parser* parser, TokenTag end, TokenTag sep, AstNode* (*parse_one)(Parser*)) {
-    AstNodeList list = { NULL };
+    AstNodeList list = { NULL, NULL };
     while (true) {
         if (end != TOKEN_ERROR && parser->ahead->tag == end)
             break;
@@ -113,7 +113,7 @@ static inline const char* parse_ident(Parser* parser) {
 
 static inline AstNode* parse_error(Parser* parser, const char* msg) {
     FilePos begin = parser->ahead->file_loc.begin;
-    expect_fail(parser, msg, token_tag_to_str(parser->ahead->tag), &parser->ahead->file_loc);
+    fail_expect(parser, msg, token_tag_to_str(parser->ahead->tag), &parser->ahead->file_loc);
     skip_token(parser);
     return make_ast_node(parser, &begin, &(AstNode) { .tag = AST_ERROR });
 }
@@ -194,7 +194,7 @@ static inline AstNode* parse_path(Parser* parser) {
 static inline AstNode* parse_block_expr(Parser* parser) {
     FilePos begin = parser->ahead->file_loc.begin;
     eat_token(parser, TOKEN_L_BRACE);
-    AstNodeList stmt_list = { NULL };
+    AstNodeList stmt_list = { NULL, NULL };
     bool ends_with_semicolon = false;
     while (parser->ahead->tag != TOKEN_R_BRACE) {
         AstNode* stmt = parse_stmt(parser);
@@ -267,7 +267,7 @@ static AstNode* parse_field_name(Parser* parser) {
 static AstNode* parse_field_names(Parser* parser, TokenTag stop) {
     AstNode* field_names = parse_many(parser, stop, TOKEN_COMMA, parse_field_name);
     if (!field_names)
-        expect_fail(parser, "name", token_tag_to_str(parser->ahead->tag), &parser->ahead->file_loc);
+        fail_expect(parser, "name", token_tag_to_str(parser->ahead->tag), &parser->ahead->file_loc);
     return field_names;
 }
 
@@ -651,15 +651,15 @@ static inline AstNode* parse_if_expr(Parser* parser) {
     FilePos begin = parser->ahead->file_loc.begin;
     eat_token(parser, TOKEN_IF);
     AstNode* cond = parse_expr_without_structs(parser);
-    AstNode* if_true = parse_block_expr_or_error(parser);
-    AstNode* if_false = NULL;
+    AstNode* then_expr = parse_block_expr_or_error(parser);
+    AstNode* else_expr = NULL;
     if (accept_token(parser, TOKEN_ELSE)) {
-        if_false = parser->ahead->tag == TOKEN_IF
+        else_expr = parser->ahead->tag == TOKEN_IF
             ? parse_if_expr(parser) : parse_block_expr_or_error(parser);
     }
     return make_ast_node(parser, &begin, &(AstNode) {
         .tag = AST_IF_EXPR,
-        .if_expr = { .cond = cond, .if_true = if_true, .if_false = if_false }
+        .if_expr = { .cond = cond, .then_expr = then_expr, .else_expr = else_expr }
     });
 }
 

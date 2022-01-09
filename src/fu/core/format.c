@@ -1,5 +1,6 @@
 #include "fu/core/alloc.h"
 #include "fu/core/format.h"
+#include "fu/lang/types.h"
 
 #include <assert.h>
 #include <stddef.h>
@@ -97,6 +98,9 @@ static const char* format_arg(FormatState* state, const char* ptr, size_t* index
             break;
         case 'p':
             chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%p", arg->p);
+            break;
+        case 't':
+            print_type(state, arg->t);
             break;
         default:
             assert(false && "unknown formatting command");

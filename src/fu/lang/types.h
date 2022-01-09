@@ -18,9 +18,11 @@ typedef enum {
     AST_PRIM_TYPE_LIST(f)
 #undef f
     TYPE_UNKNOWN,
+    TYPE_ERROR,
     TYPE_TUPLE,
     TYPE_ARRAY,
     TYPE_FUN,
+    TYPE_APP,
     TYPE_PARAM,
     TYPE_ALIAS,
     TYPE_STRUCT,
@@ -29,6 +31,8 @@ typedef enum {
 
 struct Type {
     TypeTag tag;
+    bool contains_error : 1;
+    bool contains_unknown : 1;
     size_t id;
     const Type* parent_type;
     const Type* sibling_type;
@@ -43,7 +47,13 @@ struct Type {
         struct {
             const Type* dom_type;
             const Type* codom_type;
+            const Type* type_params;
         } fun_type;
+        struct {
+            const Type* applied_type;
+            const Type** type_args;
+            size_t arg_count;
+        } type_app;
         struct {
             const char* name;
         } type_param;
@@ -71,6 +81,10 @@ typedef struct {
 } TypeTable;
 
 bool is_prim_type(TypeTag);
+bool is_nominal_type(TypeTag);
+bool is_float_type(TypeTag);
+bool is_int_type(TypeTag);
+bool is_int_or_float_type(TypeTag);
 void set_member_name(TypeTable*, Type*, size_t, const char*);
 
 TypeTable new_type_table(MemPool*);
@@ -82,10 +96,15 @@ Type* make_alias_type(TypeTable*, const char* name);
 
 const Type* make_prim_type(TypeTable*, TypeTag);
 const Type* make_unknown_type(TypeTable*);
+const Type* make_error_type(TypeTable*);
 const Type* make_type_param(TypeTable*, const char* name);
 const Type* make_tuple_type(TypeTable*, const Type** arg_types, size_t arg_count);
+const Type* make_unknown_tuple_type(TypeTable*, size_t);
+const Type* make_type_app(TypeTable*, const Type* applied_type, const Type** type_args, size_t arg_count);
 const Type* make_fun_type(TypeTable*, const Type* dom_type, const Type* codom_type);
 const Type* make_array_type(TypeTable*, const Type* elem_type);
+
+const Type* merge_types(TypeTable*, const Type* from, const Type* to);
 
 void print_type(FormatState*, const Type*);
 void dump_type(const Type*);

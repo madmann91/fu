@@ -258,8 +258,8 @@ struct AstNode {
         } fun_expr;
         struct {
             AstNode* cond;
-            AstNode* if_true;
-            AstNode* if_false;
+            AstNode* then_expr;
+            AstNode* else_expr;
         } if_expr;
         struct {
             AstNode* pattern;
@@ -304,13 +304,14 @@ struct AstNode {
     };
 };
 
-void print_ast(FormatState*, const AstNode*);
-void dump_ast(const AstNode*);
+void print_ast_node(FormatState*, const AstNode*);
+void dump_ast_node(const AstNode*);
 
 bool needs_semicolon(AstNodeTag);
 bool is_tuple(AstNodeTag);
 bool is_binary_expr(AstNodeTag);
 
+size_t get_ast_list_length(const AstNode*);
 const char* ast_node_tag_to_prim_type_name(AstNodeTag);
 const char* ast_node_tag_to_unary_expr_op(AstNodeTag);
 const char* ast_node_tag_to_binary_expr_op(AstNodeTag);

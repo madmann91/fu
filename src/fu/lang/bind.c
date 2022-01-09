@@ -392,9 +392,9 @@ void bind_expr(Env* env, AstNode* expr) {
             break;
         case AST_IF_EXPR:
             bind_expr(env, expr->if_expr.cond);
-            bind_expr(env, expr->if_expr.if_true);
-            if (expr->if_expr.if_false)
-                bind_expr(env, expr->if_expr.if_false);
+            bind_expr(env, expr->if_expr.then_expr);
+            if (expr->if_expr.else_expr)
+                bind_expr(env, expr->if_expr.else_expr);
             break;
         case AST_MATCH_EXPR:
             bind_expr(env, expr->match_expr.arg);

@@ -32,8 +32,11 @@ typedef struct {
     } color;
 } FormatStyle;
 
+typedef struct Type Type;
+
 typedef union {
     FormatStyle style;
+    const Type* t;
     bool b;
     const void* p;
     const char* s;

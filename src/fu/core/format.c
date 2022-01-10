@@ -81,8 +81,8 @@ static const char* format_arg(FormatState* state, const char* ptr, size_t* index
             break;
         case 'f':
             switch (*(ptr++)) {
-                case '3': assert(*ptr == '2'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%f", arg->f32); break;
-                case '6': assert(*ptr == '4'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%g", arg->f64); break;
+                case '3': assert(*ptr == '2'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%e", arg->f32); break;
+                case '6': assert(*ptr == '4'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%e", arg->f64); break;
                 default: assert(false && "invalid floating-point format string");
             }
             break;

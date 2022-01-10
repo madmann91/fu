@@ -64,6 +64,16 @@ const Type* infer_type(TypingContext* context, AstNode* type) {
 #define f(name, ...) case AST_TYPE_##name: return make_prim_type(context->type_table, TYPE_##name);
         AST_PRIM_TYPE_LIST(f)
 #undef f
+        case AST_TUPLE_TYPE: {
+            size_t arg_count = get_ast_list_length(type->tuple_type.args);
+            const Type** arg_types = malloc_or_die(sizeof(Type*) * arg_count);
+            AstNode* arg = type->tuple_type.args;
+            for (size_t i = 0; arg; ++i, arg = arg->next)
+                arg_types[i] = infer_type(context, arg);
+            const Type* result = make_tuple_type(context->type_table, arg_types, arg_count);
+            free(arg_types);
+            return result;
+        }
         default:
             assert(false && "invalid type");
             return make_error_type(context->type_table);

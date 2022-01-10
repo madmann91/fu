@@ -25,11 +25,13 @@ static const Type* expect_type(
 }
 
 static const Type* fail_expect(
-    TypingContext* context, const char* msg, const Type* type, bool expect_dir, const FileLoc* file_loc)
+    TypingContext* context, const char* msg, const Type* type, bool is_type_expected, const FileLoc* file_loc)
 {
-    log_error(context->log, file_loc,
-        expect_dir ? "expected type '{1:t}', but got {0:s}" : "expected {s}, but got '{t}'",
-        (FormatArg[]) { { .s = msg }, { .t = type } });
+    if (!type->contains_error) {
+        log_error(context->log, file_loc,
+            is_type_expected ? "expected type '{1:t}', but got {0:s}" : "expected {s}, but got '{t}'",
+            (FormatArg[]) { { .s = msg }, { .t = type } });
+    }
     return make_error_type(context->type_table);
 }
 
@@ -41,7 +43,7 @@ static const Type* fail_infer(TypingContext* context, const char* msg, const Fil
 static const Type* expect_int_or_float_literal(
     TypingContext* context, const Type* type, const FileLoc* file_loc)
 {
-    if (!is_int_or_float_type(type->tag) && !type->contains_error)
+    if (!is_int_or_float_type(type->tag))
         return fail_expect(context, "integer or floating-point literal", type, true, file_loc);
     return type;
 }
@@ -49,7 +51,7 @@ static const Type* expect_int_or_float_literal(
 static const Type* expect_float_literal(
     TypingContext* context, const Type* type, const FileLoc* file_loc)
 {
-    if (!is_float_type(type->tag) && !type->contains_error)
+    if (!is_float_type(type->tag))
         return fail_expect(context, "floating-point literal", type, true, file_loc);
     return type;
 }
@@ -59,7 +61,7 @@ static const Type* infer_path(TypingContext* context, AstNode* path) {
     return make_error_type(context->type_table);
 }
 
-const Type* infer_type(TypingContext* context, AstNode* type) {
+static const Type* infer_type(TypingContext* context, AstNode* type) {
     switch (type->tag) {
 #define f(name, ...) case AST_TYPE_##name: return make_prim_type(context->type_table, TYPE_##name);
         AST_PRIM_TYPE_LIST(f)
@@ -80,6 +82,37 @@ const Type* infer_type(TypingContext* context, AstNode* type) {
     }
 }
 
+const Type* check_type(TypingContext* context, AstNode* type, const Type* proto_type) {
+    return expect_type(context, infer_type(context, type), proto_type, &type->file_loc);
+}
+
+static const Type* check_tuple(
+    TypingContext* context,
+    AstNode* tuple,
+    const Type* proto_type,
+    const Type* (*check_arg)(TypingContext*, AstNode*, const Type*))
+{
+    size_t arg_count = get_ast_list_length(tuple->tuple_expr.args);
+    if (proto_type->tag == TYPE_TUPLE && proto_type->tuple_type.arg_count != arg_count) {
+        log_error(context->log, &tuple->file_loc,
+            "expected {u64} tuple argument(s), but got {u64}", 
+            (FormatArg[]) { { .u64 = proto_type->tuple_type.arg_count }, { .u64 = arg_count } });
+        return make_error_type(context->type_table);
+    }
+
+    const Type** arg_types = malloc_or_die(sizeof(Type*) * arg_count);
+    AstNode* arg = tuple->tuple_expr.args;
+    for (size_t i = 0; arg; ++i, arg = arg->next) {
+        const Type* arg_type = proto_type->tag == TYPE_TUPLE
+            ? proto_type->tuple_type.arg_types[i]
+            : make_unknown_type(context->type_table);
+        arg_types[i] = check_arg(context, arg, arg_type);
+    }
+    const Type* result = make_tuple_type(context->type_table, arg_types, arg_count);
+    free(arg_types);
+    return result;
+}
+
 const Type* check_expr(TypingContext* context, AstNode* expr, const Type* proto_type) {
     switch (expr->tag) {
         case AST_INT_LITERAL:
@@ -94,6 +127,22 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* proto_
             return expect_type(context,
                 make_prim_type(context->type_table, TYPE_BOOL),
                 proto_type, &expr->file_loc);
+        case AST_CHAR_LITERAL:
+            return expect_type(context,
+                make_prim_type(context->type_table, TYPE_U8),
+                proto_type, &expr->file_loc);
+        case AST_STR_LITERAL:
+            return expect_type(context,
+                make_array_type(context->type_table,
+                    make_prim_type(context->type_table, TYPE_U8)),
+                proto_type, &expr->file_loc);
+        case AST_TYPED_EXPR:
+            return check_expr(context,
+                expr->typed_expr.left, check_type(context, expr->typed_expr.type, proto_type));
+        case AST_TUPLE_EXPR:
+            if (proto_type->tag != TYPE_UNKNOWN && proto_type->tag != TYPE_TUPLE)
+                return fail_expect(context, "tuple expression", proto_type, true, &expr->file_loc);
+            return check_tuple(context, expr, proto_type, check_expr);
         default:
             assert(false && "invalid expression");
             return make_error_type(context->type_table);
@@ -110,8 +159,12 @@ const Type* check_pattern(TypingContext* context, AstNode* pattern, const Type* 
             return fail_infer(context, "pattern", &pattern->file_loc);
         }
         case AST_TYPED_PATTERN:
-            return expect_type(context, proto_type,
-                infer_type(context, pattern->typed_pattern.type), &pattern->file_loc);
+            proto_type = expect_type(context, proto_type, infer_type(context, pattern->typed_pattern.type), &pattern->file_loc);
+            return check_pattern(context, pattern->typed_pattern.left, proto_type);
+        case AST_TUPLE_PATTERN:
+            if (proto_type->tag != TYPE_UNKNOWN && proto_type->tag != TYPE_TUPLE)
+                return fail_expect(context, "tuple pattern", proto_type, false, &pattern->file_loc);
+            return check_tuple(context, pattern, proto_type, check_pattern);
         default:
             assert(false && "invalid pattern");
             return make_error_type(context->type_table);

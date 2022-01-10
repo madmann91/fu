@@ -19,7 +19,7 @@ const Type* check_stmt(TypingContext*, AstNode*, const Type*);
 const Type* check_decl(TypingContext*, AstNode*, const Type*);
 const Type* check_pattern(TypingContext*, AstNode*, const Type*);
 const Type* check_expr(TypingContext*, AstNode*, const Type*);
-const Type* infer_type(TypingContext*, AstNode*);
+const Type* check_type(TypingContext*, AstNode*, const Type*);
 void check_program(TypingContext*, AstNode*);
 
 #endif

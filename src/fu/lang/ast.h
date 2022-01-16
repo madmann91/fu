@@ -304,8 +304,8 @@ struct AstNode {
     };
 };
 
-void print_ast_node(FormatState*, const AstNode*);
-void dump_ast_node(const AstNode*);
+void print_ast(FormatState*, const AstNode*);
+void dump_ast(const AstNode*);
 
 bool needs_semicolon(AstNodeTag);
 bool is_tuple(AstNodeTag);
@@ -317,7 +317,7 @@ const char* ast_node_tag_to_unary_expr_op(AstNodeTag);
 const char* ast_node_tag_to_binary_expr_op(AstNodeTag);
 const char* ast_node_tag_to_assign_expr_op(AstNodeTag);
 
-int max_precedence();
-int precedence(AstNodeTag);
+int get_max_binary_expr_precedence();
+int get_binary_expr_precedence(AstNodeTag);
 
 #endif

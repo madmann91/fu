@@ -1,4 +1,5 @@
 #include "fu/lang/check.h"
+#include "fu/lang/type_table.h"
 #include "fu/core/alloc.h"
 
 #include <assert.h>
@@ -12,20 +13,26 @@ TypingContext make_typing_context(TypeTable* type_table, Log* log) {
 }
 
 static const Type* expect_type(
-    TypingContext* context, const Type* type, const Type* expected_type, const FileLoc* file_loc)
+    TypingContext* context, const Type* type, const Type* proto_type, bool is_expected_type, const FileLoc* file_loc)
 {
-    const Type* merged_type = merge_types(context->type_table, type, expected_type);
+    const Type* merged_type = merge_types(context->type_table, type, proto_type, true);
     // Do not report error messages when they have already been reported
-    if (merged_type->contains_error && !expected_type->contains_error && !type->contains_error) {
+    if (merged_type->contains_error && !proto_type->contains_error && !type->contains_error) {
+        if (is_expected_type)
+            swap_types(&type, &proto_type);
         log_error(context->log, file_loc, "expected type '{t}', but got '{t}'",
-            (FormatArg[]) { { .t = expected_type }, { .t = type } });
+            (FormatArg[]) { { .t = proto_type }, { .t = type } });
         return make_error_type(context->type_table);
     }
     return merged_type;
 }
 
 static const Type* fail_expect(
-    TypingContext* context, const char* msg, const Type* type, bool is_type_expected, const FileLoc* file_loc)
+    TypingContext* context,
+    const char* msg,
+    const Type* type,
+    bool is_type_expected,
+    const FileLoc* file_loc)
 {
     if (!type->contains_error) {
         log_error(context->log, file_loc,
@@ -83,7 +90,7 @@ static const Type* infer_type(TypingContext* context, AstNode* type) {
 }
 
 const Type* check_type(TypingContext* context, AstNode* type, const Type* proto_type) {
-    return expect_type(context, infer_type(context, type), proto_type, &type->file_loc);
+    return expect_type(context, infer_type(context, type), proto_type, true, &type->file_loc);
 }
 
 static const Type* check_tuple(
@@ -126,16 +133,16 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* proto_
         case AST_BOOL_LITERAL:
             return expect_type(context,
                 make_prim_type(context->type_table, TYPE_BOOL),
-                proto_type, &expr->file_loc);
+                proto_type, true, &expr->file_loc);
         case AST_CHAR_LITERAL:
             return expect_type(context,
                 make_prim_type(context->type_table, TYPE_U8),
-                proto_type, &expr->file_loc);
+                proto_type, true, &expr->file_loc);
         case AST_STR_LITERAL:
             return expect_type(context,
                 make_array_type(context->type_table,
                     make_prim_type(context->type_table, TYPE_U8)),
-                proto_type, &expr->file_loc);
+                proto_type, true, &expr->file_loc);
         case AST_TYPED_EXPR:
             return check_expr(context,
                 expr->typed_expr.left, check_type(context, expr->typed_expr.type, proto_type));
@@ -143,6 +150,14 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* proto_
             if (proto_type->tag != TYPE_UNKNOWN && proto_type->tag != TYPE_TUPLE)
                 return fail_expect(context, "tuple expression", proto_type, true, &expr->file_loc);
             return check_tuple(context, expr, proto_type, check_expr);
+        case AST_IF_EXPR:
+            check_expr(context, expr->if_expr.cond, make_prim_type(context->type_table, TYPE_BOOL));
+            const Type* then_type = check_expr(context, expr->if_expr.then_expr, proto_type);
+            if (expr->if_expr.else_expr) {
+                const Type* else_type = check_expr(context, expr->if_expr.else_expr, proto_type);
+                return merge_types(context->type_table, then_type, else_type, true);
+            }
+            return then_type;
         default:
             assert(false && "invalid expression");
             return make_error_type(context->type_table);
@@ -153,13 +168,15 @@ const Type* check_pattern(TypingContext* context, AstNode* pattern, const Type* 
     switch (pattern->tag) {
         case AST_PATH: {
             if (pattern->path.elems->next || pattern->path.elems->path_elem.type_args)
-                return expect_type(context, proto_type, infer_path(context, pattern), &pattern->file_loc);
+                return expect_type(context, infer_path(context, pattern), proto_type, false, &pattern->file_loc);
             else if (!proto_type->contains_unknown)
                 return proto_type;
             return fail_infer(context, "pattern", &pattern->file_loc);
         }
         case AST_TYPED_PATTERN:
-            proto_type = expect_type(context, proto_type, infer_type(context, pattern->typed_pattern.type), &pattern->file_loc);
+            proto_type = expect_type(context,
+                infer_type(context, pattern->typed_pattern.type),
+                proto_type, false, &pattern->file_loc);
             return check_pattern(context, pattern->typed_pattern.left, proto_type);
         case AST_TUPLE_PATTERN:
             if (proto_type->tag != TYPE_UNKNOWN && proto_type->tag != TYPE_TUPLE)
@@ -171,7 +188,12 @@ const Type* check_pattern(TypingContext* context, AstNode* pattern, const Type* 
     }
 }
 
-static const Type* check_pattern_and_expr(TypingContext* context, AstNode* pattern, AstNode* expr, const Type* proto_type) {
+static const Type* check_pattern_and_expr(
+    TypingContext* context,
+    AstNode* pattern,
+    AstNode* expr,
+    const Type* proto_type)
+{
     if (pattern->tag == AST_TUPLE_PATTERN && expr->tag == AST_TUPLE_EXPR &&
         (proto_type->tag == TYPE_UNKNOWN || proto_type->tag == TYPE_TUPLE))
     {
@@ -182,7 +204,9 @@ static const Type* check_pattern_and_expr(TypingContext* context, AstNode* patte
             AstNode* expr_arg = expr->tuple_expr.args;
             AstNode* pattern_arg = pattern->tuple_pattern.args;
             const Type** arg_types = malloc_or_die(sizeof(Type*) * arg_count);
-            for (size_t i = 0; i < arg_count; ++i, expr_arg = expr_arg->next, pattern_arg = pattern_arg->next) {
+            for (size_t i = 0; i < arg_count;
+                ++i, expr_arg = expr_arg->next, pattern_arg = pattern_arg->next)
+            {
                 const Type* arg_type = proto_type->tag == TYPE_TUPLE
                     ? proto_type->tuple_type.arg_types[i]
                     : make_unknown_type(context->type_table);

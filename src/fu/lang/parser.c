@@ -392,7 +392,12 @@ AstNode* parse_type(Parser* parser) {
     }
 }
 
-static AstNode* parse_struct(Parser* parser, AstNodeTag tag, AstNode* left, AstNode* (*parse_field)(Parser*)) {
+static AstNode* parse_struct(
+    Parser* parser,
+    AstNodeTag tag,
+    AstNode* left,
+    AstNode* (*parse_field)(Parser*))
+{
     eat_token(parser, TOKEN_L_BRACE);
     AstNode* fields = parse_many(parser, TOKEN_R_BRACE, TOKEN_COMMA, parse_field);
     expect_token(parser, TOKEN_R_BRACE);
@@ -477,7 +482,8 @@ static inline AstNode* parse_postfix_expr(Parser* parser, AstNode* (*parse_prima
         }
         FilePos begin = parser->ahead->file_loc.begin;
         skip_token(parser);
-        operand = make_ast_node(parser, &begin, &(AstNode) { .tag = tag, .unary_expr = { .operand = operand } });
+        operand = make_ast_node(parser,
+            &begin, &(AstNode) { .tag = tag, .unary_expr = { .operand = operand } });
     }
 }
 
@@ -505,7 +511,7 @@ static inline AstNode* parse_binary_expr(
         AstNodeTag tag = token_tag_to_binary_expr_tag(parser->ahead->tag);
         if (tag == AST_ERROR)
             break;
-        int next_prec = precedence(tag);
+        int next_prec = get_binary_expr_precedence(tag);
         if (next_prec > prec)
             break;
         if (next_prec < prec)
@@ -544,7 +550,7 @@ static inline AstNode* parse_assign_expr(Parser* parser, AstNode* (*parse_primar
             .binary_expr = { .left = left, .right = right }
         });
     }
-    return parse_binary_expr(parser, left, parse_primary_expr, max_precedence());
+    return parse_binary_expr(parser, left, parse_primary_expr, get_max_binary_expr_precedence());
 }
 
 static AstNode* parse_primary_expr(Parser*, bool);

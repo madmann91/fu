@@ -2,22 +2,16 @@
 #define FU_LANG_TYPES_H
 
 #include "fu/lang/ast.h"
-#include "fu/core/str_pool.h"
-#include "fu/core/hash_table.h"
-
-/*
- * Types are uniquely stored and hashed in a `TypeTable` object, using a process called hash-consing.
- * The idea is that whenever a type that already exists is requested, the existing type is returned,
- * instead of allocating a new copy.
- */
 
 typedef struct Type Type;
+typedef struct TypeTable TypeTable;
 
 typedef enum {
 #define f(name, ...) TYPE_##name,
     AST_PRIM_TYPE_LIST(f)
 #undef f
     TYPE_UNKNOWN,
+    TYPE_NORET,
     TYPE_ERROR,
     TYPE_TUPLE,
     TYPE_ARRAY,
@@ -73,38 +67,19 @@ struct Type {
     };
 };
 
-typedef struct {
-    HashTable types;
-    MemPool* mem_pool;
-    StrPool str_pool;
-    size_t type_count;
-} TypeTable;
-
 bool is_prim_type(TypeTag);
 bool is_nominal_type(TypeTag);
 bool is_float_type(TypeTag);
+bool is_unsigned_int_type(TypeTag);
+bool is_signed_int_type(TypeTag);
 bool is_int_type(TypeTag);
 bool is_int_or_float_type(TypeTag);
-void set_member_name(TypeTable*, Type*, size_t, const char*);
+void set_type_member_name(TypeTable*, Type*, size_t, const char*);
+size_t get_prim_type_bitwidth(TypeTag);
 
-TypeTable new_type_table(MemPool*);
-void free_type_table(TypeTable*);
+const Type* merge_types(TypeTable*, const Type*, const Type*, bool);
 
-Type* make_struct_type(TypeTable*, const char* name, size_t field_count);
-Type* make_enum_type(TypeTable*, const char* name, size_t option_count);
-Type* make_alias_type(TypeTable*, const char* name);
-
-const Type* make_prim_type(TypeTable*, TypeTag);
-const Type* make_unknown_type(TypeTable*);
-const Type* make_error_type(TypeTable*);
-const Type* make_type_param(TypeTable*, const char* name);
-const Type* make_tuple_type(TypeTable*, const Type** arg_types, size_t arg_count);
-const Type* make_unknown_tuple_type(TypeTable*, size_t);
-const Type* make_type_app(TypeTable*, const Type* applied_type, const Type** type_args, size_t arg_count);
-const Type* make_fun_type(TypeTable*, const Type* dom_type, const Type* codom_type);
-const Type* make_array_type(TypeTable*, const Type* elem_type);
-
-const Type* merge_types(TypeTable*, const Type* from, const Type* to);
+void swap_types(const Type**, const Type**);
 
 void print_type(FormatState*, const Type*);
 void dump_type(const Type*);

@@ -7,6 +7,7 @@
 #include "fu/lang/bind.h"
 #include "fu/lang/check.h"
 #include "fu/lang/types.h"
+#include "fu/lang/type_table.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -77,7 +78,7 @@ static bool compile_file(const char* file_name, const Options* options, Log* log
 
     if (options->print_ast) {
         FormatState state = new_format_state("    ", !is_color_supported(stdout));
-        print_ast_node(&state, program);
+        print_ast(&state, program);
         write_format_state(&state, stdout);
         free_format_state(&state);
         printf("\n");

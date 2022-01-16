@@ -12,7 +12,8 @@ add_library(libfu
     lang/bind.c
     lang/check.c
     lang/ast.c
-    lang/types.c)
+    lang/types.c
+    lang/type_table.c)
 
 add_executable(fu driver/main.c)
 

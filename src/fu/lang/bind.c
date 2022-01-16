@@ -54,30 +54,35 @@ static void insert_symbol(Env* env, const char* name, AstNode* decl_site) {
     assert(env->cur_scope);
     Symbol symbol = { .name = name, .decl_site = decl_site };
     uint32_t hash = hash_str(hash_init(), name);
-    bool was_inserted = insert_in_hash_table(&env->cur_scope->symbols, &symbol, hash, sizeof(Symbol), compare_symbols);
+    bool was_inserted = insert_in_hash_table(&env->cur_scope->symbols,
+        &symbol, hash, sizeof(Symbol), compare_symbols);
     if (!was_inserted) {
         log_error(env->log, &decl_site->file_loc, "redefinition of symbol '{s}'",
             (FormatArg[]) { { .s = name } });
-        const Symbol* prev_symbol = find_in_hash_table(&env->cur_scope->symbols, &symbol, hash, sizeof(Symbol), compare_symbols);
+        const Symbol* prev_symbol = find_in_hash_table(&env->cur_scope->symbols,
+            &symbol, hash, sizeof(Symbol), compare_symbols);
         assert(prev_symbol);
         log_note(env->log, &prev_symbol->decl_site->file_loc, "previously declared here", NULL);
     }
 }
 
-static size_t levenshtein_distance(const char* left, const char* right) {
+static size_t levenshtein_distance(const char* left, const char* right, size_t min_dist) {
     if (!*left)  return strlen(right);
     if (!*right) return strlen(left);
+
     if (left[0] == right[0])
-        return levenshtein_distance(left + 1, right + 1);
-    else {
-        size_t a = levenshtein_distance(left + 1, right);
-        size_t b = levenshtein_distance(left, right + 1);
-        size_t c = levenshtein_distance(left + 1, right + 1);
-        size_t min = a;
-        min = min < b ? min : b;
-        min = min < c ? min : c;
-        return 1 + min;
-    }
+        return levenshtein_distance(left + 1, right + 1, min_dist);
+
+    if (min_dist == 0)
+        return 1;
+
+    size_t a = levenshtein_distance(left + 1, right, min_dist - 1);
+    size_t b = levenshtein_distance(left, right + 1, min_dist - 1);
+    size_t c = levenshtein_distance(left + 1, right + 1, min_dist - 1);
+    size_t min = a;
+    min = min < b ? min : b;
+    min = min < c ? min : c;
+    return 1 + min;
 }
 
 static void suggest_similar_symbol(Env* env, const char* name) {
@@ -94,7 +99,7 @@ static void suggest_similar_symbol(Env* env, const char* name) {
         for (size_t i = 0; i < scope->symbols.capacity; i++) {
             if (!is_bucket_occupied(&scope->symbols, i))
                 continue;
-            size_t dist = levenshtein_distance(name, symbols[i].name);
+            size_t dist = levenshtein_distance(name, symbols[i].name, min_dist);
             if (dist < min_dist) {
                 min_dist = dist;
                 similar_name = symbols[i].name;

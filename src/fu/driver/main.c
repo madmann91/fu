@@ -95,7 +95,7 @@ static bool compile_file(const char* file_name, const Options* options, Log* log
     if (log->error_count == 0) {
         TypeTable type_table = new_type_table(&mem_pool);
         TypingContext typing_context = make_typing_context(&type_table, log);
-        check_program(&typing_context, program);
+        infer_program(&typing_context, program);
         free_type_table(&type_table);
     }
 

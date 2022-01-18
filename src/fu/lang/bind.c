@@ -286,7 +286,7 @@ static void bind_path(Env* env, AstNode* path) {
     // Only bind the base of the path
     // (the other elements cannot be bound because types are not yet known).
     AstNode* base = path->path.elems;
-    base->path_elem.decl_site = find_symbol(env, base->path_elem.name, &base->file_loc);
+    path->path.decl_site = find_symbol(env, base->path_elem.name, &base->file_loc);
 
     for (AstNode* elem = path->path.elems; elem; elem = elem->next)
         bind_many(env, elem->path_elem.type_args, bind_type);

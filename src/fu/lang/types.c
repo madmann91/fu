@@ -44,6 +44,45 @@ bool is_int_or_float_type(TypeTag tag) {
     return is_int_type(tag) || is_float_type(tag);
 }
 
+static bool are_all_subtypes(const Type** left_types, const Type** right_types, size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+        if (!is_subtype(left_types[i], right_types[i]))
+            return false;
+    }
+    return true;
+}
+
+bool is_subtype(const Type* left, const Type* right) {
+    if (left == right ||
+        left->tag == TYPE_NORET ||
+        left->tag == TYPE_UNKNOWN ||
+        right->tag == TYPE_UNKNOWN)
+        return true;
+
+    if ((is_signed_int_type(left->tag) && is_signed_int_type(right->tag)) ||
+        (is_unsigned_int_type(left->tag) && is_unsigned_int_type(right->tag)) ||
+        (is_float_type(left->tag) && is_float_type(right->tag)))
+        return get_prim_type_bitwidth(left->tag) <= get_prim_type_bitwidth(right->tag);
+
+    if (left->tag != right->tag)
+        return false;
+
+    if (left->tag == TYPE_TUPLE && left->tuple_type.arg_count == right->tuple_type.arg_count) {
+        return are_all_subtypes(
+            left->tuple_type.arg_types,
+            right->tuple_type.arg_types,
+            left->tuple_type.arg_count);
+    }
+
+    if (left->tag == TYPE_FUN) {
+        return
+            is_subtype(right->fun_type.dom_type, left->fun_type.dom_type) &&
+            is_subtype(left->fun_type.dom_type, right->fun_type.dom_type);
+    }
+
+    return false;
+}
+
 void set_type_member_name(TypeTable* type_table, Type* type, size_t i, const char* name) {
     assert(i < type->struct_type.member_count);
     type->struct_type.member_names[i] = make_str(&type_table->str_pool, name);
@@ -60,77 +99,6 @@ size_t get_prim_type_bitwidth(TypeTag tag) {
             assert(false && "invalid primitive type");
             return 0;
     }
-}
-
-static const Type** merge_many_types(
-    TypeTable* type_table,
-    const Type** from_types,
-    const Type** to_types,
-    size_t count,
-    bool is_join)
-{
-    const Type** merged_types = malloc_or_die(sizeof(Type*) * count);
-    for (size_t i = 0; i < count; ++i)
-        merged_types[i] = merge_types(type_table, from_types[i], to_types[i], is_join);
-    return merged_types;
-}
-
-const Type* merge_types(TypeTable* type_table, const Type* from, const Type* to, bool is_join) {
-    if (from == to) return to;
-    if (to->tag == TYPE_UNKNOWN) return from;
-
-    if ((is_signed_int_type(from->tag) && is_signed_int_type(to->tag)) ||
-        (is_unsigned_int_type(from->tag) && is_unsigned_int_type(to->tag)) ||
-        (is_float_type(from->tag) && is_float_type(to->tag)))
-    {
-        if ((!is_join) ^ (get_prim_type_bitwidth(from->tag) <= get_prim_type_bitwidth(to->tag)))
-            return to;
-    }
-
-    if (from->tag != to->tag || is_nominal_type(from->tag))
-        return make_error_type(type_table);
-
-    switch (from->tag) {
-        case TYPE_TUPLE: {
-            if (from->tuple_type.arg_count != to->tuple_type.arg_count)
-                break;
-            const Type** arg_types = merge_many_types(type_table,
-                from->tuple_type.arg_types, to->tuple_type.arg_types,
-                from->tuple_type.arg_count, is_join);
-            const Type* result = make_tuple_type(type_table, arg_types, from->tuple_type.arg_count);
-            free(arg_types);
-            return result;
-        }
-        case TYPE_APP: {
-            if (from->type_app.arg_count != to->type_app.arg_count)
-                break;
-            const Type** arg_types = merge_many_types(type_table,
-                from->tuple_type.arg_types, to->tuple_type.arg_types,
-                from->tuple_type.arg_count, is_join);
-            const Type* result = make_type_app(type_table,
-                merge_types(type_table, from->type_app.applied_type, to->type_app.applied_type, is_join),
-                arg_types, from->type_app.arg_count);
-            free(arg_types);
-            return result;
-        }
-        case TYPE_ARRAY:
-            return make_array_type(type_table,
-                merge_types(type_table, from->array_type.elem_type, to->array_type.elem_type, is_join));
-        case TYPE_FUN:
-            return make_fun_type(type_table,
-                merge_types(type_table, from->fun_type.dom_type, to->fun_type.dom_type, !is_join),
-                merge_types(type_table, from->fun_type.codom_type, to->fun_type.codom_type, is_join));
-        default:
-            assert(false && "invalid structural type");
-            break;
-    }
-    return make_error_type(type_table);
-}
-
-void swap_types(const Type** left, const Type** right) {
-    const Type* tmp = *left;
-    *left = *right;
-    *right = tmp;
 }
 
 static void print_type_params(FormatState* state, const Type* type_params) {

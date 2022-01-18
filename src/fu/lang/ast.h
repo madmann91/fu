@@ -140,10 +140,12 @@ typedef enum {
 } AstNodeTag;
 
 typedef struct AstNode AstNode;
+typedef struct Type Type;
 
 struct AstNode {
     AstNodeTag tag;
     FileLoc file_loc;
+    const Type* type;
     AstNode* next;
     AstNode* attrs;
     union {
@@ -197,10 +199,10 @@ struct AstNode {
         struct {
             const char* name;
             AstNode* type_args;
-            AstNode* decl_site;
         } path_elem;
         struct {
             AstNode* elems;
+            AstNode* decl_site;
         } path;
         struct {
             const char* name;

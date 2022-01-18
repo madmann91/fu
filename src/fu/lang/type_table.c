@@ -192,14 +192,8 @@ const Type* make_tuple_type(TypeTable* type_table, const Type** arg_types, size_
     });
 }
 
-const Type* make_unknown_tuple_type(TypeTable* type_table, size_t arg_count) {
-    const Type** arg_types = malloc_or_die(sizeof(Type*) * arg_count);
-    const Type* unknown_type = make_unknown_type(type_table);
-    for (size_t i = 0; i < arg_count; ++i)
-        arg_types[i] = unknown_type;
-    const Type* result = make_tuple_type(type_table, arg_types, arg_count);
-    free(arg_types);
-    return result;
+const Type* make_unit_type(TypeTable* type_table) {
+    return make_tuple_type(type_table, NULL, 0);
 }
 
 const Type* make_type_app(TypeTable* type_table, const Type* applied_type, const Type** type_args, size_t arg_count) {

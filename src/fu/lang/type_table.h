@@ -25,7 +25,7 @@ const Type* make_error_type(TypeTable*);
 const Type* make_noret_type(TypeTable*);
 const Type* make_type_param(TypeTable*, const char* name);
 const Type* make_tuple_type(TypeTable*, const Type** arg_types, size_t arg_count);
-const Type* make_unknown_tuple_type(TypeTable*, size_t);
+const Type* make_unit_type(TypeTable*);
 const Type* make_type_app(TypeTable*, const Type* applied_type, const Type** type_args, size_t arg_count);
 const Type* make_fun_type(TypeTable*, const Type* dom_type, const Type* codom_type);
 const Type* make_array_type(TypeTable*, const Type* elem_type);

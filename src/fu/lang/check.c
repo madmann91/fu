@@ -73,22 +73,6 @@ static const Type* fail_infer(TypingContext* context, const char* msg, const Fil
     return make_error_type(context->type_table);
 }
 
-static const Type* expect_int_or_float_literal(
-    TypingContext* context, const Type* type, const FileLoc* file_loc)
-{
-    if (!is_int_or_float_type(type->tag))
-        return fail_expect(context, "integer or floating-point literal", type, file_loc);
-    return type;
-}
-
-static const Type* expect_float_literal(
-    TypingContext* context, const Type* type, const FileLoc* file_loc)
-{
-    if (!is_float_type(type->tag))
-        return fail_expect(context, "floating-point literal", type, file_loc);
-    return type;
-}
-
 static const Type* infer_path(TypingContext* context, AstNode* path) {
     assert(path->path.decl_site->type);
     return path->path.decl_site->type;
@@ -162,6 +146,8 @@ static const Type* check_if_expr(TypingContext* context, AstNode* if_expr, const
 
 const Type* infer_expr(TypingContext* context, AstNode* expr) {
     switch (expr->tag) {
+        case AST_PATH:
+            return expr->type = infer_path(context, expr);
         case AST_INT_LITERAL:
             return expr->type = make_prim_type(context->type_table, TYPE_I32);
         case AST_FLOAT_LITERAL:
@@ -179,10 +165,29 @@ const Type* infer_expr(TypingContext* context, AstNode* expr) {
                 infer_type(context, expr->typed_expr.type));
         case AST_IF_EXPR:
             return check_if_expr(context, expr, make_unknown_type(context->type_table));
+        case AST_BLOCK_EXPR: {
+            const Type* last_type = NULL;
+            for (AstNode* stmt = expr->block_expr.stmts; stmt; stmt = stmt->next)
+                last_type = infer_stmt(context, stmt);
+            return expr->type = !last_type || expr->block_expr.ends_with_semicolon
+                ? make_unit_type(context->type_table) : last_type;
+        }
         default:
             assert(false && "invalid expression");
             return make_error_type(context->type_table);
     }
+}
+
+static const Type* check_int_literal(TypingContext* context, AstNode* literal, const Type* expected_type) {
+    if (!is_int_or_float_type(expected_type->tag))
+        return literal->type = fail_expect(context, "integer literal", expected_type, &literal->file_loc);
+    return literal->type = expected_type;
+}
+
+static const Type* check_float_literal(TypingContext* context, AstNode* literal, const Type* expected_type) {
+    if (!is_float_type(expected_type->tag))
+        return literal->type = fail_expect(context, "floating-point literal", expected_type, &literal->file_loc);
+    return literal->type = expected_type;
 }
 
 const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expected_type) {
@@ -193,15 +198,39 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
             return expr->type = expect_type(context,
                 infer_path(context, expr), expected_type, true, &expr->file_loc);
         case AST_INT_LITERAL:
-            return expr->type = expect_int_or_float_literal(context, expected_type, &expr->file_loc);
+            return check_int_literal(context, expr, expected_type);
+        case AST_FLOAT_LITERAL:
+            return check_float_literal(context, expr, expected_type);
         case AST_TUPLE_EXPR:
             if (expected_type->tag == TYPE_TUPLE)
                 return check_tuple(context, expr, expected_type, check_expr);
             return expr->type = fail_expect(context, "tuple expression", expected_type, &expr->file_loc);
         case AST_IF_EXPR:
             return check_if_expr(context, expr, expected_type);
+        case AST_BLOCK_EXPR: {
+            if (expr->block_expr.ends_with_semicolon || !expr->block_expr.stmts)
+                return expect_type(context, infer_expr(context, expr), expected_type, true, &expr->file_loc);
+            const Type* last_type = NULL;
+            for (AstNode* stmt = expr->block_expr.stmts; stmt; stmt = stmt->next)
+                last_type = stmt->next ? infer_stmt(context, stmt) : check_stmt(context, stmt, expected_type);
+            return last_type;
+        }
         default:
             return expect_type(context, infer_expr(context, expr), expected_type, true, &expr->file_loc);
+    }
+}
+
+const Type* infer_stmt(TypingContext* context, AstNode* stmt) {
+    switch (stmt->tag) {
+        default:
+            return infer_expr(context, stmt);
+    }
+}
+
+const Type* check_stmt(TypingContext* context, AstNode* stmt, const Type* expected_type) {
+    switch (stmt->tag) {
+        default:
+            return check_expr(context, stmt, expected_type);
     }
 }
 
@@ -209,8 +238,8 @@ const Type* infer_pattern(TypingContext* context, AstNode* pattern) {
     switch (pattern->tag) {
         case AST_PATH:
             if (pattern->path.decl_site)
-                return infer_path(context, pattern);
-            return fail_infer(context, "pattern", &pattern->file_loc);
+                return pattern->type = infer_path(context, pattern);
+            return pattern->type = fail_infer(context, "pattern", &pattern->file_loc);
         case AST_TYPED_PATTERN:
             return pattern->type = check_pattern(context,
                 pattern->typed_pattern.left,
@@ -225,6 +254,10 @@ const Type* check_pattern(TypingContext* context, AstNode* pattern, const Type* 
     if (expected_type->tag == TYPE_UNKNOWN)
         return infer_pattern(context, pattern);
     switch (pattern->tag) {
+        case AST_INT_LITERAL:
+            return check_int_literal(context, pattern, expected_type);
+        case AST_FLOAT_LITERAL:
+            return check_float_literal(context, pattern, expected_type);
         case AST_TUPLE_PATTERN:
             if (expected_type->tag == TYPE_TUPLE)
                 return check_tuple(context, pattern, expected_type, check_pattern);
@@ -276,50 +309,61 @@ static const Type* check_pattern_and_expr(
     return check_pattern(context, pattern, check_expr(context, expr, expected_type));
 }
 
-static const Type* check_const_or_var_decl(TypingContext* context, AstNode* decl, const Type* expected_type) {
-    return check_pattern_and_expr(context, decl->var_decl.pattern, decl->var_decl.init, expected_type);
+static const Type* infer_const_or_var_decl(TypingContext* context, AstNode* decl) {
+    return check_pattern_and_expr(context,
+        decl->var_decl.pattern,
+        decl->var_decl.init,
+        make_unknown_type(context->type_table));
 }
 
-static const Type* check_struct_decl(TypingContext* context, AstNode* struct_decl, const Type* expected_type) {
+static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_decl) {
     // TODO
     return make_error_type(context->type_table);
 }
 
-static const Type* check_enum_decl(TypingContext* context, AstNode* enum_decl, const Type* expected_type) {
+static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
     // TODO
     return make_error_type(context->type_table);
 }
 
-static const Type* check_type_decl(TypingContext* context, AstNode* type_decl, const Type* expected_type) {
+static const Type* infer_type_decl(TypingContext* context, AstNode* type_decl) {
     // TODO
     return make_error_type(context->type_table);
 }
 
-static const Type* check_fun_decl(TypingContext* context, AstNode* fun_decl, const Type* expected_type) {
-    // TODO
-    return make_error_type(context->type_table);
+static const Type* infer_fun_decl(TypingContext* context, AstNode* fun_decl) {
+    const Type* dom_type = infer_pattern(context, fun_decl->fun_decl.param);
+    if (fun_decl->fun_decl.ret_type) {
+        const Type* codom_type = infer_type(context, fun_decl->fun_decl.ret_type);
+        // Set the function type now in case the function is recursive
+        fun_decl->type = make_fun_type(context->type_table, dom_type, codom_type);
+        check_expr(context, fun_decl->fun_decl.body, codom_type);
+        return fun_decl->type;
+    }
+    const Type* codom_type = infer_expr(context, fun_decl->fun_decl.body);
+    return fun_decl->type = make_fun_type(context->type_table, dom_type, codom_type);
 }
 
-const Type* check_decl(TypingContext* context, AstNode* decl, const Type* expected_type) {
+const Type* infer_decl(TypingContext* context, AstNode* decl) {
     switch (decl->tag) {
         case AST_FUN_DECL:
-            return check_fun_decl(context, decl, expected_type);
+            return infer_fun_decl(context, decl);
         case AST_STRUCT_DECL:
-            return check_struct_decl(context, decl, expected_type);
+            return infer_struct_decl(context, decl);
         case AST_ENUM_DECL:
-            return check_enum_decl(context, decl, expected_type);
+            return infer_enum_decl(context, decl);
         case AST_TYPE_DECL:
-            return check_type_decl(context, decl, expected_type);
+            return infer_type_decl(context, decl);
         case AST_VAR_DECL:
         case AST_CONST_DECL:
-            return check_const_or_var_decl(context, decl, expected_type);
+            return infer_const_or_var_decl(context, decl);
         default:
             assert(false && "invalid declaration");
-            return expected_type;
+            return make_error_type(context->type_table);
     }
 }
 
 void infer_program(TypingContext* context, AstNode* program) {
     for (AstNode* decl = program->program.decls; decl; decl = decl->next)
-        check_decl(context, decl, make_unknown_type(context->type_table));
+        infer_decl(context, decl);
 }

@@ -77,7 +77,7 @@ static bool compile_file(const char* file_name, const Options* options, Log* log
         return false;
 
     if (options->print_ast) {
-        FormatState state = new_format_state("    ", !is_color_supported(stdout));
+        FormatState state = new_format_state("    ", options->no_color || !is_color_supported(stdout));
         print_ast(&state, program);
         write_format_state(&state, stdout);
         free_format_state(&state);
@@ -93,10 +93,11 @@ static bool compile_file(const char* file_name, const Options* options, Log* log
 
     // Check types
     if (log->error_count == 0) {
-        TypeTable type_table = new_type_table(&mem_pool);
-        TypingContext typing_context = make_typing_context(&type_table, log);
-        infer_program(&typing_context, program);
-        free_type_table(&type_table);
+        TypeTable* type_table = new_type_table(&mem_pool);
+        TypingContext context = new_typing_context(type_table, log);
+        infer_program(&context, program);
+        free_typing_context(&context);
+        free_type_table(type_table);
     }
 
     free_mem_pool(&mem_pool);

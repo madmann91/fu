@@ -1,12 +1,40 @@
 #include "fu/lang/check.h"
 #include "fu/lang/type_table.h"
 #include "fu/core/alloc.h"
+#include "fu/core/hash.h"
 
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 
-TypingContext make_typing_context(TypeTable* type_table, Log* log) {
-    return (TypingContext) { .log = log, .type_table = type_table };
+#define DEFAULT_DECL_CAPACITY 8
+
+TypingContext new_typing_context(TypeTable* type_table, Log* log) {
+    return (TypingContext) {
+        .log = log,
+        .type_table = type_table,
+        .visited_decls = new_hash_table(DEFAULT_DECL_CAPACITY, sizeof(AstNode*))
+    };
+}
+
+void free_typing_context(TypingContext* context) {
+    free_hash_table(&context->visited_decls);
+}
+
+static bool compare_decls(const void* left, const void* right) {
+    return !memcmp(left, right, sizeof(AstNode*));
+}
+
+static bool push_decl(TypingContext* context, AstNode* decl) {
+    return insert_in_hash_table(&context->visited_decls,
+        &decl, hash_ptr(hash_init(), decl), sizeof(AstNode*), compare_decls);
+}
+
+static void pop_decl(TypingContext* context, AstNode* decl) {
+    const AstNode** ptr = find_in_hash_table(&context->visited_decls,
+        &decl, hash_ptr(hash_init(), decl), sizeof(AstNode*), compare_decls);
+    assert(ptr && "trying to pop an unvisited declaration");
+    remove_from_hash_table(&context->visited_decls, ptr, sizeof(AstNode*));
 }
 
 static const Type** check_many(
@@ -73,9 +101,22 @@ static const Type* fail_infer(TypingContext* context, const char* msg, const Fil
     return make_error_type(context->type_table);
 }
 
+static const Type* infer_decl_site(TypingContext* context, AstNode* decl_site) {
+    if (!decl_site->type) {
+        if (!push_decl(context, decl_site)) {
+            log_error(context->log, &decl_site->file_loc, "cannot infer type for recursive declaration", NULL);
+            if (decl_site->tag == AST_FUN_DECL)
+                log_note(context->log, NULL, "adding a return type annotation may fix the problem", NULL);
+            return decl_site->type = make_error_type(context->type_table);
+        }
+        infer_decl(context, decl_site);
+        pop_decl(context, decl_site);
+    }
+    return decl_site->type;
+}
+
 static const Type* infer_path(TypingContext* context, AstNode* path) {
-    assert(path->path.decl_site->type);
-    return path->path.decl_site->type;
+    return infer_decl_site(context, path->path.decl_site);
 }
 
 static const Type* infer_tuple(
@@ -144,6 +185,15 @@ static const Type* check_if_expr(TypingContext* context, AstNode* if_expr, const
     return if_expr->type = then_type;
 }
 
+static const Type* check_call_expr(TypingContext* context, AstNode* call_expr, const Type* expected_type) {
+    const Type* callee_type = check_expr(context, call_expr->call_expr.callee,
+        make_fun_type(context->type_table, make_unknown_type(context->type_table), expected_type));
+    // TODO: Type arguments
+    if (callee_type->contains_error)
+        return make_error_type(context->type_table);
+    return callee_type->fun_type.codom_type;
+}
+
 const Type* infer_expr(TypingContext* context, AstNode* expr) {
     switch (expr->tag) {
         case AST_PATH:
@@ -172,6 +222,8 @@ const Type* infer_expr(TypingContext* context, AstNode* expr) {
             return expr->type = !last_type || expr->block_expr.ends_with_semicolon
                 ? make_unit_type(context->type_table) : last_type;
         }
+        case AST_CALL_EXPR:
+            return check_call_expr(context, expr, make_unknown_type(context->type_table));
         default:
             assert(false && "invalid expression");
             return make_error_type(context->type_table);
@@ -207,6 +259,8 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
             return expr->type = fail_expect(context, "tuple expression", expected_type, &expr->file_loc);
         case AST_IF_EXPR:
             return check_if_expr(context, expr, expected_type);
+        case AST_CALL_EXPR:
+            return check_call_expr(context, expr, expected_type);
         case AST_BLOCK_EXPR: {
             if (expr->block_expr.ends_with_semicolon || !expr->block_expr.stmts)
                 return expect_type(context, infer_expr(context, expr), expected_type, true, &expr->file_loc);

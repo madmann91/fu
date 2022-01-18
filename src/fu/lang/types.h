@@ -75,7 +75,6 @@ bool is_signed_int_type(TypeTag);
 bool is_int_type(TypeTag);
 bool is_int_or_float_type(TypeTag);
 bool is_subtype(const Type*, const Type*);
-void set_type_member_name(TypeTable*, Type*, size_t, const char*);
 size_t get_prim_type_bitwidth(TypeTag);
 
 void print_type(FormatState*, const Type*);

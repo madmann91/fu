@@ -1,19 +1,15 @@
 #ifndef FU_LANG_TYPE_TABLE_H
 #define FU_LANG_TYPE_TABLE_H
 
-#include "fu/core/hash_table.h"
-#include "fu/core/str_pool.h"
 #include "fu/lang/types.h"
 
-typedef struct TypeTable {
-    HashTable types;
-    MemPool* mem_pool;
-    StrPool str_pool;
-    size_t type_count;
-} TypeTable;
+typedef struct TypeTable TypeTable;
+typedef struct MemPool MemPool;
 
-TypeTable new_type_table(MemPool*);
+TypeTable* new_type_table(MemPool*);
 void free_type_table(TypeTable*);
+
+void set_type_member_name(TypeTable*, Type*, size_t, const char*);
 
 Type* make_struct_type(TypeTable*, const char* name, size_t field_count);
 Type* make_enum_type(TypeTable*, const char* name, size_t option_count);

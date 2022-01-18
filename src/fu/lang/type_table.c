@@ -1,6 +1,8 @@
 #include "fu/lang/type_table.h"
 #include "fu/core/mem_pool.h"
+#include "fu/core/str_pool.h"
 #include "fu/core/alloc.h"
+#include "fu/core/hash_table.h"
 #include "fu/core/hash.h"
 #include "fu/core/utils.h"
 
@@ -10,38 +12,24 @@
 
 #define DEFAULT_TYPE_TABLE_CAPACITY 16
 
-TypeTable new_type_table(MemPool* mem_pool) {
-    return (TypeTable) {
-        .types = new_hash_table(DEFAULT_TYPE_TABLE_CAPACITY, sizeof(Type*)),
-        .str_pool = new_str_pool(mem_pool),
-        .mem_pool = mem_pool
-    };
-}
+enum {
+#define f(name, ...) PRIM_TYPE_##name,
+    AST_PRIM_TYPE_LIST(f)
+#undef f
+    PRIM_TYPE_COUNT
+};
 
-void free_type_table(TypeTable* type_table) {
-    free_hash_table(&type_table->types);
-    free_str_pool(&type_table->str_pool); 
-}
-
-static Type* make_struct_or_enum_type(TypeTable* type_table, TypeTag tag, const char* name, size_t member_count) {
-    Type* type = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type));
-    type->tag = tag;
-    type->struct_type.name = make_str(&type_table->str_pool, name);
-    type->struct_type.members = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * member_count);
-    type->struct_type.member_names = alloc_from_mem_pool(type_table->mem_pool, sizeof(char*) * member_count);
-    type->struct_type.member_count = member_count;
-    type->struct_type.child_types = NULL;
-    type->id = type_table->type_count++;
-    return type;
-}
-
-Type* make_struct_type(TypeTable* type_table, const char* name, size_t field_count) {
-    return make_struct_or_enum_type(type_table, TYPE_STRUCT, name, field_count);
-}
-
-Type* make_enum_type(TypeTable* type_table, const char* name, size_t option_count) {
-    return make_struct_or_enum_type(type_table, TYPE_ENUM, name, option_count);
-}
+struct TypeTable {
+    HashTable types;
+    MemPool* mem_pool;
+    StrPool str_pool;
+    size_t type_count;
+    const Type* prim_types[PRIM_TYPE_COUNT];
+    const Type* unknown_type;
+    const Type* noret_type;
+    const Type* unit_type;
+    const Type* error_type;
+};
 
 static uint32_t hash_type(uint32_t hash, const Type* type) {
     hash = hash_uint32(hash, type->tag);
@@ -163,21 +151,66 @@ static const Type* get_or_insert_type(TypeTable* type_table, const Type* type) {
     return new_type;
 }
 
+TypeTable* new_type_table(MemPool* mem_pool) {
+    TypeTable* type_table = malloc_or_die(sizeof(TypeTable));
+    type_table->types = new_hash_table(DEFAULT_TYPE_TABLE_CAPACITY, sizeof(Type*));
+    type_table->str_pool = new_str_pool(mem_pool);
+    type_table->mem_pool = mem_pool;
+    for (size_t i = 0; i < PRIM_TYPE_COUNT; ++i)
+        type_table->prim_types[i] = get_or_insert_type(type_table, &(Type) { .tag = i });
+    type_table->unknown_type = get_or_insert_type(type_table, &(Type) { .tag = TYPE_UNKNOWN });
+    type_table->noret_type = get_or_insert_type(type_table, &(Type) { .tag = TYPE_NORET });
+    type_table->error_type = get_or_insert_type(type_table, &(Type) { .tag = TYPE_ERROR });
+    type_table->unit_type = make_tuple_type(type_table, NULL, 0);
+    return type_table;
+}
+
+void free_type_table(TypeTable* type_table) {
+    free_hash_table(&type_table->types);
+    free_str_pool(&type_table->str_pool); 
+    free(type_table);
+}
+
+void set_type_member_name(TypeTable* type_table, Type* type, size_t i, const char* name) {
+    assert(i < type->struct_type.member_count);
+    type->struct_type.member_names[i] = make_str(&type_table->str_pool, name);
+}
+
+static Type* make_struct_or_enum_type(TypeTable* type_table, TypeTag tag, const char* name, size_t member_count) {
+    Type* type = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type));
+    type->tag = tag;
+    type->struct_type.name = make_str(&type_table->str_pool, name);
+    type->struct_type.members = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * member_count);
+    type->struct_type.member_names = alloc_from_mem_pool(type_table->mem_pool, sizeof(char*) * member_count);
+    type->struct_type.member_count = member_count;
+    type->struct_type.child_types = NULL;
+    type->id = type_table->type_count++;
+    return type;
+}
+
+Type* make_struct_type(TypeTable* type_table, const char* name, size_t field_count) {
+    return make_struct_or_enum_type(type_table, TYPE_STRUCT, name, field_count);
+}
+
+Type* make_enum_type(TypeTable* type_table, const char* name, size_t option_count) {
+    return make_struct_or_enum_type(type_table, TYPE_ENUM, name, option_count);
+}
+
 const Type* make_prim_type(TypeTable* type_table, TypeTag tag) {
     assert(is_prim_type(tag));
-    return get_or_insert_type(type_table, &(Type) { .tag = tag });
+    return type_table->prim_types[tag];
 }
 
 const Type* make_unknown_type(TypeTable* type_table) {
-    return get_or_insert_type(type_table, &(Type) { .tag = TYPE_UNKNOWN });
+    return type_table->unknown_type;
 }
 
 const Type* make_error_type(TypeTable* type_table) {
-    return get_or_insert_type(type_table, &(Type) { .tag = TYPE_ERROR });
+    return type_table->error_type;
 }
 
 const Type* make_noret_type(TypeTable* type_table) {
-    return get_or_insert_type(type_table, &(Type) { .tag = TYPE_NORET });
+    return type_table->noret_type;
 }
 
 const Type* make_type_param(TypeTable* type_table, const char* name) {
@@ -193,7 +226,7 @@ const Type* make_tuple_type(TypeTable* type_table, const Type** arg_types, size_
 }
 
 const Type* make_unit_type(TypeTable* type_table) {
-    return make_tuple_type(type_table, NULL, 0);
+    return type_table->unit_type;
 }
 
 const Type* make_type_app(TypeTable* type_table, const Type* applied_type, const Type** type_args, size_t arg_count) {

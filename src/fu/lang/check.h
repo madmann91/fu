@@ -2,6 +2,7 @@
 #define FU_LANG_CHECK_H
 
 #include "fu/lang/types.h"
+#include "fu/core/hash_table.h"
 
 /*
  * The type-checker is an implementation of a bidirectional type-checking algorithm.
@@ -11,9 +12,11 @@
 typedef struct TypingContext {
     Log* log;
     TypeTable* type_table;
+    HashTable visited_decls;
 } TypingContext;
 
-TypingContext make_typing_context(TypeTable*, Log*);
+TypingContext new_typing_context(TypeTable*, Log*);
+void free_typing_context(TypingContext*);
 
 const Type* infer_stmt(TypingContext*, AstNode*);
 const Type* check_stmt(TypingContext*, AstNode*, const Type*);

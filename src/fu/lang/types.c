@@ -83,11 +83,6 @@ bool is_subtype(const Type* left, const Type* right) {
     return false;
 }
 
-void set_type_member_name(TypeTable* type_table, Type* type, size_t i, const char* name) {
-    assert(i < type->struct_type.member_count);
-    type->struct_type.member_names[i] = make_str(&type_table->str_pool, name);
-}
-
 size_t get_prim_type_bitwidth(TypeTag tag) {
     switch (tag) {
         case TYPE_BOOL: return 1;

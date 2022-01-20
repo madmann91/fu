@@ -20,6 +20,7 @@ jobs:
       run: pip3 install meson ninja
 
     - name: Create Build Environment
+      shell: bash
       run: meson setup builddir
 
     - name: Build

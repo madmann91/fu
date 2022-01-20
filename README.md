@@ -15,10 +15,9 @@ This language and implementation has the following goals:
 
 To build Fu, just type the following commands:
 
-    mkdir build
-    cd build
-    cmake .. -DCMAKE_BUILD_TYPE=<Debug|Release>
-    make
+    meson setup builddir
+    cd builddir
+    meson compile
 
 ## Documentation
 

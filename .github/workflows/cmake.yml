@@ -20,15 +20,16 @@ jobs:
       run: pip3 install meson ninja
 
     - name: Create Build Environment
+      working-directory: ${{github.workspace}}
       shell: bash
       run: meson setup builddir
 
     - name: Build
-      working-directory: ${{runner.workspace}}/builddir
+      working-directory: ${{github.workspace}}/builddir
       shell: bash
       run: meson compile
 
     - name: Test
-      working-directory: ${{runner.workspace}}/builddir
+      working-directory: ${{github.workspace}}/builddir
       shell: bash
       run: meson test

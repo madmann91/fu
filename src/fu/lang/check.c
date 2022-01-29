@@ -2,6 +2,7 @@
 #include "fu/lang/type_table.h"
 #include "fu/core/alloc.h"
 #include "fu/core/hash.h"
+#include "fu/core/mem_pool.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -9,10 +10,11 @@
 
 #define DEFAULT_DECL_CAPACITY 8
 
-TypingContext new_typing_context(TypeTable* type_table, Log* log) {
+TypingContext new_typing_context(TypeTable* type_table, MemPool* mem_pool, Log* log) {
     return (TypingContext) {
         .log = log,
         .type_table = type_table,
+        .mem_pool = mem_pool,
         .visited_decls = new_hash_table(DEFAULT_DECL_CAPACITY, sizeof(AstNode*))
     };
 }
@@ -69,8 +71,8 @@ static const Type* expect_type(
     bool is_upper_bound,
     const FileLoc* file_loc)
 {
-    bool matches_bound = is_upper_bound ? is_subtype(type, expected_type) : is_subtype(expected_type, type);
-    if (!matches_bound && !expected_type->contains_error && !type->contains_error) {
+    bool matches_type = is_upper_bound ? is_subtype(type, expected_type) : is_subtype(expected_type, type);
+    if (!matches_type && !expected_type->contains_error && !type->contains_error) {
         log_error(context->log, file_loc, "expected {s} type '{t}', but got type '{t}'",
             (FormatArg[]) {
                 { .s = is_upper_bound ? "at most" : "at least" },
@@ -142,7 +144,7 @@ static const Type* check_tuple(
     size_t arg_count = get_ast_list_length(tuple->tuple_expr.args);
     if (expected_type->tuple_type.arg_count != arg_count) {
         log_error(context->log, &tuple->file_loc,
-            "expected tuple with {u64} argument(s), but got {u64}", 
+            "expected tuple with {u64} argument(s), but got {u64}",
             (FormatArg[]) { { .u64 = expected_type->tuple_type.arg_count }, { .u64 = arg_count } });
         return make_error_type(context->type_table);
     }
@@ -156,17 +158,30 @@ static const Type* check_tuple(
     return tuple->type;
 }
 
-const Type* infer_type(TypingContext* context, AstNode* type) {
+
+static const Type* infer_type_with_noret(TypingContext* context, AstNode* type, bool accept_noret) {
     switch (type->tag) {
 #define f(name, ...) case AST_TYPE_##name: return make_prim_type(context->type_table, TYPE_##name);
         AST_PRIM_TYPE_LIST(f)
 #undef f
+        case AST_NORET_TYPE:
+            if (!accept_noret)
+                log_error(context->log, &type->file_loc, "type '!' can only be used as a return type", NULL);
+            return make_noret_type(context->type_table);
         case AST_TUPLE_TYPE:
             return infer_tuple(context, type, infer_type);
+        case AST_FUN_TYPE:
+            return make_fun_type(context->type_table,
+                infer_type(context, type->fun_type.dom_type),
+                infer_type_with_noret(context, type->fun_type.codom_type, true));
         default:
             assert(false && "invalid type");
             return make_error_type(context->type_table);
     }
+}
+
+const Type* infer_type(TypingContext* context, AstNode* type) {
+    return infer_type_with_noret(context, type, false);
 }
 
 static const Type* check_cond(TypingContext* context, AstNode* cond) {
@@ -185,13 +200,63 @@ static const Type* check_if_expr(TypingContext* context, AstNode* if_expr, const
     return if_expr->type = then_type;
 }
 
-static const Type* check_call_expr(TypingContext* context, AstNode* call_expr, const Type* expected_type) {
-    const Type* callee_type = check_expr(context, call_expr->call_expr.callee,
-        make_fun_type(context->type_table, make_unknown_type(context->type_table), expected_type));
-    // TODO: Type arguments
-    if (callee_type->contains_error)
+static const Type* check_fun_expr(
+    TypingContext* context,
+    AstNode* fun_expr,
+    const Type* dom_type,
+    const Type* codom_type)
+{
+    dom_type = check_pattern(context, fun_expr->fun_expr.param, dom_type);
+    if (fun_expr->fun_expr.ret_type) {
+        codom_type = expect_type(context,
+            infer_type(context, fun_expr->fun_expr.ret_type),
+            codom_type, true, &fun_expr->fun_expr.ret_type->file_loc);
+    }
+    const Type* body_type = check_expr(context, fun_expr->fun_expr.body, codom_type);
+    if (!fun_expr->fun_expr.ret_type)
+        codom_type = body_type;
+    return fun_expr->type = make_fun_type(context->type_table, dom_type, codom_type);
+}
+
+static const Type* check_call(
+    TypingContext* context,
+    AstNode* call_or_op,
+    AstNode* arg,
+    const char* msg,
+    const Type* callee_type,
+    const Type* expected_type)
+{
+    if (callee_type->tag != TYPE_FUN) {
+        log_error(context->log, &call_or_op->file_loc, "expected function type in {s}, but got type '{t}'",
+            (FormatArg[]) { { .s = msg }, { .t = callee_type } });
         return make_error_type(context->type_table);
-    return callee_type->fun_type.codom_type;
+    }
+    assert(callee_type->tag == TYPE_FUN);
+    check_expr(context, arg, callee_type->fun_type.dom_type);
+    return expect_type(context,
+        callee_type->fun_type.codom_type, expected_type, true, &call_or_op->file_loc);
+}
+
+static const Type* check_call_expr(TypingContext* context, AstNode* call_expr, const Type* expected_type) {
+    const Type* callee_type = infer_expr(context, call_expr->call_expr.callee);
+    return call_expr->type = check_call(context,
+        call_expr, call_expr->call_expr.arg, "function call", callee_type, expected_type);
+}
+
+static const Type* check_binary_expr(TypingContext* context, AstNode* expr, const Type* expected_type) {
+    const char* fun_name = ast_node_tag_to_binary_expr_fun_name(expr->tag);
+    assert(fun_name && "binary operation is not overloadable");
+    const Type* left_type = infer_expr(context, expr->binary_expr.left);
+    const Type* callee_type = get_member_type_by_name(left_type, fun_name);
+    return expr->type = check_call(context,
+        expr, expr->binary_expr.right, "binary operator call", callee_type, expected_type);
+}
+
+static const Type* infer_logic_expr(TypingContext* context, AstNode* expr) {
+    const Type* bool_type = make_prim_type(context->type_table, TYPE_BOOL);
+    check_expr(context, expr->binary_expr.left, bool_type);
+    check_expr(context, expr->binary_expr.right, bool_type);
+    return bool_type;
 }
 
 const Type* infer_expr(TypingContext* context, AstNode* expr) {
@@ -224,6 +289,24 @@ const Type* infer_expr(TypingContext* context, AstNode* expr) {
         }
         case AST_CALL_EXPR:
             return check_call_expr(context, expr, make_unknown_type(context->type_table));
+        case AST_FUN_EXPR:
+            return check_fun_expr(context, expr,
+                make_unknown_type(context->type_table),
+                make_unknown_type(context->type_table));
+        case AST_BREAK_EXPR:
+        case AST_CONTINUE_EXPR:
+            return make_fun_type(context->type_table,
+                make_unit_type(context->type_table),
+                make_noret_type(context->type_table));
+#define f(name, ...) case AST_##name##_EXPR:
+AST_ARITH_EXPR_LIST(f)
+AST_BIT_EXPR_LIST(f)
+AST_SHIFT_EXPR_LIST(f)
+AST_CMP_EXPR_LIST(f)
+        return check_binary_expr(context, expr, make_unknown_type(context->type_table));
+AST_LOGIC_EXPR_LIST(f)
+        return infer_logic_expr(context, expr);
+#undef f
         default:
             assert(false && "invalid expression");
             return make_error_type(context->type_table);
@@ -267,8 +350,22 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
             const Type* last_type = NULL;
             for (AstNode* stmt = expr->block_expr.stmts; stmt; stmt = stmt->next)
                 last_type = stmt->next ? infer_stmt(context, stmt) : check_stmt(context, stmt, expected_type);
-            return last_type;
+            return expr->type = last_type;
         }
+        case AST_FUN_EXPR: {
+            if (expected_type->tag != TYPE_FUN)
+                return expr->type = fail_expect(context, "function expression", expected_type, &expr->file_loc);
+            return check_fun_expr(context, expr,
+                expected_type->fun_type.dom_type,
+                expected_type->fun_type.codom_type);
+        }
+#define f(name, ...) case AST_##name##_EXPR:
+AST_ARITH_EXPR_LIST(f)
+AST_BIT_EXPR_LIST(f)
+AST_SHIFT_EXPR_LIST(f)
+AST_CMP_EXPR_LIST(f)
+        return check_binary_expr(context, expr, expected_type);
+#undef f
         default:
             return expect_type(context, infer_expr(context, expr), expected_type, true, &expr->file_loc);
     }
@@ -276,6 +373,18 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
 
 const Type* infer_stmt(TypingContext* context, AstNode* stmt) {
     switch (stmt->tag) {
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+        case AST_TYPE_DECL:
+        case AST_STRUCT_DECL:
+        case AST_ENUM_DECL:
+        case AST_FUN_DECL:
+            infer_decl(context, stmt);
+            return make_unit_type(context->type_table);
+        case AST_WHILE_LOOP:
+            check_cond(context, stmt->while_loop.cond);
+            check_expr(context, stmt->while_loop.body, make_unit_type(context->type_table));
+            return make_unit_type(context->type_table);
         default:
             return infer_expr(context, stmt);
     }
@@ -284,7 +393,7 @@ const Type* infer_stmt(TypingContext* context, AstNode* stmt) {
 const Type* check_stmt(TypingContext* context, AstNode* stmt, const Type* expected_type) {
     switch (stmt->tag) {
         default:
-            return check_expr(context, stmt, expected_type);
+            return expect_type(context, infer_stmt(context, stmt), expected_type, true, &stmt->file_loc);
     }
 }
 
@@ -298,6 +407,8 @@ const Type* infer_pattern(TypingContext* context, AstNode* pattern) {
             return pattern->type = check_pattern(context,
                 pattern->typed_pattern.left,
                 infer_type(context, pattern->typed_pattern.type));
+        case AST_TUPLE_PATTERN:
+            return pattern->type = infer_tuple(context, pattern, infer_pattern);
         default:
             assert(false && "invalid pattern");
             return make_error_type(context->type_table);

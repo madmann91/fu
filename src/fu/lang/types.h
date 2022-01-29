@@ -53,7 +53,7 @@ struct Type {
         } type_param;
         struct {
             const char* name;
-            const Type** members;
+            const Type** member_types;
             const char** member_names;
             size_t member_count;
             const Type* child_types;
@@ -76,6 +76,9 @@ bool is_int_type(TypeTag);
 bool is_int_or_float_type(TypeTag);
 bool is_subtype(const Type*, const Type*);
 size_t get_prim_type_bitwidth(TypeTag);
+const Type* join_of_types(const Type*, const Type*);
+size_t get_member_index_by_name(const Type*, const char*);
+const Type* get_member_type_by_name(const Type*, const char*);
 
 void print_type(FormatState*, const Type*);
 void dump_type(const Type*);

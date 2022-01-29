@@ -21,6 +21,7 @@ typedef struct Log {
     FormatState* state;
     size_t error_count;
     size_t warning_count;
+    size_t max_errors;
     bool show_diagnostics;
 } Log;
 

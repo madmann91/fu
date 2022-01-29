@@ -24,7 +24,8 @@ Log new_log(FormatState* state) {
     return (Log) {
         .file_cache = new_hash_table(DEFAULT_FILE_CACHE_CAPACITY, sizeof(FileEntry)),
         .show_diagnostics = true,
-        .state = state
+        .state = state,
+        .max_errors = SIZE_MAX
     };
 }
 
@@ -190,6 +191,9 @@ static void print_msg(
     const char* format_str,
     const FormatArg* args)
 {
+    if (msg_type == LOG_ERROR && log->error_count >= log->max_errors)
+        return;
+
     if (msg_type == LOG_ERROR && log->error_count > 0)
         format(log->state, "\n", NULL);
     else if (msg_type == LOG_WARNING && log->warning_count > 0)

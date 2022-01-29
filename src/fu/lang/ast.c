@@ -42,7 +42,7 @@ static inline void print_many_asts_inside_block(FormatState* state, const char* 
         print_many_asts_with_delim(state, "{{{>}\n", sep, "{<}\n}", elems);
 }
 
-static inline void print_as_tuple(FormatState* state, const AstNode* ast_node) {
+static inline void print_with_parens(FormatState* state, const AstNode* ast_node) {
     if (is_tuple(ast_node->tag))
         print_ast(state, ast_node);
     else
@@ -85,7 +85,8 @@ static inline void print_assign_expr(FormatState* state, const AstNode* ast_node
 
 static inline void print_decl_head(FormatState* state, const char* keyword, const char* name, const AstNode* type_params) {
     print_keyword(state, keyword);
-    format(state, " {s}", (FormatArg[]) { { .s = name } });
+    if (name)
+        format(state, " {s}", (FormatArg[]) { { .s = name } });
     if (type_params)
         print_many_asts_with_delim(state, "[", ", ", "]", type_params);
 }
@@ -94,6 +95,17 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
     if (ast_node->attrs)
         print_many_asts_with_delim(state, "#[", ", ", "] ", ast_node->attrs);
     switch (ast_node->tag) {
+        case AST_IMPLICIT_CAST:
+            print_with_style(state, "/* cast */", comment_style);
+            print_ast(state, ast_node->implicit_cast.expr);
+            format(state, "{$}/* to {$}{t}{$} */{$}", (FormatArg[]) {
+                { .style = comment_style },
+                { .style = reset_style },
+                { .t = ast_node->type },
+                { .style = comment_style },
+                { .style = reset_style }
+            });
+            break;
         case AST_BOOL_LITERAL:
             print_keyword(state, ast_node->bool_literal.val ? "true" : "false");
             break;
@@ -130,6 +142,9 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
         AST_PRIM_TYPE_LIST(f)
 #undef f
             print_prim_type(state, ast_node->tag);
+            break;
+        case AST_NORET_TYPE:
+            format(state, "!", NULL);
             break;
         case AST_ATTR:
             format(state, "{s}", (FormatArg[]) { { .s = ast_node->attr.name } });
@@ -183,37 +198,45 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             break;
         case AST_TYPE_DECL:
             print_decl_head(state, "type", ast_node->type_decl.name, ast_node->type_decl.type_params);
-            print_ast_with_delim(state, " = ", ";", ast_node->type_decl.aliased_type);
+            if (ast_node->type_decl.aliased_type)
+                print_ast_with_delim(state, " = ", ";", ast_node->type_decl.aliased_type);
+            else
+                format(state, ";", NULL);
             break;
         case AST_FIELD_DECL:
             print_many_asts_with_delim(state, "", ", ", ": ", ast_node->field_decl.field_names);
             print_ast(state, ast_node->field_decl.type);
             break;
-        case AST_STRUCT_DECL:
-            print_decl_head(state, "struct", ast_node->struct_decl.name, ast_node->struct_decl.type_params);
-            format(state, " ", NULL);
-            print_many_asts_inside_block(state, ",\n", ast_node->struct_decl.fields);
-            break;
         case AST_OPTION_DECL:
             format(state, "{s}", (FormatArg[]) { { .s = ast_node->option_decl.name } });
             if (ast_node->option_decl.param_type)
-                print_as_tuple(state, ast_node->option_decl.param_type);
-            break;
-        case AST_ENUM_DECL:
-            print_decl_head(state, "enum", ast_node->enum_decl.name, ast_node->enum_decl.type_params);
-            format(state, " ", NULL);
-            print_many_asts_inside_block(state, ",\n", ast_node->enum_decl.options);
+                print_with_parens(state, ast_node->option_decl.param_type);
             break;
         case AST_FUN_DECL:
             print_decl_head(state, "fun", ast_node->fun_decl.name, ast_node->fun_decl.type_params);
-            print_as_tuple(state, ast_node->fun_decl.param);
+            print_with_parens(state, ast_node->fun_decl.param);
             if (ast_node->fun_decl.ret_type)
                 print_ast_with_delim(state, " -> ", "", ast_node->fun_decl.ret_type);
+            if (ast_node->fun_decl.body) {
+                format(state, " ", NULL);
+                if (ast_node->fun_decl.body->tag != AST_BLOCK_EXPR)
+                    print_ast_with_delim(state, "= ", ";", ast_node->fun_decl.body);
+                else
+                    print_ast(state, ast_node->fun_decl.body);
+            } else
+                format(state, ";", NULL);
+            break;
+        case AST_STRUCT_DECL:
+        case AST_MOD_DECL:
+        case AST_ENUM_DECL:
+        case AST_SIG_DECL:
+            print_decl_head(state,
+                ast_node_tag_to_decl_keyword(ast_node->tag),
+                ast_node->struct_decl.name, ast_node->struct_decl.type_params);
+            if (ast_node->struct_decl.type)
+                print_ast_with_delim(state, " : ", "", ast_node->struct_decl.type);
             format(state, " ", NULL);
-            if (ast_node->fun_decl.body->tag != AST_BLOCK_EXPR)
-                print_ast_with_delim(state, "= ", ";", ast_node->fun_decl.body);
-            else
-                print_ast(state, ast_node->fun_decl.body);
+            print_many_asts_inside_block(state, ",\n", ast_node->struct_decl.decls);
             break;
         case AST_CONST_DECL:
         case AST_VAR_DECL:
@@ -245,8 +268,16 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             break;
         case AST_FUN_TYPE:
             print_keyword(state, "fun");
-            print_as_tuple(state, ast_node->fun_type.dom_type);
+            print_with_parens(state, ast_node->fun_type.dom_type);
             print_ast_with_delim(state, " -> ", "", ast_node->fun_type.codom_type);
+            break;
+        case AST_PTR_TYPE:
+            format(state, "&", NULL);
+            if (ast_node->ptr_type.is_const) {
+                print_keyword(state, "const");
+                format(state, " ", NULL);
+            }
+            print_ast(state, ast_node->ptr_type.pointed_type);
             break;
         case AST_ARRAY_PATTERN:
         case AST_ARRAY_EXPR:
@@ -254,7 +285,10 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             break;
         case AST_TYPED_PATTERN:
         case AST_TYPED_EXPR:
-            print_ast(state, ast_node->typed_pattern.left);
+            if (ast_node->typed_pattern.left->tag == ast_node->tag)
+                print_with_parens(state, ast_node->typed_pattern.left);
+            else
+                print_ast(state, ast_node->typed_pattern.left);
             format(state, ": ", NULL);
             print_ast(state, ast_node->typed_pattern.type);
             break;
@@ -293,16 +327,19 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             print_many_asts_inside_block(state, ",\n", ast_node->match_expr.cases);
             break;
         case AST_CALL_EXPR:
-            print_ast(state, ast_node->call_expr.callee);
-            print_as_tuple(state, ast_node->call_expr.arg);
+            if (ast_node->call_expr.callee->tag == AST_FUN_EXPR)
+                print_with_parens(state, ast_node->call_expr.callee);
+            else
+                print_ast(state, ast_node->call_expr.callee);
+            print_with_parens(state, ast_node->call_expr.arg);
             break;
         case AST_CTOR_PATTERN:
             print_ast(state, ast_node->ctor_pattern.path);
-            print_as_tuple(state, ast_node->ctor_pattern.arg);
+            print_with_parens(state, ast_node->ctor_pattern.arg);
             break;
         case AST_FUN_EXPR:
             print_keyword(state, "fun");
-            print_as_tuple(state, ast_node->fun_expr.param);
+            print_with_parens(state, ast_node->fun_expr.param);
             if (ast_node->fun_expr.ret_type)
                 print_ast_with_delim(state, " -> ", "", ast_node->fun_expr.ret_type);
             print_ast_with_delim(state, " => ", "", ast_node->fun_expr.body);
@@ -397,7 +434,7 @@ const char* ast_node_tag_to_prim_type_name(AstNodeTag tag) {
 
 const char* ast_node_tag_to_binary_expr_op(AstNodeTag tag) {
     switch (tag) {
-#define f(name, prec, tok, str) case AST_##name##_EXPR: return str;
+#define f(name, prec, tok, str, ...) case AST_##name##_EXPR: return str;
         AST_BINARY_EXPR_LIST(f)
 #undef f
         default:
@@ -408,7 +445,7 @@ const char* ast_node_tag_to_binary_expr_op(AstNodeTag tag) {
 
 const char* ast_node_tag_to_unary_expr_op(AstNodeTag tag) {
     switch (tag) {
-#define f(name, tok, str) case AST_##name##_EXPR: return str;
+#define f(name, tok, str, ...) case AST_##name##_EXPR: return str;
         AST_UNARY_EXPR_LIST(f)
 #undef f
         default:
@@ -420,12 +457,39 @@ const char* ast_node_tag_to_unary_expr_op(AstNodeTag tag) {
 const char* ast_node_tag_to_assign_expr_op(AstNodeTag tag) {
     switch (tag) {
         case AST_ASSIGN_EXPR: return "=";
-#define f(name, prec, tok, str) case AST_##name##_ASSIGN_EXPR: return str"=";
+#define f(name, prec, tok, str, ...) case AST_##name##_ASSIGN_EXPR: return str"=";
         AST_ASSIGN_EXPR_LIST(f)
 #undef f
         default:
             assert(false && "invalid assignment expression");
             return "";
+    }
+}
+
+const char* ast_node_tag_to_binary_expr_fun_name(AstNodeTag tag) {
+    switch (tag) {
+#define f(name, prec, tok, str, op_name) case AST_##name##_EXPR: return op_name;
+        AST_BINARY_EXPR_LIST(f)
+#undef f
+        default:
+            assert(false && "invalid binary expression");
+            return NULL;
+    }
+}
+
+const char* ast_node_tag_to_decl_keyword(AstNodeTag tag) {
+    switch (tag) {
+        case AST_FUN_DECL:    return "fun";
+        case AST_TYPE_DECL:   return "type";
+        case AST_STRUCT_DECL: return "struct";
+        case AST_ENUM_DECL:   return "enum";
+        case AST_MOD_DECL:    return "mod";
+        case AST_SIG_DECL:    return "sig";
+        case AST_VAR_DECL:    return "var";
+        case AST_CONST_DECL:  return "const";
+        default:
+            assert(false && "invalid declaration");
+            return NULL;
     }
 }
 

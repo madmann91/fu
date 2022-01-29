@@ -68,6 +68,8 @@
     f(TYPE, "type") \
     f(STRUCT, "struct") \
     f(ENUM, "enum") \
+    f(MOD, "mod") \
+    f(SIG, "sig") \
     f(BOOL, "bool") \
     f(I8, "i8") \
     f(I16, "i16") \

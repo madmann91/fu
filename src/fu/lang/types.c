@@ -77,7 +77,7 @@ bool is_subtype(const Type* left, const Type* right) {
     if (left->tag == TYPE_FUN) {
         return
             is_subtype(right->fun_type.dom_type, left->fun_type.dom_type) &&
-            is_subtype(left->fun_type.dom_type, right->fun_type.dom_type);
+            is_subtype(left->fun_type.codom_type, right->fun_type.codom_type);
     }
 
     return false;
@@ -94,6 +94,19 @@ size_t get_prim_type_bitwidth(TypeTag tag) {
             assert(false && "invalid primitive type");
             return 0;
     }
+}
+
+size_t get_member_index_by_name(const Type* type, const char* name) {
+    for (size_t i = 0; i < type->struct_type.member_count; ++i) {
+        if (!strcmp(name, type->struct_type.member_names[i]))
+            return i;
+    }
+    return SIZE_MAX;
+}
+
+const Type* get_member_type_by_name(const Type* type, const char* name) {
+    size_t index = get_member_index_by_name(type, name);
+    return index == SIZE_MAX ? NULL : type->struct_type.member_types[index];
 }
 
 static void print_type_params(FormatState* state, const Type* type_params) {

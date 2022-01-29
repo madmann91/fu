@@ -4,6 +4,8 @@
 #include "fu/lang/types.h"
 #include "fu/core/hash_table.h"
 
+typedef struct MemPool MemPool;
+
 /*
  * The type-checker is an implementation of a bidirectional type-checking algorithm.
  * It is therefore local in nature, only looking at "neighboring" nodes to make typing judgments.
@@ -12,10 +14,11 @@
 typedef struct TypingContext {
     Log* log;
     TypeTable* type_table;
+    MemPool* mem_pool;
     HashTable visited_decls;
 } TypingContext;
 
-TypingContext new_typing_context(TypeTable*, Log*);
+TypingContext new_typing_context(TypeTable*, MemPool* mem_pool, Log*);
 void free_typing_context(TypingContext*);
 
 const Type* infer_stmt(TypingContext*, AstNode*);

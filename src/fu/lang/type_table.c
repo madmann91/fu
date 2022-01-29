@@ -180,7 +180,7 @@ static Type* make_struct_or_enum_type(TypeTable* type_table, TypeTag tag, const 
     Type* type = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type));
     type->tag = tag;
     type->struct_type.name = make_str(&type_table->str_pool, name);
-    type->struct_type.members = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * member_count);
+    type->struct_type.member_types = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * member_count);
     type->struct_type.member_names = alloc_from_mem_pool(type_table->mem_pool, sizeof(char*) * member_count);
     type->struct_type.member_count = member_count;
     type->struct_type.child_types = NULL;

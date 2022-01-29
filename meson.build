@@ -15,7 +15,9 @@ libfu = library('libfu',
     'src/fu/lang/lexer.c',
     'src/fu/lang/parser.c',
     'src/fu/lang/types.c',
-    'src/fu/lang/type_table.c'],
+    'src/fu/lang/type_table.c',
+    'src/fu/driver/driver.c',
+    'src/fu/driver/options.c'],
   include_directories: 'src',
   name_prefix: '')
 

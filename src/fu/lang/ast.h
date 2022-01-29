@@ -5,32 +5,32 @@
 #include "fu/core/log.h"
 
 #define AST_ARITH_EXPR_LIST(f) \
-    f(ADD, 3, PLUS,    "+") \
-    f(SUB, 3, MINUS,   "-") \
-    f(MUL, 2, STAR,    "*") \
-    f(DIV, 2, SLASH,   "/") \
-    f(REM, 2, PERCENT, "%")
+    f(ADD, 3, PLUS,    "+", "add") \
+    f(SUB, 3, MINUS,   "-", "sub") \
+    f(MUL, 2, STAR,    "*", "mul") \
+    f(DIV, 2, SLASH,   "/", "div") \
+    f(REM, 2, PERCENT, "%", "rem")
 
 #define AST_BIT_EXPR_LIST(f) \
-    f(AND, 7, AMP,  "&") \
-    f(OR,  9, PIPE, "|") \
-    f(XOR, 8, HAT,  "^")
+    f(AND, 7, AMP,  "&", "and") \
+    f(OR,  9, PIPE, "|", "or") \
+    f(XOR, 8, HAT,  "^", "xor")
 
 #define AST_SHIFT_EXPR_LIST(f) \
-    f(L_SHIFT, 4, DOUBLE_LESS, "<<") \
-    f(R_SHIFT, 4, DOUBLE_GREATER, ">>")
+    f(L_SHIFT, 4, DOUBLE_LESS, "<<", "lshift") \
+    f(R_SHIFT, 4, DOUBLE_GREATER, ">>", "rshift")
 
 #define AST_CMP_EXPR_LIST(f) \
-    f(EQ, 6, DOUBLE_EQUAL,  "==") \
-    f(NE, 6, BANG_EQUAL,    "!=") \
-    f(GT, 5, GREATER,       ">") \
-    f(LT, 5, LESS,          "<") \
-    f(GE, 5, GREATER_EQUAL, ">=") \
-    f(LE, 5, LESS_EQUAL,    "<=")
+    f(EQ, 6, DOUBLE_EQUAL,  "==", "eq") \
+    f(NE, 6, BANG_EQUAL,    "!=", "neq") \
+    f(GT, 5, GREATER,       ">", "gt") \
+    f(LT, 5, LESS,          "<", "lt") \
+    f(GE, 5, GREATER_EQUAL, ">=", "geq") \
+    f(LE, 5, LESS_EQUAL,    "<=", "leq")
 
 #define AST_LOGIC_EXPR_LIST(f) \
-    f(LOGIC_AND, 10, DOUBLE_AMP,  "&&") \
-    f(LOGIC_OR,  11, DOUBLE_PIPE, "||")
+    f(LOGIC_AND, 10, DOUBLE_AMP,  "&&", NULL) \
+    f(LOGIC_OR,  11, DOUBLE_PIPE, "||", NULL)
 
 #define AST_BINARY_EXPR_LIST(f) \
     AST_ARITH_EXPR_LIST(f) \
@@ -78,16 +78,19 @@ typedef enum {
     AST_FIELD_NAME,
     AST_TYPE_PARAM,
     AST_ATTR,
+    AST_IMPLICIT_CAST,
     // Path
     AST_PATH_ELEM,
     AST_PATH,
     // Types
     AST_TUPLE_TYPE,
     AST_ARRAY_TYPE,
+    AST_PTR_TYPE,
     AST_FUN_TYPE,
 #define f(name, ...) AST_TYPE_##name,
     AST_PRIM_TYPE_LIST(f)
 #undef f
+    AST_NORET_TYPE,
     // Literals
     AST_BOOL_LITERAL,
     AST_INT_LITERAL,
@@ -103,6 +106,8 @@ typedef enum {
     AST_OPTION_DECL,
     AST_STRUCT_DECL,
     AST_ENUM_DECL,
+    AST_MOD_DECL,
+    AST_SIG_DECL,
     // Expressions
 #define f(name, ...) AST_##name##_EXPR,
     AST_BINARY_EXPR_LIST(f)
@@ -153,6 +158,9 @@ struct AstNode {
             AstNode* decls;
         } program;
         struct {
+            AstNode* expr;
+        } implicit_cast;
+        struct {
             bool val;
         } bool_literal;
         struct {
@@ -185,6 +193,10 @@ struct AstNode {
             AstNode* dom_type;
             AstNode* codom_type;
         } fun_type;
+        struct {
+            bool is_const;
+            AstNode* pointed_type;
+        } ptr_type;
         struct {
             AstNode* elems;
         } array_expr, array_pattern;
@@ -226,13 +238,9 @@ struct AstNode {
         struct {
             const char* name;
             AstNode* type_params;
-            AstNode* fields;
-        } struct_decl;
-        struct {
-            const char* name;
-            AstNode* type_params;
-            AstNode* options;
-        } enum_decl;
+            AstNode* decls;
+            AstNode* type;
+        } struct_decl, enum_decl, mod_decl, sig_decl;
         struct {
             const char* name;
             AstNode* type_params;
@@ -318,6 +326,8 @@ const char* ast_node_tag_to_prim_type_name(AstNodeTag);
 const char* ast_node_tag_to_unary_expr_op(AstNodeTag);
 const char* ast_node_tag_to_binary_expr_op(AstNodeTag);
 const char* ast_node_tag_to_assign_expr_op(AstNodeTag);
+const char* ast_node_tag_to_binary_expr_fun_name(AstNodeTag);
+const char* ast_node_tag_to_decl_keyword(AstNodeTag);
 
 int get_max_binary_expr_precedence();
 int get_binary_expr_precedence(AstNodeTag);

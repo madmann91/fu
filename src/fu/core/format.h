@@ -66,6 +66,7 @@ static const FormatStyle reset_style    = { STYLE_NORMAL, COLOR_NORMAL };
 static const FormatStyle error_style    = { STYLE_BOLD,   COLOR_RED };
 static const FormatStyle literal_style  = { STYLE_NORMAL, COLOR_MAGENTA };
 static const FormatStyle keyword_style  = { STYLE_BOLD,   COLOR_BLUE };
+static const FormatStyle comment_style  = { STYLE_NORMAL, COLOR_GREEN };
 static const FormatStyle ellipsis_style = { STYLE_NORMAL, COLOR_WHITE };
 static const FormatStyle loc_style      = { STYLE_BOLD,   COLOR_WHITE };
 

@@ -52,6 +52,9 @@ void free_env(Env* env) {
 
 static void insert_symbol(Env* env, const char* name, AstNode* decl_site) {
     assert(env->cur_scope);
+    // Variables or patterns that begin with '_' are anonymous and cannot be referred to.
+    if (name[0] == '_')
+        return;
     Symbol symbol = { .name = name, .decl_site = decl_site };
     uint32_t hash = hash_str(hash_init(), name);
     bool was_inserted = insert_in_hash_table(&env->cur_scope->symbols,
@@ -180,13 +183,21 @@ static void insert_decl_in_env(Env* env, AstNode* decl) {
     const char* name = NULL;
     switch (decl->tag) {
         case AST_STRUCT_DECL: name = decl->struct_decl.name; break;
-        case AST_ENUM_DECL:   name = decl->enum_decl.name; break;
-        case AST_FUN_DECL:    name = decl->fun_decl.name; break;
-        case AST_TYPE_DECL:   name = decl->type_decl.name; break;
+        case AST_ENUM_DECL:   name = decl->enum_decl.name;   break;
+        case AST_MOD_DECL:    name = decl->mod_decl.name;    break;
+        case AST_SIG_DECL:    name = decl->sig_decl.name;    break;
+        case AST_FUN_DECL:    name = decl->fun_decl.name;    break;
+        case AST_TYPE_DECL:   name = decl->type_decl.name;   break;
         default:
             return;
     }
-    insert_symbol(env, name, decl);
+    if (name)
+        insert_symbol(env, name, decl);
+}
+
+static void insert_many_decls_in_env(Env* env, AstNode* decls) {
+    for (AstNode* decl = decls; decl; decl = decl->next)
+        insert_decl_in_env(env, decl);
 }
 
 static void bind_while_loop(Env* env, AstNode* while_loop) {
@@ -211,6 +222,8 @@ void bind_stmt(Env* env, AstNode* stmt) {
         case AST_CONST_DECL:
         case AST_STRUCT_DECL:
         case AST_ENUM_DECL:
+        case AST_MOD_DECL:
+        case AST_SIG_DECL:
         case AST_TYPE_DECL:
             bind_decl(env, stmt);
             break;
@@ -239,26 +252,27 @@ void bind_decl(Env* env, AstNode* decl) {
         case AST_FIELD_DECL:
             bind_type(env, decl->field_decl.type);
             break;
-        case AST_STRUCT_DECL:
-            push_scope(env, decl);
-            bind_type_params(env, decl->struct_decl.type_params);
-            bind_many(env, decl->struct_decl.fields, bind_decl);
-            pop_scope(env);
-            break;
         case AST_OPTION_DECL:
             if (decl->option_decl.param_type)
                 bind_type(env, decl->option_decl.param_type);
             break;
+        case AST_STRUCT_DECL:
         case AST_ENUM_DECL:
+        case AST_MOD_DECL:
+        case AST_SIG_DECL:
+            if (decl->struct_decl.type)
+                bind_type(env, decl->struct_decl.type);
             push_scope(env, decl);
-            bind_type_params(env, decl->enum_decl.type_params);
-            bind_many(env, decl->enum_decl.options, bind_decl);
+            bind_type_params(env, decl->struct_decl.type_params);
+            insert_many_decls_in_env(env, decl->struct_decl.decls);
+            bind_many(env, decl->struct_decl.decls, bind_decl);
             pop_scope(env);
             break;
         case AST_TYPE_DECL:
             push_scope(env, decl);
             bind_type_params(env, decl->type_decl.type_params);
-            bind_type(env, decl->type_decl.aliased_type);
+            if (decl->type_decl.aliased_type)
+                bind_type(env, decl->type_decl.aliased_type);
             pop_scope(env);
             break;
         case AST_FUN_DECL:
@@ -267,7 +281,8 @@ void bind_decl(Env* env, AstNode* decl) {
             bind_pattern(env, decl->fun_decl.param);
             if (decl->fun_decl.ret_type)
                 bind_type(env, decl->fun_decl.ret_type);
-            bind_expr(env, decl->fun_decl.body);
+            if (decl->fun_decl.body)
+                bind_expr(env, decl->fun_decl.body);
             pop_scope(env);
             break;
         case AST_VAR_DECL:
@@ -407,8 +422,7 @@ void bind_expr(Env* env, AstNode* expr) {
             break;
         case AST_BLOCK_EXPR:
             push_scope(env, expr);
-            for (AstNode* decl = expr->block_expr.stmts; decl; decl = decl->next)
-                insert_decl_in_env(env, decl);
+            insert_many_decls_in_env(env, expr->block_expr.stmts);
             bind_many(env, expr->block_expr.stmts, bind_stmt);
             pop_scope(env);
             break;
@@ -431,6 +445,7 @@ void bind_expr(Env* env, AstNode* expr) {
 
 void bind_type(Env* env, AstNode* type) {
     switch (type->tag) {
+        case AST_NORET_TYPE:
 #define f(name, ...) case AST_TYPE_##name:
         AST_PRIM_TYPE_LIST(f)
 #undef f
@@ -448,6 +463,9 @@ void bind_type(Env* env, AstNode* type) {
             bind_type(env, type->fun_type.dom_type);
             bind_type(env, type->fun_type.codom_type);
             break;
+        case AST_PTR_TYPE:
+            bind_type(env, type->ptr_type.pointed_type);
+            break;
         default:
             assert(false && "invalid type");
             break;
@@ -456,8 +474,7 @@ void bind_type(Env* env, AstNode* type) {
 
 void bind_program(Env* env, AstNode* program) {
     push_scope(env, program);
-    for (AstNode* decl = program->program.decls; decl; decl = decl->next)
-        insert_decl_in_env(env, decl);
+    insert_many_decls_in_env(env, program->program.decls);
     bind_many(env, program->program.decls, bind_decl);
     pop_scope(env);
 }

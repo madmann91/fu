@@ -91,6 +91,8 @@ typedef enum {
     AST_PRIM_TYPE_LIST(f)
 #undef f
     AST_NORET_TYPE,
+    AST_WHERE_TYPE,
+    AST_WHERE_CLAUSE,
     // Literals
     AST_BOOL_LITERAL,
     AST_INT_LITERAL,
@@ -108,6 +110,7 @@ typedef enum {
     AST_ENUM_DECL,
     AST_MOD_DECL,
     AST_SIG_DECL,
+    AST_USING_DECL,
     // Expressions
 #define f(name, ...) AST_##name##_EXPR,
     AST_BINARY_EXPR_LIST(f)
@@ -198,11 +201,19 @@ struct AstNode {
             AstNode* pointed_type;
         } ptr_type;
         struct {
+            AstNode* path;
+            AstNode* clauses;
+        } where_type;
+        struct {
+            AstNode* path;
+            AstNode* type;
+        } where_clause;
+        struct {
             AstNode* elems;
         } array_expr, array_pattern;
         struct {
             AstNode* left;
-            AstNode* path_elem;
+            AstNode* elem_or_index;
         } member_expr;
         struct {
             const char* name;
@@ -222,6 +233,7 @@ struct AstNode {
             AstNode* type_params;
             AstNode* ret_type;
             AstNode* body;
+            AstNode* used_sigs;
         } fun_decl;
         struct {
             AstNode* pattern;
@@ -230,6 +242,7 @@ struct AstNode {
         struct {
             AstNode* field_names;
             AstNode* type;
+            AstNode* value;
         } field_decl;
         struct {
             const char* name;
@@ -246,6 +259,10 @@ struct AstNode {
             AstNode* type_params;
             AstNode* aliased_type;
         } type_decl;
+        struct {
+            AstNode* type_params;
+            AstNode* used_mod;
+        } using_decl;
         struct {
             AstNode* left;
             AstNode* right;
@@ -320,14 +337,17 @@ void dump_ast(const AstNode*);
 bool needs_semicolon(AstNodeTag);
 bool is_tuple(AstNodeTag);
 bool is_binary_expr(AstNodeTag);
+bool is_assign_expr(AstNodeTag);
 
 size_t get_ast_list_length(const AstNode*);
-const char* ast_node_tag_to_prim_type_name(AstNodeTag);
-const char* ast_node_tag_to_unary_expr_op(AstNodeTag);
-const char* ast_node_tag_to_binary_expr_op(AstNodeTag);
-const char* ast_node_tag_to_assign_expr_op(AstNodeTag);
-const char* ast_node_tag_to_binary_expr_fun_name(AstNodeTag);
-const char* ast_node_tag_to_decl_keyword(AstNodeTag);
+
+AstNodeTag assign_expr_to_binary_expr(AstNodeTag);
+const char* get_prim_type_name(AstNodeTag);
+const char* get_unary_expr_op(AstNodeTag);
+const char* get_binary_expr_op(AstNodeTag);
+const char* get_assign_expr_op(AstNodeTag);
+const char* get_binary_expr_fun_name(AstNodeTag);
+const char* get_decl_keyword(AstNodeTag);
 
 int get_max_binary_expr_precedence();
 int get_binary_expr_precedence(AstNodeTag);

@@ -19,6 +19,12 @@ To build Fu, just type the following commands:
     cd builddir
     meson compile
 
+## Planned Language Features
+
+- Type system with first-class modules and parametric polymorphism
+- Local type inference algorithm
+- Partial evaluation constructs for compile-time function evaluation
+
 ## Documentation
 
 The documentation can be found [here](doc/index.md).

@@ -26,6 +26,7 @@ static inline bool check_option_arg(int i, int argc, char** argv, Log* log) {
 }
 
 bool parse_options(int* argc, char** argv, Options* options, Log* log) {
+    bool status = true;
     int file_count = 0;
     for (int i = 1, n = *argc; i < n; ++i) {
         if (argv[i][0] != '-') {
@@ -34,7 +35,7 @@ bool parse_options(int* argc, char** argv, Options* options, Log* log) {
         }
         if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
             usage();
-            return false;
+            goto error;
         } else if (!strcmp(argv[i], "--no-color"))
             options->no_color = true;
         else if (!strcmp(argv[i], "--no-type-check"))
@@ -43,17 +44,22 @@ bool parse_options(int* argc, char** argv, Options* options, Log* log) {
             options->print_ast = true;
         else if (!strcmp(argv[i], "--max-errors")) {
             if (!check_option_arg(i, n, argv, log))
-                return false;
+                goto error;
             options->max_errors = strtoull(argv[++i], NULL, 10);
         } else {
             log_error(log, NULL, "invalid option '{s}'", (FormatArg[]) { { .s = argv[i] } });
-            return false;
+            goto error;
         }
     }
-    *argc = file_count + 1;
     if (file_count == 0) {
         log_error(log, NULL, "no input file", NULL);
-        return false;
+        goto error;
     }
-    return true;
+    goto exit;
+
+error:
+    status = false;
+exit:
+    *argc = file_count + 1;
+    return status;
 }

@@ -28,6 +28,7 @@ static const size_t primes[] = {
 PRIMES(f)
 #undef f
 };
+
 static const size_t prime_count = sizeof(primes) / sizeof(primes[0]);
 
 // Returns the prime that is strictly greater than the given value.

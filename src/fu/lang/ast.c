@@ -50,7 +50,7 @@ static inline void print_with_parens(FormatState* state, const AstNode* ast_node
 }
 
 static inline void print_prim_type(FormatState* state, AstNodeTag tag) {
-    print_keyword(state, ast_node_tag_to_prim_type_name(tag));
+    print_keyword(state, get_prim_type_name(tag));
 }
 
 static inline void print_operand(FormatState* state, const AstNode* ast_node, int prec) {
@@ -61,11 +61,11 @@ static inline void print_operand(FormatState* state, const AstNode* ast_node, in
 }
 
 static inline void print_prefix_expr(FormatState* state, const AstNode* ast_node) {
-    print_ast_with_delim(state, ast_node_tag_to_unary_expr_op(ast_node->tag), "", ast_node->unary_expr.operand);
+    print_ast_with_delim(state, get_unary_expr_op(ast_node->tag), "", ast_node->unary_expr.operand);
 }
 
 static inline void print_postfix_expr(FormatState* state, const AstNode* ast_node) {
-    print_ast_with_delim(state, "", ast_node_tag_to_unary_expr_op(ast_node->tag), ast_node->unary_expr.operand);
+    print_ast_with_delim(state, "", get_unary_expr_op(ast_node->tag), ast_node->unary_expr.operand);
 }
 
 static inline void print_binary_or_assign_expr(FormatState* state, const AstNode* ast_node, const char* op) {
@@ -76,11 +76,11 @@ static inline void print_binary_or_assign_expr(FormatState* state, const AstNode
 }
 
 static inline void print_binary_expr(FormatState* state, const AstNode* ast_node) {
-    print_binary_or_assign_expr(state, ast_node, ast_node_tag_to_binary_expr_op(ast_node->tag));
+    print_binary_or_assign_expr(state, ast_node, get_binary_expr_op(ast_node->tag));
 }
 
 static inline void print_assign_expr(FormatState* state, const AstNode* ast_node) {
-    print_binary_or_assign_expr(state, ast_node, ast_node_tag_to_assign_expr_op(ast_node->tag));
+    print_binary_or_assign_expr(state, ast_node, get_assign_expr_op(ast_node->tag));
 }
 
 static inline void print_decl_head(FormatState* state, const char* keyword, const char* name, const AstNode* type_params) {
@@ -195,6 +195,8 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             break;
         case AST_TYPE_PARAM:
             format(state, "{s}", (FormatArg[]) { { .s = ast_node->type_param.name } });
+            if (ast_node->type_param.kind)
+                print_ast_with_delim(state, ": ", "", ast_node->type_param.kind);
             break;
         case AST_TYPE_DECL:
             print_decl_head(state, "type", ast_node->type_decl.name, ast_node->type_decl.type_params);
@@ -206,6 +208,8 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
         case AST_FIELD_DECL:
             print_many_asts_with_delim(state, "", ", ", ": ", ast_node->field_decl.field_names);
             print_ast(state, ast_node->field_decl.type);
+            if (ast_node->field_decl.value)
+                print_ast_with_delim(state, " = ", "", ast_node->field_decl.value);
             break;
         case AST_OPTION_DECL:
             format(state, "{s}", (FormatArg[]) { { .s = ast_node->option_decl.name } });
@@ -229,14 +233,20 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
         case AST_STRUCT_DECL:
         case AST_MOD_DECL:
         case AST_ENUM_DECL:
-        case AST_SIG_DECL:
+        case AST_SIG_DECL: {
             print_decl_head(state,
-                ast_node_tag_to_decl_keyword(ast_node->tag),
+                get_decl_keyword(ast_node->tag),
                 ast_node->struct_decl.name, ast_node->struct_decl.type_params);
             if (ast_node->struct_decl.type)
                 print_ast_with_delim(state, " : ", "", ast_node->struct_decl.type);
             format(state, " ", NULL);
-            print_many_asts_inside_block(state, ",\n", ast_node->struct_decl.decls);
+            const char* sep = ast_node->tag == AST_MOD_DECL || ast_node->tag == AST_SIG_DECL ? "\n" : ",\n";
+            print_many_asts_inside_block(state, sep, ast_node->struct_decl.decls);
+            break;
+        }
+        case AST_USING_DECL:
+            print_decl_head(state, "using", NULL, ast_node->using_decl.type_params);
+            print_ast_with_delim(state, " ", ";", ast_node->using_decl.used_mod);
             break;
         case AST_CONST_DECL:
         case AST_VAR_DECL:
@@ -278,6 +288,15 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
                 format(state, " ", NULL);
             }
             print_ast(state, ast_node->ptr_type.pointed_type);
+            break;
+        case AST_WHERE_CLAUSE:
+            print_ast_with_delim(state, "", " = ", ast_node->where_clause.path);
+            print_ast(state, ast_node->where_clause.type);
+            break;
+        case AST_WHERE_TYPE:
+            print_ast_with_delim(state, "", " ", ast_node->where_type.path);
+            print_keyword(state, "where");
+            print_many_asts_with_delim(state, " ", ", ", "", ast_node->where_type.clauses);
             break;
         case AST_ARRAY_PATTERN:
         case AST_ARRAY_EXPR:
@@ -346,7 +365,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             break;
         case AST_MEMBER_EXPR:
             print_ast(state, ast_node->member_expr.left);
-            print_ast_with_delim(state, ".", "", ast_node->member_expr.path_elem);
+            print_ast_with_delim(state, ".", "", ast_node->member_expr.elem_or_index);
             break;
         case AST_FOR_LOOP:
             print_keyword(state, "for");
@@ -405,8 +424,19 @@ bool is_tuple(AstNodeTag tag) {
 
 bool is_binary_expr(AstNodeTag tag) {
     switch (tag) {
-#define f(name, prec, ...) case AST_##name##_EXPR:
+#define f(name, ...) case AST_##name##_EXPR:
     AST_BINARY_EXPR_LIST(f)
+#undef f
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool is_assign_expr(AstNodeTag tag) {
+    switch (tag) {
+#define f(name, ...) case AST_##name##_EXPR:
+    AST_ASSIGN_EXPR_LIST(f)
 #undef f
             return true;
         default:
@@ -421,7 +451,17 @@ size_t get_ast_list_length(const AstNode* node) {
     return len;
 }
 
-const char* ast_node_tag_to_prim_type_name(AstNodeTag tag) {
+AstNodeTag assign_expr_to_binary_expr(AstNodeTag tag) {
+    switch (tag) {
+#define f(name, ...) case AST_##name##_ASSIGN_EXPR: return AST_##name##_EXPR;
+        AST_ASSIGN_EXPR_LIST(f)
+#undef f
+        default:
+            return tag;
+    }
+}
+
+const char* get_prim_type_name(AstNodeTag tag) {
     switch (tag) {
 #define f(name, str) case AST_TYPE_##name: return str;
         AST_PRIM_TYPE_LIST(f)
@@ -432,7 +472,7 @@ const char* ast_node_tag_to_prim_type_name(AstNodeTag tag) {
     }
 }
 
-const char* ast_node_tag_to_binary_expr_op(AstNodeTag tag) {
+const char* get_binary_expr_op(AstNodeTag tag) {
     switch (tag) {
 #define f(name, prec, tok, str, ...) case AST_##name##_EXPR: return str;
         AST_BINARY_EXPR_LIST(f)
@@ -443,7 +483,7 @@ const char* ast_node_tag_to_binary_expr_op(AstNodeTag tag) {
     }
 }
 
-const char* ast_node_tag_to_unary_expr_op(AstNodeTag tag) {
+const char* get_unary_expr_op(AstNodeTag tag) {
     switch (tag) {
 #define f(name, tok, str, ...) case AST_##name##_EXPR: return str;
         AST_UNARY_EXPR_LIST(f)
@@ -454,7 +494,7 @@ const char* ast_node_tag_to_unary_expr_op(AstNodeTag tag) {
     }
 }
 
-const char* ast_node_tag_to_assign_expr_op(AstNodeTag tag) {
+const char* get_assign_expr_op(AstNodeTag tag) {
     switch (tag) {
         case AST_ASSIGN_EXPR: return "=";
 #define f(name, prec, tok, str, ...) case AST_##name##_ASSIGN_EXPR: return str"=";
@@ -466,7 +506,7 @@ const char* ast_node_tag_to_assign_expr_op(AstNodeTag tag) {
     }
 }
 
-const char* ast_node_tag_to_binary_expr_fun_name(AstNodeTag tag) {
+const char* get_binary_expr_fun_name(AstNodeTag tag) {
     switch (tag) {
 #define f(name, prec, tok, str, op_name) case AST_##name##_EXPR: return op_name;
         AST_BINARY_EXPR_LIST(f)
@@ -477,7 +517,7 @@ const char* ast_node_tag_to_binary_expr_fun_name(AstNodeTag tag) {
     }
 }
 
-const char* ast_node_tag_to_decl_keyword(AstNodeTag tag) {
+const char* get_decl_keyword(AstNodeTag tag) {
     switch (tag) {
         case AST_FUN_DECL:    return "fun";
         case AST_TYPE_DECL:   return "type";

@@ -224,6 +224,7 @@ void bind_stmt(Env* env, AstNode* stmt) {
         case AST_ENUM_DECL:
         case AST_MOD_DECL:
         case AST_SIG_DECL:
+        case AST_USING_DECL:
         case AST_TYPE_DECL:
             bind_decl(env, stmt);
             break;
@@ -290,6 +291,12 @@ void bind_decl(Env* env, AstNode* decl) {
             bind_pattern(env, decl->var_decl.pattern);
             if (decl->var_decl.init)
                 bind_expr(env, decl->var_decl.init);
+            break;
+        case AST_USING_DECL:
+            push_scope(env, decl);
+            bind_type_params(env, decl->using_decl.type_params);
+            bind_type(env, decl->using_decl.used_mod);
+            pop_scope(env);
             break;
         default:
             assert(false && "invalid declaration");
@@ -443,6 +450,10 @@ void bind_expr(Env* env, AstNode* expr) {
     }
 }
 
+static void bind_where_clause(Env* env, AstNode* where_clause) {
+    bind_type(env, where_clause->where_clause.type);
+}
+
 void bind_type(Env* env, AstNode* type) {
     switch (type->tag) {
         case AST_NORET_TYPE:
@@ -466,6 +477,14 @@ void bind_type(Env* env, AstNode* type) {
         case AST_PTR_TYPE:
             bind_type(env, type->ptr_type.pointed_type);
             break;
+        case AST_WHERE_TYPE:
+            bind_type(env, type->where_type.path);
+            bind_many(env, type->where_type.clauses, bind_where_clause);
+            break;
+        case AST_SIG_DECL:
+        case AST_STRUCT_DECL:
+        case AST_ENUM_DECL:
+            return bind_decl(env, type);
         default:
             assert(false && "invalid type");
             break;

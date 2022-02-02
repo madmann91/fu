@@ -18,7 +18,7 @@ STRING_LITERAL
 Paths are formed when accessing the fields of a compound object or type.
 
 ```bnf
-PATH_ELEM ::= IDENTIFIER | IDENTIFIER , "[" , TYPE_ARGS , "]"
+PATH_ELEM ::= IDENTIFIER | IDENTIFIER , "[" , TYPE_LIST , "]"
 PATH ::= PATH_ELEM | PATH_ELEM , "." , PATH
 ```
 
@@ -30,34 +30,57 @@ Types form the set of types that are accepted as part of a program.
 TYPE ::=
     PATH |
     PRIM_TYPE |
+    PTR_TYPE |
     TUPLE_TYPE |
     ARRAY_TYPE |
+    WHERE_TYPE |
     STRUCT_DECL |
-    ENUM_DECL
+    ENUM_DECL |
+    SIG_DECL
 
 PRIM_TYPE ::=
-    "bool" |
+    "!" | "bool" |
     "i8" | "i16" | "i32" | "i64" |
     "u8" | "u16" | "u32" | "u64" |
     "f32" | "f64"
 
-TYPE_ARGS ::= TYPE | TYPE , "," , TYPE_ARGS
-TUPLE_TYPE ::= "(" , TYPE_ARGS , ")"
+PTR_TYPE ::= "&" , TYPE | "&" , "const" , TYPE
+
+TYPE_LIST ::= TYPE | TYPE , "," , TYPE_LIST
+TUPLE_TYPE ::= "(" , TYPE_LIST , ")"
 ARRAY_TYPE ::= "[" , TYPE , "]"
 FUN_TYPE ::= "fun" , TUPLE_TYPE , "->" , TYPE
+
+WHERE_TYPE ::= PATH , "where", WHERE_CLAUSES
+WHERE_CLAUSES ::= WHERE_CLAUSE | WHERE_CLAUSE , "," , WHERE_CLAUSES
+WHERE_CLAUSE ::= PATH , "=" , TYPE
 ```
 
 ## Declarations
 
 Declarations can declare either values (functions, constants and variables) or types (aliases, structures, and enumerations).
+Inside function parameters, identifiers must either be types, or be followed by a type annotation (starting with `:`).
+In the grammar, this is encoded as the disjunction between `TYPED_TUPLE_PATTERN` and `TUPLE_TYPE`, for simplicity.
 
 ```bnf
+DECL ::=
+    STRUCT_DECL |
+    ENUM_DECL |
+    ALIAS_DECL |
+    MOD_DECL |
+    USING_DECL |
+    FUN_DECL |
+    VAR_DECL |
+    CONST_DECL
+
+DECL_LIST ::= DECL | DECL DECL_LIST
+
 TYPE_PARAM ::= IDENTIFIER
 TYPE_PARAMS ::= TYPE_PARAM | TYPE_PARAM , "," , TYPE_PARAMS
 TYPE_PARAM_LIST ::= "[", TYPE_PARAMS, "]"
 
 FIELD_NAMES ::= IDENTIFIER | IDENTIFIER , "," , FIELD_NAMES
-STRUCT_FIELD ::= FIELD_NAMES , ":" , TYPE
+STRUCT_FIELD ::= FIELD_NAMES , ":" , TYPE , ("=", EXPR)?
 STRUCT_FIELDS ::= STRUCT_FIELD | STRUCT_FIELD , "," , STRUCT_FIELDS
 STRUCT_DECL ::= "struct" , IDENTIFIER , TYPE_PARAMS_LIST?, "{" , STRUCT_FIELDS, "}"
 
@@ -67,9 +90,17 @@ ENUM_DECL ::= "enum" , IDENTIFIER , TYPE_PARAMS_LIST?, "{" , ENUM_OPTIONS, "}"
 
 ALIAS_DECL ::= "type" , IDENTIFIER , TYPE_PARAM_LIST? , "=" , TYPE , ";"
 
+MOD_DECL ::= "mod" , IDENTIFIER , TYPE_PARAM_LIST? , (":" , TYPE)? , MOD_BODY
+MOD_BODY ::= ";" | "{" , DECL_LIST , "}"
+
+SIG_DECL ::= "sig" , IDENTIFIER? , TYPE_PARAM_LIST? , SIG_BODY
+SIG_BODY ::= "=" , TYPE , ";" | "{" , DECL_LIST , "}"
+
+FUN_PARAMS ::= TYPED_TUPLE_PATTERN | TUPLE_TYPE
 RET_TYPE ::= "->", TYPE
-FUN_DECL ::= "fun" , IDENTIFIER , TYPE_PARAM_LIST?, TUPLE_PATTERN , RET_TYPE? , FUN_BODY
-FUN_BODY ::= "=" , EXPR , ";" | BLOCK_EXPR
+FUN_DECL ::= "fun" , IDENTIFIER , TYPE_PARAM_LIST?, FUN_PARAMS , RET_TYPE? , USED_SIGS? , FUN_BODY
+USED_SIGS ::= "using" , TYPE_LIST
+FUN_BODY ::= ";" | "=" , EXPR , ";" | BLOCK_EXPR
 
 CONST_DECL ::= "const" , PATTERN , "=" , EXPR , ";"
 VAR_DECL ::= "var" , PATTERN, ("=" , EXPR)? , ";"

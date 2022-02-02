@@ -21,6 +21,9 @@ static const Options default_options = {
     .max_errors    = SIZE_MAX
 };
 
+/// Parse command-line options, and remove those parsed options from the
+/// argument list. After parsing, `argc` and `argv` are modified to only
+/// contain the arguments that were not parsed. 
 bool parse_options(int* argc, char** argv, Options* options, Log* log);
 
 #endif

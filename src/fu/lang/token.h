@@ -70,6 +70,8 @@
     f(ENUM, "enum") \
     f(MOD, "mod") \
     f(SIG, "sig") \
+    f(WHERE, "where") \
+    f(USING, "using") \
     f(BOOL, "bool") \
     f(I8, "i8") \
     f(I16, "i16") \

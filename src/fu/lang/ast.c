@@ -217,7 +217,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             if (ast_node->option_decl.param_type)
                 print_with_parens(state, ast_node->option_decl.param_type);
             break;
-        case AST_FUN_DECL: {
+        case AST_FUN_DECL:
             print_decl_head(state, "fun", ast_node->fun_decl.name, ast_node->fun_decl.type_params);
             print_with_parens(state, ast_node->fun_decl.param);
             if (ast_node->fun_decl.ret_type)
@@ -241,7 +241,6 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             } else
                 format(state, ";", NULL);
             break;
-        }
         case AST_STRUCT_DECL:
         case AST_MOD_DECL:
         case AST_ENUM_DECL:

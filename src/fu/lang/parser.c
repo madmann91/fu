@@ -821,8 +821,8 @@ static inline AstNode* parse_fun_decl(Parser* parser) {
     eat_token(parser, TOKEN_FUN);
 
     const char* name = parse_ident(parser);
-    AstNode* param = parse_tuple_or_error(parser, "function parameters", parse_fun_params);
     AstNode* type_params = parse_type_params(parser);
+    AstNode* param = parse_tuple_or_error(parser, "function parameters", parse_fun_params);
 
     AstNode* ret_type = NULL;
     if (accept_token(parser, TOKEN_THIN_ARROW))
@@ -833,7 +833,7 @@ static inline AstNode* parse_fun_decl(Parser* parser) {
         AstNodeList sig_list = { NULL, NULL };
         do {
             add_ast_node_to_list(&sig_list, parse_type(parser));
-        } while (accept_token(parser, TOKEN_COMMA) && parser->ahead->tag == TOKEN_IDENT);
+        } while (accept_token(parser, TOKEN_USING));
         used_sigs = sig_list.first;
     }
 

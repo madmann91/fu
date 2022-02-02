@@ -29,8 +29,9 @@ static inline void print_ast_with_delim(
     const char* close,
     const AstNode* elem)
 {
-    assert(!elem->next);
-    print_many_asts_with_delim(state, open, "", close, elem);
+    format(state, open, NULL);
+    print_ast(state, elem);
+    format(state, close, NULL);
 }
 
 static inline void print_many_asts_inside_block(FormatState* state, const char* sep, const AstNode* elems) {
@@ -216,11 +217,21 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             if (ast_node->option_decl.param_type)
                 print_with_parens(state, ast_node->option_decl.param_type);
             break;
-        case AST_FUN_DECL:
+        case AST_FUN_DECL: {
             print_decl_head(state, "fun", ast_node->fun_decl.name, ast_node->fun_decl.type_params);
             print_with_parens(state, ast_node->fun_decl.param);
             if (ast_node->fun_decl.ret_type)
                 print_ast_with_delim(state, " -> ", "", ast_node->fun_decl.ret_type);
+            if (ast_node->fun_decl.used_sigs) {
+                format(state, "{>}\n", NULL);
+                for (AstNode* used_sig = ast_node->fun_decl.used_sigs; used_sig; used_sig = used_sig->next) {
+                    print_keyword(state, "using");
+                    print_ast_with_delim(state, " ", "", used_sig);
+                    if (used_sig->next)
+                        format(state, "\n", NULL);
+                }
+                format(state, "{<}", NULL);
+            }
             if (ast_node->fun_decl.body) {
                 format(state, " ", NULL);
                 if (ast_node->fun_decl.body->tag != AST_BLOCK_EXPR)
@@ -230,6 +241,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             } else
                 format(state, ";", NULL);
             break;
+        }
         case AST_STRUCT_DECL:
         case AST_MOD_DECL:
         case AST_ENUM_DECL:

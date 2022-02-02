@@ -99,7 +99,8 @@ SIG_BODY ::= "=" , TYPE , ";" | "{" , DECL_LIST , "}"
 FUN_PARAMS ::= TYPED_TUPLE_PATTERN | TUPLE_TYPE
 RET_TYPE ::= "->", TYPE
 FUN_DECL ::= "fun" , IDENTIFIER , TYPE_PARAM_LIST?, FUN_PARAMS , RET_TYPE? , USED_SIGS? , FUN_BODY
-USED_SIGS ::= "using" , TYPE_LIST
+USED_SIGS ::= USED_SIG | USED_SIG , USED_SIGS
+USED_SIG ::= "using" , TYPE
 FUN_BODY ::= ";" | "=" , EXPR , ";" | BLOCK_EXPR
 
 CONST_DECL ::= "const" , PATTERN , "=" , EXPR , ";"

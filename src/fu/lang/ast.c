@@ -209,8 +209,8 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
         case AST_FIELD_DECL:
             print_many_asts_with_delim(state, "", ", ", ": ", ast_node->field_decl.field_names);
             print_ast(state, ast_node->field_decl.type);
-            if (ast_node->field_decl.value)
-                print_ast_with_delim(state, " = ", "", ast_node->field_decl.value);
+            if (ast_node->field_decl.val)
+                print_ast_with_delim(state, " = ", "", ast_node->field_decl.val);
             break;
         case AST_OPTION_DECL:
             format(state, "{s}", (FormatArg[]) { { .s = ast_node->option_decl.name } });
@@ -223,14 +223,9 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             if (ast_node->fun_decl.ret_type)
                 print_ast_with_delim(state, " -> ", "", ast_node->fun_decl.ret_type);
             if (ast_node->fun_decl.used_sigs) {
-                format(state, "{>}\n", NULL);
-                for (AstNode* used_sig = ast_node->fun_decl.used_sigs; used_sig; used_sig = used_sig->next) {
-                    print_keyword(state, "using");
-                    print_ast_with_delim(state, " ", "", used_sig);
-                    if (used_sig->next)
-                        format(state, "\n", NULL);
-                }
-                format(state, "{<}", NULL);
+                format(state, " ", NULL);
+                print_keyword(state, "using");
+                print_many_asts_with_delim(state, " ", ", ", "", ast_node->fun_decl.used_sigs);
             }
             if (ast_node->fun_decl.body) {
                 format(state, " ", NULL);
@@ -242,17 +237,28 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
                 format(state, ";", NULL);
             break;
         case AST_STRUCT_DECL:
-        case AST_MOD_DECL:
-        case AST_ENUM_DECL:
-        case AST_SIG_DECL: {
+        case AST_ENUM_DECL: {
             print_decl_head(state,
                 get_decl_keyword(ast_node->tag),
                 ast_node->struct_decl.name, ast_node->struct_decl.type_params);
-            if (ast_node->struct_decl.type)
-                print_ast_with_delim(state, " : ", "", ast_node->struct_decl.type);
             format(state, " ", NULL);
-            const char* sep = ast_node->tag == AST_MOD_DECL || ast_node->tag == AST_SIG_DECL ? "\n" : ",\n";
-            print_many_asts_inside_block(state, sep, ast_node->struct_decl.decls);
+            print_many_asts_inside_block(state, ",\n", ast_node->struct_decl.decls);
+            break;
+        }
+        case AST_MOD_DECL:
+        case AST_SIG_DECL: {
+            print_decl_head(state,
+                get_decl_keyword(ast_node->tag),
+                ast_node->mod_decl.name, ast_node->mod_decl.type_params);
+            if (ast_node->mod_decl.type)
+                print_ast_with_delim(state, " : ", "", ast_node->mod_decl.type);
+            if (ast_node->mod_decl.decls) {
+                format(state, " ", NULL);
+                print_many_asts_inside_block(state, "\n", ast_node->struct_decl.decls);
+            } else if (ast_node->mod_decl.alias_val)
+                print_ast_with_delim(state, " = ", ";", ast_node->mod_decl.alias_val);
+            else
+                format(state, ";", NULL);
             break;
         }
         case AST_USING_DECL:
@@ -307,7 +313,8 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
         case AST_WHERE_TYPE:
             print_ast_with_delim(state, "", " ", ast_node->where_type.path);
             print_keyword(state, "where");
-            print_many_asts_with_delim(state, " ", ", ", "", ast_node->where_type.clauses);
+            format(state, " ", NULL);
+            print_many_asts_inside_block(state, ", ", ast_node->where_type.clauses);
             break;
         case AST_ARRAY_PATTERN:
         case AST_ARRAY_EXPR:

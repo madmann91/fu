@@ -41,16 +41,12 @@ struct Type {
         struct {
             const Type* dom_type;
             const Type* codom_type;
-            const Type* type_params;
         } fun_type;
         struct {
             const Type* applied_type;
             const Type** type_args;
             size_t arg_count;
         } type_app;
-        struct {
-            const char* name;
-        } type_param;
         struct {
             const char* name;
             const Type** member_types;
@@ -60,10 +56,12 @@ struct Type {
             const Type* type_params;
         } enum_type, struct_type;
         struct {
-            const char* name;
             const Type* type_params;
-            const Type* aliased_type;
-        } alias_type;
+            const Type* body;
+        } poly_type;
+        struct {
+            const char* name;
+        } type_param;
     };
 };
 
@@ -75,8 +73,8 @@ bool is_signed_int_type(TypeTag);
 bool is_int_type(TypeTag);
 bool is_int_or_float_type(TypeTag);
 bool is_subtype(const Type*, const Type*);
+
 size_t get_prim_type_bitwidth(TypeTag);
-const Type* join_of_types(const Type*, const Type*);
 size_t get_member_index_by_name(const Type*, const char*);
 const Type* get_member_type_by_name(const Type*, const char*);
 

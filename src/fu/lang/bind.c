@@ -259,14 +259,22 @@ void bind_decl(Env* env, AstNode* decl) {
             break;
         case AST_STRUCT_DECL:
         case AST_ENUM_DECL:
-        case AST_MOD_DECL:
-        case AST_SIG_DECL:
-            if (decl->struct_decl.type)
-                bind_type(env, decl->struct_decl.type);
             push_scope(env, decl);
             bind_type_params(env, decl->struct_decl.type_params);
             insert_many_decls_in_env(env, decl->struct_decl.decls);
             bind_many(env, decl->struct_decl.decls, bind_decl);
+            pop_scope(env);
+            break;
+        case AST_MOD_DECL:
+        case AST_SIG_DECL:
+            if (decl->mod_decl.type)
+                bind_type(env, decl->mod_decl.type);
+            push_scope(env, decl);
+            bind_type_params(env, decl->mod_decl.type_params);
+            insert_many_decls_in_env(env, decl->mod_decl.decls);
+            bind_many(env, decl->mod_decl.decls, bind_decl);
+            if (decl->mod_decl.alias_val)
+                bind_type(env, decl->mod_decl.alias_val);
             pop_scope(env);
             break;
         case AST_TYPE_DECL:
@@ -284,13 +292,14 @@ void bind_decl(Env* env, AstNode* decl) {
                 bind_type(env, decl->fun_decl.ret_type);
             if (decl->fun_decl.body)
                 bind_expr(env, decl->fun_decl.body);
+            bind_many(env, decl->fun_decl.used_sigs, bind_type);
             pop_scope(env);
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
-            bind_pattern(env, decl->var_decl.pattern);
             if (decl->var_decl.init)
                 bind_expr(env, decl->var_decl.init);
+            bind_pattern(env, decl->var_decl.pattern);
             break;
         case AST_USING_DECL:
             push_scope(env, decl);

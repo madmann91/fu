@@ -209,9 +209,10 @@ static const Type* check_if_expr(TypingContext* context, AstNode* if_expr, const
     const Type* then_type = check_expr(context, if_expr->if_expr.then_expr, expected_type);
     if (if_expr->if_expr.else_expr) {
         const Type* else_type = check_expr(context, if_expr->if_expr.else_expr, expected_type);
-        if (is_subtype(else_type, then_type))
+        if (is_subtype(then_type, else_type))
             return if_expr->type = else_type;
-        return if_expr->type = expect_type(context, then_type, else_type, true, &if_expr->file_loc);
+        return if_expr->type = expect_type(
+            context, else_type, then_type, true, &if_expr->if_expr.else_expr->file_loc);
     }
     return if_expr->type = then_type;
 }
@@ -261,7 +262,7 @@ static const Type* check_call_expr(TypingContext* context, AstNode* call_expr, c
 
 static const Type* check_int_literal(TypingContext* context, AstNode* literal, const Type* expected_type) {
     if (expected_type->tag == TYPE_UNKNOWN)
-        return literal->type = make_prim_type(context->type_table, TYPE_F64);
+        return literal->type = make_prim_type(context->type_table, TYPE_I64);
     if (!is_int_or_float_type(expected_type->tag))
         return literal->type = fail_expect(context, "integer literal", expected_type, &literal->file_loc);
     return literal->type = expected_type;
@@ -269,7 +270,7 @@ static const Type* check_int_literal(TypingContext* context, AstNode* literal, c
 
 static const Type* check_float_literal(TypingContext* context, AstNode* literal, const Type* expected_type) {
     if (expected_type->tag == TYPE_UNKNOWN)
-        return literal->type = make_prim_type(context->type_table, TYPE_I64);
+        return literal->type = make_prim_type(context->type_table, TYPE_F64);
     if (!is_float_type(expected_type->tag))
         return literal->type = fail_expect(context, "floating-point literal", expected_type, &literal->file_loc);
     return literal->type = expected_type;
@@ -325,7 +326,7 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
         case AST_BLOCK_EXPR: {
             const Type* last_type = NULL;
             for (AstNode* stmt = expr->block_expr.stmts; stmt; stmt = stmt->next) {
-                last_type = stmt->next && expr->block_expr.ends_with_semicolon
+                last_type = stmt->next || expr->block_expr.ends_with_semicolon
                     ? infer_stmt(context, stmt) : check_stmt(context, stmt, expected_type);
             }
             if (expr->block_expr.ends_with_semicolon || !expr->block_expr.stmts)

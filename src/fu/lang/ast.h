@@ -242,7 +242,7 @@ struct AstNode {
         struct {
             AstNode* field_names;
             AstNode* type;
-            AstNode* value;
+            AstNode* val;
         } field_decl;
         struct {
             const char* name;
@@ -252,8 +252,14 @@ struct AstNode {
             const char* name;
             AstNode* type_params;
             AstNode* decls;
+        } struct_decl, enum_decl;
+        struct {
+            const char* name;
+            AstNode* type_params;
+            AstNode* decls;
             AstNode* type;
-        } struct_decl, enum_decl, mod_decl, sig_decl;
+            AstNode* alias_val;
+        } mod_decl, sig_decl;
         struct {
             const char* name;
             AstNode* type_params;

@@ -1,7 +1,6 @@
 project('fu', 'c', version: '0.1')
 libfu = library('libfu',
   sources: [
-    'src/fu/core/alloc.c',
     'src/fu/core/format.c',
     'src/fu/core/hash.c',
     'src/fu/core/hash_table.c',

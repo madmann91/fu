@@ -191,12 +191,15 @@ static void print_msg(
     const char* format_str,
     const FormatArg* args)
 {
-    if (msg_type == LOG_ERROR && log->error_count >= log->max_errors)
+    if (msg_type == LOG_ERROR)
+        log->error_count++;
+    else if (msg_type == LOG_WARNING)
+        log->warning_count++;
+
+    if (log->error_count >= log->max_errors)
         return;
 
-    if (msg_type == LOG_ERROR && log->error_count > 0)
-        format(log->state, "\n", NULL);
-    else if (msg_type == LOG_WARNING && log->warning_count > 0)
+    if ((msg_type == LOG_ERROR || msg_type == LOG_WARNING) && log->error_count + log->warning_count > 1)
         format(log->state, "\n", NULL);
 
     static const FormatStyle header_styles[] = {
@@ -205,9 +208,6 @@ static void print_msg(
         { STYLE_BOLD, COLOR_BLUE }
     };
     static const char* headers[] = { "error", "warning", "note" };
-
-    if (msg_type == LOG_ERROR) log->error_count++;
-    else if (msg_type == LOG_WARNING) log->warning_count++;
 
     format(log->state, "{$}{s}{$}: ", (FormatArg[]) {
         { .style = header_styles[msg_type] },

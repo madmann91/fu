@@ -51,7 +51,7 @@ TUPLE_TYPE ::= "(" , TYPE_LIST , ")"
 ARRAY_TYPE ::= "[" , TYPE , "]"
 FUN_TYPE ::= "fun" , TUPLE_TYPE , "->" , TYPE
 
-WHERE_TYPE ::= PATH , "where", WHERE_CLAUSES
+WHERE_TYPE ::= PATH , "where", (WHERE_CLAUSE | ("{", WHERE_CLAUSES , "}))
 WHERE_CLAUSES ::= WHERE_CLAUSE | WHERE_CLAUSE , "," , WHERE_CLAUSES
 WHERE_CLAUSE ::= PATH , "=" , TYPE
 ```
@@ -68,6 +68,7 @@ DECL ::=
     ENUM_DECL |
     ALIAS_DECL |
     MOD_DECL |
+    SIG_DECL |
     USING_DECL |
     FUN_DECL |
     VAR_DECL |
@@ -90,11 +91,9 @@ ENUM_DECL ::= "enum" , IDENTIFIER , TYPE_PARAMS_LIST?, "{" , ENUM_OPTIONS, "}"
 
 ALIAS_DECL ::= "type" , IDENTIFIER , TYPE_PARAM_LIST? , "=" , TYPE , ";"
 
-MOD_DECL ::= "mod" , IDENTIFIER , TYPE_PARAM_LIST? , (":" , TYPE)? , MOD_BODY
-MOD_BODY ::= ";" | "{" , DECL_LIST , "}"
-
-SIG_DECL ::= "sig" , IDENTIFIER? , TYPE_PARAM_LIST? , SIG_BODY
-SIG_BODY ::= "=" , TYPE , ";" | "{" , DECL_LIST , "}"
+MOD_DECL ::= "mod" , IDENTIFIER? , TYPE_PARAM_LIST? , (":" , TYPE)? , MOD_OR_SIG_BODY
+SIG_DECL ::= "sig" , IDENTIFIER? , TYPE_PARAM_LIST? , (":" , TYPE)? , MOD_OR_SIG_BODY
+MOD_OR_SIG_BODY ::= ";" | "=" , TYPE , ";" | "{" , DECL_LIST , "}"
 
 FUN_PARAMS ::= TYPED_TUPLE_PATTERN | TUPLE_TYPE
 RET_TYPE ::= "->", TYPE

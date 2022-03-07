@@ -126,6 +126,17 @@ static void print_params(FormatState* state, const Type** params, size_t param_c
     format(state, "]", NULL);
 }
 
+static void print_member(FormatState* state, const Member* member) {
+    format(state, "\n", NULL);
+    print_keyword(state, member->tag == MEMBER_TYPE ? "type" : "const");
+    format(state, " {s}", (FormatArg[]) { { .s = member->name } });
+    if (member->type) {
+        format(state, member->tag == MEMBER_TYPE ? " = " : ": ", NULL);
+        print_type(state, member->type);
+    }
+    format(state, ";", NULL);
+}
+
 void print_type(FormatState* state, const Type* type) {
     switch (type->tag) {
 #define f(name, str) case TYPE_##name: print_keyword(state, str); break;
@@ -178,6 +189,22 @@ void print_type(FormatState* state, const Type* type) {
         case TYPE_STRUCT:
             print_keyword(state, "struct");
             format(state, " {s}", (FormatArg[]) { { .s = type->struct_type.name } });
+            break;
+        case TYPE_SIG:
+            print_keyword(state, "sig");
+            print_params(state, type->sig_type.params, type->sig_type.param_count);
+            format(state, " {{{>}", NULL);
+            for (size_t i = 0; i < type->sig_type.member_count; ++i)
+                print_member(state, type->sig_type.members + i);
+            format(state, "{<}\n}", NULL);
+            break;
+        case TYPE_PTR:
+            format(state, "&", NULL);
+            if (type->ptr_type.is_const) {
+                print_keyword(state, "const");
+                format(state, " ", NULL);
+            }
+            print_type(state, type->ptr_type.pointee);
             break;
         default:
             assert(false && "invalid type");

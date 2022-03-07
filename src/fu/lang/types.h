@@ -21,7 +21,8 @@ typedef enum {
     TYPE_STRUCT,
     TYPE_ENUM,
     TYPE_ALIAS,
-    TYPE_SIG
+    TYPE_SIG,
+    TYPE_PTR
 } TypeTag;
 
 typedef struct Member {
@@ -78,6 +79,10 @@ struct Type {
             size_t param_count;
             const Type* aliased_type;
         } alias_type;
+        struct {
+            bool is_const;
+            const Type* pointee;
+        } ptr_type;
     };
 };
 

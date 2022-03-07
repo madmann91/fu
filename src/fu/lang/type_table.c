@@ -65,7 +65,12 @@ static uint32_t hash_type(uint32_t hash, const Type* type) {
         case TYPE_PARAM:
             hash = hash_str(hash, type->type_param.name);
             break;
+        case TYPE_PTR:
+            hash = hash_uint8(hash, type->ptr_type.is_const);
+            hash = hash_uint64(hash, type->ptr_type.pointee->id);
+            break;
         default:
+            assert(false && "invalid type");
             break;
     }
     return hash;
@@ -115,7 +120,12 @@ static bool compare_types(const void* left, const void* right) {
             return type_left->array_type.elem_type == type_right->array_type.elem_type;
         case TYPE_PARAM:
             return type_left->type_param.name == type_right->type_param.name;
+        case TYPE_PTR:
+            return
+                type_left->ptr_type.is_const == type_right->ptr_type.is_const &&
+                type_left->ptr_type.pointee  == type_right->ptr_type.pointee;
         default:
+            assert(false && "invalid type");
             break;
     }
     return true;
@@ -281,17 +291,32 @@ const Type* make_type_app(TypeTable* type_table, const Type* applied_type, const
     });
 }
 
-const Type* make_fun_type(TypeTable* type_table, const Type* dom, const Type* codom) {
-    return get_or_insert_type(type_table, &(Type) {
-        .tag = TYPE_FUN,
-        .fun_type = { .dom = dom, .codom = codom }
-    });
-}
-
 const Type* make_array_type(TypeTable* type_table, const Type* elem_type) {
     return get_or_insert_type(type_table, &(Type) {
         .tag = TYPE_ARRAY,
         .array_type = { .elem_type = elem_type }
+    });
+}
+
+const Type* make_fun_type(TypeTable* type_table, const Type* dom, const Type* codom) {
+    return make_poly_fun_type(type_table, dom, codom, NULL, 0);
+}
+
+const Type* make_poly_fun_type(
+    TypeTable* type_table,
+    const Type* dom,
+    const Type* codom,
+    const Type** params,
+    size_t param_count)
+{
+    return get_or_insert_type(type_table, &(Type) {
+        .tag = TYPE_FUN,
+        .fun_type = {
+            .dom = dom,
+            .codom = codom,
+            .params = params,
+            .param_count = param_count
+        }
     });
 }
 

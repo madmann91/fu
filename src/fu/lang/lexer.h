@@ -7,8 +7,7 @@
 
 /*
  * The lexer requires to have the entire file data in memory (or a memory mapped file, if needs be),
- * and produces tokens one at a time.
- * The file data must be terminated by a null character.
+ * and produces tokens one at a time. The file data must be terminated by a null character.
  */
 
 typedef struct Lexer {

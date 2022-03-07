@@ -493,7 +493,8 @@ void bind_type(Env* env, AstNode* type) {
         case AST_SIG_DECL:
         case AST_STRUCT_DECL:
         case AST_ENUM_DECL:
-            return bind_decl(env, type);
+            bind_decl(env, type);
+            break;
         default:
             assert(false && "invalid type");
             break;

@@ -202,7 +202,7 @@ static inline AstNode* parse_path(Parser* parser) {
 static inline AstNode* make_single_elem_path(Parser* parser, const char* name, const FileLoc* file_loc) {
     AstNode* path_elem = make_ast_node(parser, &file_loc->begin, &(AstNode) {
         .tag = AST_PATH_ELEM,
-        .path_elem = { .name = "_"  }
+        .path_elem = { .name = name }
     });
     AstNode* path = make_ast_node(parser, &file_loc->begin, &(AstNode) {
         .tag = AST_PATH,

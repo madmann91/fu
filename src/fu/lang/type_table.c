@@ -5,6 +5,7 @@
 #include "fu/core/hash_table.h"
 #include "fu/core/hash.h"
 #include "fu/core/utils.h"
+#include "fu/core/sort.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -294,13 +295,25 @@ const Type* make_array_type(TypeTable* type_table, const Type* elem_type) {
     });
 }
 
+static inline bool is_member_smaller_than(const Member* left, const Member* right) {
+    return
+        left->tag < right->tag || (left->tag == right->tag &&
+        (left->type->id < right->type->id || (left->type->id == right->type->id &&
+        strcmp(left->name, right->name) < 0)));
+}
+
+DECLARE_SHELL_SORT(sort_members, Member, is_member_smaller_than)
+
 const Type* make_sig_type(
     TypeTable* type_table,
-    const Member* members,
+    Member* members,
     size_t member_count,
     const Type** params,
     size_t param_count)
 {
+    // This ensures that signatures that have the same members compare equal,
+    // regardless of the order in which members are declared.
+    sort_members(members, member_count);
     return get_or_insert_type(type_table, &(Type) {
         .tag = TYPE_SIG,
         .sig_type = {

@@ -134,6 +134,7 @@ static const Type* infer_decl_site(TypingContext* context, AstNode* decl_site) {
 }
 
 static const Type* infer_path(TypingContext* context, AstNode* path) {
+    // TODO: Infer the rest of the path
     return infer_decl_site(context, path->path.decl_site);
 }
 

@@ -30,6 +30,6 @@ const Type* make_unit_type(TypeTable*);
 const Type* make_type_app(TypeTable*, const Type* applied_type, const Type** args, size_t arg_count);
 const Type* make_fun_type(TypeTable*, const Type* dom, const Type* codom);
 const Type* make_array_type(TypeTable*, const Type* elem_type);
-const Type* make_sig_type(TypeTable*, const Member*, size_t, const Type**, size_t);
+const Type* make_sig_type(TypeTable*, Member*, size_t, const Type**, size_t);
 
 #endif

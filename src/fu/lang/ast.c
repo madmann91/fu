@@ -125,10 +125,10 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             });
             break;
         case AST_INT_LITERAL:
-            format(state, "{$}{s}{um}{$}", (FormatArg[]) {
+            format(state, "{$}{s}{u}{$}", (FormatArg[]) {
                 { .style = literal_style },
                 { .s = ast_node->int_literal.has_minus ? "-" : "" },
-                { .um = ast_node->int_literal.val },
+                { .u = ast_node->int_literal.val },
                 { .style = reset_style }
             });
             break;

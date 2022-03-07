@@ -63,11 +63,10 @@ static const char* format_arg(FormatState* state, const char* ptr, size_t* index
         case 'u':
             switch (*(ptr++)) {
                 case '8': chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu8, arg->u8);  break;
-                case 'm': chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIuMAX, arg->um); break;
                 case '1': assert(*ptr == '6'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu16, arg->u16); break;
                 case '3': assert(*ptr == '2'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu32, arg->u32); break;
                 case '6': assert(*ptr == '4'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu64, arg->u64); break;
-                default: assert(false && "invalid unsigned integer format string");
+                default: chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIuMAX, arg->u); break;
             }
             break;
         case 'i':
@@ -76,7 +75,7 @@ static const char* format_arg(FormatState* state, const char* ptr, size_t* index
                 case '1': assert(*ptr == '6'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi16, arg->i16); break;
                 case '3': assert(*ptr == '2'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi32, arg->i32); break;
                 case '6': assert(*ptr == '4'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi64, arg->i64); break;
-                default: assert(false && "invalid signed integer format string");
+                default: chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIiMAX, arg->i); break;
             }
             break;
         case 'f':

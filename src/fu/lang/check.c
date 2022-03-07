@@ -162,8 +162,8 @@ static const Type* check_tuple(
     if (expected_type->tuple_type.arg_count != arg_count)
     {
         log_error(context->log, &tuple->file_loc,
-            "expected tuple with {u64} argument(s), but got {u64}",
-            (FormatArg[]) { { .u64 = expected_type->tuple_type.arg_count }, { .u64 = arg_count } });
+            "expected tuple with {u} argument(s), but got {u}",
+            (FormatArg[]) { { .u = expected_type->tuple_type.arg_count }, { .u = arg_count } });
         return make_error_type(context->type_table);
     }
 

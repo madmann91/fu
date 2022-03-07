@@ -144,9 +144,9 @@ static void print_diagnostic(Log* log, FormatStyle style, const FileLoc* file_lo
     format(log->state, "{$}|{$}\n", (FormatArg[]) { { .style = style }, { .style = reset_style } });
 
     print_empty_space(log->state, line_number_len - count_digits(file_loc->begin.row));
-    format(log->state, "{$}{u64}{$} {$}|{$}", (FormatArg[]) {
+    format(log->state, "{$}{u}{$} {$}|{$}", (FormatArg[]) {
         { .style = loc_style },
-        { .u64 = file_loc->begin.row },
+        { .u = file_loc->begin.row },
         { .style = reset_style },
         { .style = style },
         { .style = reset_style }
@@ -166,9 +166,9 @@ static void print_diagnostic(Log* log, FormatStyle style, const FileLoc* file_lo
             format(log->state, "{$}...{$}\n", (FormatArg[]) { { .style = loc_style }, { .style = reset_style } });
         }
 
-        format(log->state, "{$}{u64}{$} {$}|{$}", (FormatArg[]) {
+        format(log->state, "{$}{u}{$} {$}|{$}", (FormatArg[]) {
             { .style = loc_style },
-            { .u64 = file_loc->end.row },
+            { .u = file_loc->end.row },
             { .style = reset_style },
             { .style = style },
             { .style = reset_style }

@@ -44,11 +44,12 @@ typedef union {
     uint16_t u16;
     uint32_t u32;
     uint64_t u64;
-    uintmax_t um;
+    uintmax_t u;
     int8_t i8;
     int16_t i16;
     int32_t i32;
     int64_t i64;
+    intmax_t i;
     float f32;
     double f64;
     size_t len;

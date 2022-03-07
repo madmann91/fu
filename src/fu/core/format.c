@@ -57,31 +57,31 @@ static void write_str(FormatState* state, const char* s) {
 static const char* format_arg(FormatState* state, const char* ptr, size_t* index, const FormatArg* args) {
     const FormatArg* arg = &args[(*index)++];
     char* buf_ptr = reserve_buf(state, MAX_FORMAT_CHARS);
-    size_t chars_printed = 0;
+    size_t n = 0;
     char c = *(ptr++);
     switch (c) {
         case 'u':
-            switch (*(ptr++)) {
-                case '8': chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu8, arg->u8);  break;
-                case '1': assert(*ptr == '6'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu16, arg->u16); break;
-                case '3': assert(*ptr == '2'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu32, arg->u32); break;
-                case '6': assert(*ptr == '4'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu64, arg->u64); break;
-                default: chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIuMAX, arg->u); break;
+            switch (*ptr) {
+                case '8':                        ptr += 1; n = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu8,   arg->u8);  break;
+                case '1': assert(ptr[1] == '6'); ptr += 2; n = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu16,  arg->u16); break;
+                case '3': assert(ptr[1] == '2'); ptr += 2; n = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu32,  arg->u32); break;
+                case '6': assert(ptr[1] == '4'); ptr += 2; n = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIu64,  arg->u64); break;
+                default:                                   n = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIuMAX, arg->u);   break;
             }
             break;
         case 'i':
-            switch (*(ptr++)) {
-                case '8': chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi8, arg->i8);  break;
-                case '1': assert(*ptr == '6'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi16, arg->i16); break;
-                case '3': assert(*ptr == '2'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi32, arg->i32); break;
-                case '6': assert(*ptr == '4'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi64, arg->i64); break;
-                default: chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIiMAX, arg->i); break;
+            switch (*ptr) {
+                case '8':                        ptr += 1; n = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi8,   arg->i8);  break;
+                case '1': assert(ptr[1] == '6'); ptr += 2; n = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi16,  arg->i16); break;
+                case '3': assert(ptr[1] == '2'); ptr += 2; n = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi32,  arg->i32); break;
+                case '6': assert(ptr[1] == '4'); ptr += 2; n = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIi64,  arg->i64); break;
+                default:                                   n = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%"PRIiMAX, arg->i);   break;
             }
             break;
         case 'f':
             switch (*(ptr++)) {
-                case '3': assert(*ptr == '2'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%e", arg->f32); break;
-                case '6': assert(*ptr == '4'); ptr++; chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%e", arg->f64); break;
+                case '3': assert(*ptr == '2'); ptr++; n = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%e", arg->f32); break;
+                case '6': assert(*ptr == '4'); ptr++; n = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%e", arg->f64); break;
                 default: assert(false && "invalid floating-point format string");
             }
             break;
@@ -96,7 +96,7 @@ static const char* format_arg(FormatState* state, const char* ptr, size_t* index
             write_str(state, arg->b ? "true" : "false");
             break;
         case 'p':
-            chars_printed = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%p", arg->p);
+            n = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%p", arg->p);
             break;
         case 't':
             print_type(state, arg->t);
@@ -105,8 +105,8 @@ static const char* format_arg(FormatState* state, const char* ptr, size_t* index
             assert(false && "unknown formatting command");
             break;
     }
-    assert(chars_printed < MAX_FORMAT_CHARS);
-    advance_buf(state->cur_buf, chars_printed);
+    assert(n < MAX_FORMAT_CHARS);
+    advance_buf(state->cur_buf, n);
     return ptr;
 }
 

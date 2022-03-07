@@ -17,11 +17,12 @@ bool is_prim_type(TypeTag tag) {
     }
 }
 
+bool is_compound_type(TypeTag tag) {
+    return tag == TYPE_STRUCT || tag == TYPE_ENUM || tag == TYPE_SIG;
+}
+
 bool is_nominal_type(TypeTag tag) {
-    return
-        tag == TYPE_STRUCT ||
-        tag == TYPE_ENUM ||
-        tag == TYPE_ALIAS;
+    return tag == TYPE_STRUCT || tag == TYPE_ENUM || tag == TYPE_ALIAS;
 }
 
 bool is_float_type(TypeTag tag) {
@@ -69,15 +70,15 @@ bool is_subtype(const Type* left, const Type* right) {
 
     if (left->tag == TYPE_TUPLE && left->tuple_type.arg_count == right->tuple_type.arg_count) {
         return are_all_subtypes(
-            left->tuple_type.arg_types,
-            right->tuple_type.arg_types,
+            left->tuple_type.args,
+            right->tuple_type.args,
             left->tuple_type.arg_count);
     }
 
     if (left->tag == TYPE_FUN) {
         return
-            is_subtype(right->fun_type.dom_type, left->fun_type.dom_type) &&
-            is_subtype(left->fun_type.codom_type, right->fun_type.codom_type);
+            is_subtype(right->fun_type.dom, left->fun_type.dom) &&
+            is_subtype(left->fun_type.codom, right->fun_type.codom);
     }
 
     return false;
@@ -98,7 +99,7 @@ size_t get_prim_type_bitwidth(TypeTag tag) {
 
 size_t get_member_index_by_name(const Type* type, const char* name) {
     for (size_t i = 0; i < type->struct_type.member_count; ++i) {
-        if (!strcmp(name, type->struct_type.member_names[i]))
+        if (!strcmp(name, type->struct_type.members[i].name))
             return i;
     }
     return SIZE_MAX;
@@ -106,19 +107,7 @@ size_t get_member_index_by_name(const Type* type, const char* name) {
 
 const Type* get_member_type_by_name(const Type* type, const char* name) {
     size_t index = get_member_index_by_name(type, name);
-    return index == SIZE_MAX ? NULL : type->struct_type.member_types[index];
-}
-
-static void print_type_params(FormatState* state, const Type* type_params) {
-    if (type_params) {
-        format(state, "[", NULL);
-        for (; type_params; type_params = type_params->sibling_type) {
-            print_type(state, type_params);
-            if (type_params->sibling_type)
-                format(state, ", ", NULL);
-        }
-        format(state, "]", NULL);
-    }
+    return index == SIZE_MAX ? NULL : type->struct_type.members[index].type;
 }
 
 static void print_many_types(FormatState* state, const char* sep, const Type** types, size_t count) {
@@ -127,6 +116,14 @@ static void print_many_types(FormatState* state, const char* sep, const Type** t
         if (i != count - 1)
             format(state, sep, NULL);
     }
+}
+
+static void print_params(FormatState* state, const Type** params, size_t param_count) {
+    if (param_count == 0)
+        return;
+    format(state, "[", NULL);
+    print_many_types(state, ", ", params, param_count);
+    format(state, "]", NULL);
 }
 
 void print_type(FormatState* state, const Type* type) {
@@ -144,13 +141,13 @@ void print_type(FormatState* state, const Type* type) {
             break;
         case TYPE_TUPLE:
             format(state, "(", NULL);
-            print_many_types(state, ", ", type->tuple_type.arg_types, type->tuple_type.arg_count);
+            print_many_types(state, ", ", type->tuple_type.args, type->tuple_type.arg_count);
             format(state, ")", NULL);
             break;
         case TYPE_APP:
             print_type(state, type->type_app.applied_type);
             format(state, "[", NULL);
-            print_many_types(state, ", ", type->tuple_type.arg_types, type->tuple_type.arg_count);
+            print_many_types(state, ", ", type->type_app.args, type->type_app.arg_count);
             format(state, "]", NULL);
             break;
         case TYPE_ARRAY:
@@ -163,26 +160,24 @@ void print_type(FormatState* state, const Type* type) {
             break;
         case TYPE_FUN:
             print_keyword(state, "fun");
-            print_type_params(state, type->fun_type.type_params);
-            if (type->fun_type.dom_type->tag == TYPE_TUPLE)
-                print_type(state, type->fun_type.dom_type);
+            print_params(state, type->fun_type.params, type->fun_type.param_count);
+            if (type->fun_type.dom->tag == TYPE_TUPLE)
+                print_type(state, type->fun_type.dom);
             else {
                 format(state, "(", NULL);
-                print_type(state, type->fun_type.dom_type);
+                print_type(state, type->fun_type.dom);
                 format(state, ")", NULL);
             }
             format(state, " -> ", NULL);
-            print_type(state, type->fun_type.codom_type);
+            print_type(state, type->fun_type.codom);
             break;
         case TYPE_ENUM:
             print_keyword(state, "enum");
             format(state, " {s}", (FormatArg[]) { { .s = type->enum_type.name } });
-            print_type_params(state, type->enum_type.type_params);
             break;
         case TYPE_STRUCT:
             print_keyword(state, "struct");
             format(state, " {s}", (FormatArg[]) { { .s = type->struct_type.name } });
-            print_type_params(state, type->struct_type.type_params);
             break;
         default:
             assert(false && "invalid type");

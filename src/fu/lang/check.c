@@ -168,7 +168,7 @@ static const Type* check_tuple(
 
     const Type** arg_types = check_many(context,
         tuple->tuple_expr.args,
-        expected_type->tuple_type.arg_types,
+        expected_type->tuple_type.args,
         arg_count, check_arg);
     tuple->type = make_tuple_type(context->type_table, arg_types, arg_count);
     free(arg_types);
@@ -249,9 +249,9 @@ static const Type* check_call(
         return make_error_type(context->type_table);
     }
     assert(callee_type->tag == TYPE_FUN);
-    check_expr(context, arg, callee_type->fun_type.dom_type);
+    check_expr(context, arg, callee_type->fun_type.dom);
     return expect_type(context,
-        callee_type->fun_type.codom_type, expected_type, true, &call_or_op->file_loc);
+        callee_type->fun_type.codom, expected_type, true, &call_or_op->file_loc);
 }
 
 static const Type* check_call_expr(TypingContext* context, AstNode* call_expr, const Type* expected_type) {
@@ -341,8 +341,8 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
             if (expected_type->tag != TYPE_FUN)
                 return expr->type = fail_expect(context, "function expression", expected_type, &expr->file_loc);
             return check_fun_expr(context, expr,
-                expected_type->fun_type.dom_type,
-                expected_type->fun_type.codom_type);
+                expected_type->fun_type.dom,
+                expected_type->fun_type.codom);
         }
         case AST_BREAK_EXPR:
         case AST_CONTINUE_EXPR: {
@@ -460,7 +460,7 @@ static const Type* check_pattern_and_expr(
                 ++i, expr_arg = expr_arg->next, pattern_arg = pattern_arg->next)
             {
                 const Type* arg_type = expected_type->tag == TYPE_TUPLE
-                    ? expected_type->tuple_type.arg_types[i]
+                    ? expected_type->tuple_type.args[i]
                     : make_unknown_type(context->type_table);
                 arg_types[i] = check_pattern_and_expr(context, pattern_arg, expr_arg, arg_type);
             }

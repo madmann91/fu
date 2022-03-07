@@ -519,6 +519,8 @@ static inline AstNode* parse_prefix_expr(Parser* parser, AstNode* (*parse_primar
         case TOKEN_BANG:         tag = AST_NOT_EXPR;     break;
         case TOKEN_MINUS:        tag = AST_MINUS_EXPR;   break;
         case TOKEN_PLUS:         tag = AST_PLUS_EXPR;    break;
+        case TOKEN_AMP:          tag = AST_ADDR_OF_EXPR; break;
+        case TOKEN_STAR:         tag = AST_DEREF_EXPR;   break;
         default:
             return parse_postfix_expr(parser, parse_primary_expr);
     }

@@ -18,54 +18,71 @@ typedef enum {
     TYPE_FUN,
     TYPE_APP,
     TYPE_PARAM,
-    TYPE_ALIAS,
     TYPE_STRUCT,
-    TYPE_ENUM
+    TYPE_ENUM,
+    TYPE_ALIAS,
+    TYPE_SIG
 } TypeTag;
+
+typedef struct Member {
+    enum {
+        MEMBER_TYPE,
+        MEMBER_VALUE
+    } tag;
+    const char* name;
+    const Type* type;
+} Member;
+
+#define COMPOUND_TYPE_FIELDS(member_type) \
+    const Type** params; \
+    size_t param_count; \
+    member_type* members; \
+    size_t member_count;
 
 struct Type {
     TypeTag tag;
     bool contains_error : 1;
     bool contains_unknown : 1;
     size_t id;
-    const Type* parent_type;
-    const Type* sibling_type;
     union {
         struct {
-            const Type** arg_types;
+            const char* name;
+        } type_param;
+        struct {
+            COMPOUND_TYPE_FIELDS(Member)
+            const char* name;
+        } struct_type, enum_type;
+        struct {
+            COMPOUND_TYPE_FIELDS(const Member)
+        } sig_type;
+        struct {
+            const Type* applied_type;
+            const Type** args;
+            size_t arg_count;
+        } type_app;
+        struct {
+            const Type** params;
+            size_t param_count;
+            const Type* dom;
+            const Type* codom;
+        } fun_type;
+        struct {
+            const Type** args;
             size_t arg_count;
         } tuple_type;
         struct {
             const Type* elem_type;
         } array_type;
         struct {
-            const Type* dom_type;
-            const Type* codom_type;
-        } fun_type;
-        struct {
-            const Type* applied_type;
-            const Type** type_args;
-            size_t arg_count;
-        } type_app;
-        struct {
-            const char* name;
-            const Type** member_types;
-            const char** member_names;
-            size_t member_count;
-            const Type* child_types;
-            const Type* type_params;
-        } enum_type, struct_type;
-        struct {
-            const Type* type_params;
-            const Type* body;
-        } poly_type;
-        struct {
-            const char* name;
-        } type_param;
+            const Type** params;
+            size_t param_count;
+            const Type* aliased_type;
+        } alias_type;
     };
 };
 
 bool is_prim_type(TypeTag);
+bool is_compound_type(TypeTag);
 bool is_nominal_type(TypeTag);
 bool is_float_type(TypeTag);
 bool is_unsigned_int_type(TypeTag);

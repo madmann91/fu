@@ -47,6 +47,8 @@
 #define AST_PREFIX_EXPR_LIST(f) \
     f(PRE_DEC, DOUBLE_MINUS, "--") \
     f(PRE_INC, DOUBLE_PLUS, "++") \
+    f(ADDR_OF, AMP, "&") \
+    f(DEREF, STAR, "*") \
     f(MINUS, MINUS, "-") \
     f(PLUS, PLUS, "+") \
     f(NOT, BANG, "!")

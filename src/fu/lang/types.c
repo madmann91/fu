@@ -184,11 +184,6 @@ void print_type(FormatState* state, const Type* type) {
             format(state, " {s}", (FormatArg[]) { { .s = type->struct_type.name } });
             print_type_params(state, type->struct_type.type_params);
             break;
-        case TYPE_ALIAS:
-            print_keyword(state, "type");
-            format(state, " {s}", (FormatArg[]) { { .s = type->alias_type.name } });
-            print_type_params(state, type->alias_type.type_params);
-            break;
         default:
             assert(false && "invalid type");
             break;

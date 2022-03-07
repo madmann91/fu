@@ -39,11 +39,11 @@ void free_hash_table(HashTable* hash_table) {
 }
 
 static inline bool is_occupied_hash(uint32_t hash) {
-	return hash & OCCUPIED_MASK;
+    return hash & OCCUPIED_MASK;
 }
 
 bool is_bucket_occupied(const HashTable* hash_table, size_t i) {
-	return is_occupied_hash(hash_table->hashes[i]);
+    return is_occupied_hash(hash_table->hashes[i]);
 }
 
 static inline void rehash_table(HashTable* hash_table, size_t elem_size) {
@@ -80,7 +80,7 @@ bool insert_in_hash_table(
     size_t elem_size,
     CompareFn compare)
 {
-	hash |= OCCUPIED_MASK;
+    hash |= OCCUPIED_MASK;
     size_t index = mod_prime(hash, hash_table->capacity);
     while (is_bucket_occupied(hash_table, index)) {
         if (hash_table->hashes[index] == hash &&

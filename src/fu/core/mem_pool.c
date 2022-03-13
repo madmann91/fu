@@ -41,6 +41,8 @@ static size_t align_to(size_t size, size_t align) {
 }
 
 void* alloc_from_mem_pool(MemPool* mem_pool, size_t size) {
+    if (size == 0)
+        return NULL;
     size = align_to(size, sizeof(max_align_t));
     if (!mem_pool->cur) {
         mem_pool->first = mem_pool->cur = alloc_mem_block(NULL, size);

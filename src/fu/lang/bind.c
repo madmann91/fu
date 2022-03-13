@@ -208,7 +208,7 @@ static void bind_while_loop(Env* env, AstNode* while_loop) {
 }
 
 static void bind_for_loop(Env* env, AstNode* for_loop) {
-    bind_pattern(env, for_loop->for_loop.pattern);
+    bind_const_pattern(env, for_loop->for_loop.pattern);
     bind_expr(env, for_loop->for_loop.range);
     push_scope(env, for_loop);
     bind_expr(env, for_loop->for_loop.body);
@@ -238,6 +238,66 @@ void bind_stmt(Env* env, AstNode* stmt) {
             bind_expr(env, stmt);
             break;
     }
+}
+
+static void bind_path(Env* env, AstNode* path) {
+    // Only bind the base of the path
+    // (the other elements cannot be bound because types are not yet known).
+    AstNode* base = path->path.elems;
+    path->path.decl_site = find_symbol(env, base->path_elem.name, &base->file_loc);
+
+    for (AstNode* elem = path->path.elems; elem; elem = elem->next)
+        bind_many(env, elem->path_elem.type_args, bind_type);
+}
+
+static void bind_pattern(Env* env, AstNode* pattern, bool is_const) {
+    void (*bind_sub_pattern)(Env*, AstNode*) = is_const ? bind_const_pattern : bind_non_const_pattern;
+    switch (pattern->tag) {
+        case AST_PATH:
+            bind_path(env, pattern);
+            break;
+        case AST_BOOL_LITERAL:
+        case AST_INT_LITERAL:
+        case AST_CHAR_LITERAL:
+        case AST_STR_LITERAL:
+            return;
+        case AST_IDENT_PATTERN:
+            insert_symbol(env, pattern->ident_pattern.name, pattern);
+            pattern->ident_pattern.is_const = is_const;
+            break;
+        case AST_TUPLE_PATTERN:
+            bind_many(env, pattern->tuple_pattern.args, bind_sub_pattern);
+            break;
+        case AST_FIELD_PATTERN:
+            bind_pattern(env, pattern->field_pattern.val, is_const);
+            break;
+        case AST_STRUCT_PATTERN:
+            bind_path(env, pattern->struct_pattern.left);
+            bind_many(env, pattern->struct_pattern.fields, bind_sub_pattern);
+            break;
+        case AST_CTOR_PATTERN:
+            bind_path(env, pattern->ctor_pattern.path);
+            bind_pattern(env, pattern->ctor_pattern.arg, is_const);
+            break;
+        case AST_TYPED_PATTERN:
+            bind_pattern(env, pattern->typed_pattern.left, is_const);
+            bind_type(env, pattern->typed_pattern.type);
+            break;
+        case AST_ARRAY_PATTERN:
+            bind_many(env, pattern->array_pattern.elems, bind_sub_pattern);
+            break;
+        default:
+            assert(false && "invalid pattern");
+            break;
+    }
+}
+
+void bind_const_pattern(Env* env, AstNode* pattern) {
+    bind_pattern(env, pattern, true);
+}
+
+void bind_non_const_pattern(Env* env, AstNode* pattern) {
+    bind_pattern(env, pattern, false);
 }
 
 static void bind_type_param(Env* env, AstNode* type_param) {
@@ -287,7 +347,7 @@ void bind_decl(Env* env, AstNode* decl) {
         case AST_FUN_DECL:
             push_scope(env, decl);
             bind_type_params(env, decl->fun_decl.type_params);
-            bind_pattern(env, decl->fun_decl.param);
+            bind_const_pattern(env, decl->fun_decl.param);
             if (decl->fun_decl.ret_type)
                 bind_type(env, decl->fun_decl.ret_type);
             if (decl->fun_decl.body)
@@ -299,7 +359,7 @@ void bind_decl(Env* env, AstNode* decl) {
         case AST_CONST_DECL:
             if (decl->var_decl.init)
                 bind_expr(env, decl->var_decl.init);
-            bind_pattern(env, decl->var_decl.pattern);
+            bind_pattern(env, decl->var_decl.pattern, decl->tag == AST_CONST_DECL);
             break;
         case AST_USING_DECL:
             push_scope(env, decl);
@@ -313,59 +373,9 @@ void bind_decl(Env* env, AstNode* decl) {
     }
 }
 
-static void bind_path(Env* env, AstNode* path) {
-    // Only bind the base of the path
-    // (the other elements cannot be bound because types are not yet known).
-    AstNode* base = path->path.elems;
-    path->path.decl_site = find_symbol(env, base->path_elem.name, &base->file_loc);
-
-    for (AstNode* elem = path->path.elems; elem; elem = elem->next)
-        bind_many(env, elem->path_elem.type_args, bind_type);
-}
-
-void bind_pattern(Env* env, AstNode* pattern) {
-    switch (pattern->tag) {
-        case AST_PATH:
-            if (!pattern->path.elems->next && !pattern->path.elems->path_elem.type_args)
-                insert_symbol(env, pattern->path.elems->path_elem.name, pattern);
-            else
-                bind_path(env, pattern);
-            break;
-        case AST_BOOL_LITERAL:
-        case AST_INT_LITERAL:
-        case AST_CHAR_LITERAL:
-        case AST_STR_LITERAL:
-            return;
-        case AST_TUPLE_PATTERN:
-            bind_many(env, pattern->tuple_pattern.args, bind_pattern);
-            break;
-        case AST_FIELD_PATTERN:
-            bind_pattern(env, pattern->field_pattern.val);
-            break;
-        case AST_STRUCT_PATTERN:
-            bind_path(env, pattern->struct_pattern.left);
-            bind_many(env, pattern->struct_pattern.fields, bind_pattern);
-            break;
-        case AST_CTOR_PATTERN:
-            bind_path(env, pattern->ctor_pattern.path);
-            bind_pattern(env, pattern->ctor_pattern.arg);
-            break;
-        case AST_TYPED_PATTERN:
-            bind_pattern(env, pattern->typed_pattern.left);
-            bind_type(env, pattern->typed_pattern.type);
-            break;
-        case AST_ARRAY_PATTERN:
-            bind_many(env, pattern->array_pattern.elems, bind_pattern);
-            break;
-        default:
-            assert(false && "invalid pattern");
-            break;
-    }
-}
-
 static void bind_match_case(Env* env, AstNode* match_case) {
     push_scope(env, match_case);
-    bind_pattern(env, match_case->match_case.pattern);
+    bind_const_pattern(env, match_case->match_case.pattern);
     bind_expr(env, match_case->match_case.val);
     pop_scope(env);
 }
@@ -447,7 +457,7 @@ void bind_expr(Env* env, AstNode* expr) {
             break;
         case AST_FUN_EXPR:
             push_scope(env, expr);
-            bind_pattern(env, expr->fun_expr.param);
+            bind_const_pattern(env, expr->fun_expr.param);
             bind_expr(env, expr->fun_expr.body);
             if (expr->fun_expr.ret_type)
                 bind_type(env, expr->fun_expr.ret_type);

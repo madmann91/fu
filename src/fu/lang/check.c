@@ -3,6 +3,7 @@
 #include "fu/core/alloc.h"
 #include "fu/core/hash.h"
 #include "fu/core/mem_pool.h"
+#include "fu/core/dyn_array.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -37,12 +38,6 @@ static void pop_decl(TypingContext* context, AstNode* decl) {
         &decl, hash_ptr(hash_init(), decl), sizeof(AstNode*), compare_decls);
     assert(ptr && "trying to pop an unvisited declaration");
     remove_from_hash_table(&context->visited_decls, ptr, sizeof(AstNode*));
-}
-
-static bool is_assignable(AstNode* expr) {
-    assert(expr->type && "expression must have been type-checked first");
-    // TODO
-    return true;
 }
 
 static const Type** check_many(
@@ -91,10 +86,19 @@ static const Type* expect_type(
 }
 
 static const Type* expect_assignable(TypingContext* context, AstNode* expr) {
-    if (!is_assignable(expr) && !expr->type->contains_error) {
+    if (!is_assignable_expr(expr) && !expr->type->contains_error) {
         log_error(context->log, &expr->file_loc,
-            "expression with type '{t}' cannot be written to",
+            "expression cannot be written to",
             (FormatArg[]) { { .t = expr->type } });
+        if (expr->tag == AST_PATH &&
+            expr->path.decl_site && 
+            expr->path.decl_site->tag == AST_IDENT_PATTERN && 
+            expr->path.decl_site->ident_pattern.is_const)
+        {
+            log_note(context->log, &expr->path.decl_site->file_loc,
+                "'{s}' is declared as a constant here",
+                (FormatArg[]) { { .s = expr->path.decl_site->ident_pattern.name } });
+        }
         return make_error_type(context->type_table);
     }
     return expr->type;
@@ -135,7 +139,7 @@ static const Type* infer_decl_site(TypingContext* context, AstNode* decl_site) {
 
 static const Type* infer_path(TypingContext* context, AstNode* path) {
     // TODO: Infer the rest of the path
-    return infer_decl_site(context, path->path.decl_site);
+    return path->type = path->path.elems->type = infer_decl_site(context, path->path.decl_site);
 }
 
 static const Type* infer_tuple(
@@ -278,6 +282,8 @@ static const Type* check_float_literal(TypingContext* context, AstNode* literal,
 }
 
 static const Type* check_binary_expr(TypingContext* context, AstNode* binary_expr, const Type* expected_type) {
+    infer_expr(context, binary_expr->binary_expr.left);
+    infer_expr(context, binary_expr->binary_expr.right);
     if (is_assign_expr(binary_expr->tag))
         expect_assignable(context, binary_expr->binary_expr.left);
     // TODO
@@ -401,12 +407,14 @@ const Type* check_pattern(TypingContext* context, AstNode* pattern, const Type* 
         case AST_TYPED_PATTERN:
             pattern->type = check_pattern(context, pattern->typed_pattern.left, infer_type(context, pattern->typed_pattern.type));
             return pattern->type = expect_type(context, pattern->type, expected_type, false, &pattern->file_loc);
+        case AST_IDENT_PATTERN:
+            if (expected_type->contains_unknown)
+                return pattern->type = fail_infer(context, "pattern", &pattern->file_loc);
+            return pattern->type = expected_type;
         case AST_PATH:
-            if (!pattern->path.decl_site) {
-                if (expected_type->contains_unknown)
-                    return pattern->type = fail_infer(context, "pattern", &pattern->file_loc);
-                return pattern->type = expected_type;
-            }
+            // This error should have been reported by the name binding algorithm
+            if (!pattern->path.decl_site)
+                return pattern->type = make_error_type(context->type_table);
             return pattern->type = infer_path(context, pattern);
         default:
             assert(false && "invalid pattern");
@@ -510,6 +518,34 @@ static const Type* infer_fun_decl(TypingContext* context, AstNode* fun_decl) {
     return fun_decl->type = make_fun_type(context->type_table, dom_type, codom_type);
 }
 
+static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
+    Member* members = new_dyn_array(sizeof(Member));
+    for (AstNode* decl = mod_decl->mod_decl.decls; decl; decl = decl->next) {
+        // TODO: variables
+        infer_decl(context, decl);
+        bool is_type =
+            decl->tag == AST_SIG_DECL ||
+            decl->tag == AST_STRUCT_DECL ||
+            decl->tag == AST_ENUM_DECL ||
+            decl->tag == AST_TYPE_DECL;
+        push_on_dyn_array(members, &(Member) {
+            .is_type = is_type,
+            .name = get_decl_name(decl),
+            .type = decl->type
+        });
+    }
+
+    const Type** type_params = new_dyn_array(sizeof(Type*));
+    // TODO
+
+    mod_decl->type = make_sig_type(context->type_table,
+        members, get_dyn_array_size(members),
+        type_params, get_dyn_array_size(type_params));
+    free_dyn_array(members);
+    free_dyn_array(type_params);
+    return mod_decl->type;
+}
+
 const Type* infer_decl(TypingContext* context, AstNode* decl) {
     switch (decl->tag) {
         case AST_FUN_DECL:
@@ -520,6 +556,8 @@ const Type* infer_decl(TypingContext* context, AstNode* decl) {
             return infer_enum_decl(context, decl);
         case AST_TYPE_DECL:
             return infer_type_decl(context, decl);
+        case AST_MOD_DECL:
+            return infer_mod_decl(context, decl);
         case AST_VAR_DECL:
         case AST_CONST_DECL:
             return infer_const_or_var_decl(context, decl);

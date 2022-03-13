@@ -141,6 +141,7 @@ typedef enum {
     AST_WHILE_LOOP,
     AST_FOR_LOOP,
     // Patterns
+    AST_IDENT_PATTERN,
     AST_FIELD_PATTERN,
     AST_STRUCT_PATTERN,
     AST_CTOR_PATTERN,
@@ -328,6 +329,10 @@ struct AstNode {
             AstNode* arg;
         } ctor_pattern;
         struct {
+            const char* name;
+            bool is_const;
+        } ident_pattern;
+        struct {
             AstNode* cond;
             AstNode* body;
         } while_loop;
@@ -346,6 +351,7 @@ bool needs_semicolon(AstNodeTag);
 bool is_tuple(AstNodeTag);
 bool is_binary_expr(AstNodeTag);
 bool is_assign_expr(AstNodeTag);
+bool is_assignable_expr(const AstNode*);
 
 size_t get_ast_list_length(const AstNode*);
 
@@ -356,6 +362,7 @@ const char* get_binary_expr_op(AstNodeTag);
 const char* get_assign_expr_op(AstNodeTag);
 const char* get_binary_expr_fun_name(AstNodeTag);
 const char* get_decl_keyword(AstNodeTag);
+const char* get_decl_name(const AstNode*);
 
 int get_max_binary_expr_precedence();
 int get_binary_expr_precedence(AstNodeTag);

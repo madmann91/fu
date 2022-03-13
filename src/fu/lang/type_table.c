@@ -35,6 +35,13 @@ struct TypeTable {
 static uint32_t hash_type(uint32_t hash, const Type* type) {
     hash = hash_uint32(hash, type->tag);
     switch (type->tag) {
+#define f(name, ...) case TYPE_##name:
+    AST_PRIM_TYPE_LIST(f)
+#undef f
+        case TYPE_UNKNOWN:
+        case TYPE_NORET:
+        case TYPE_ERROR:
+            break;
         case TYPE_TUPLE:
             for (size_t i = 0; i < type->tuple_type.arg_count; ++i)
                 hash = hash_uint64(hash, type->tuple_type.args[i]->id);
@@ -55,7 +62,7 @@ static uint32_t hash_type(uint32_t hash, const Type* type) {
                 hash = hash_uint64(hash, type->sig_type.params[i]->id);
             for (size_t i = 0; i < type->sig_type.member_count; ++i) {
                 hash = hash_str(hash, type->sig_type.members[i].name);
-                hash = hash_uint8(hash, type->sig_type.members[i].tag);
+                hash = hash_uint8(hash, type->sig_type.members[i].is_type);
                 hash = hash_uint64(hash, type->sig_type.members[i].type->id);
             }
             break;
@@ -82,6 +89,10 @@ static bool compare_types(const void* left, const void* right) {
     if (type_left->tag != type_right->tag)
         return false;
     switch (type_left->tag) {
+#define f(name, ...) case TYPE_##name:
+    AST_PRIM_TYPE_LIST(f)
+#undef f
+            break;
         case TYPE_TUPLE:
             if (type_left->tuple_type.arg_count != type_right->tuple_type.arg_count)
                 return false;
@@ -211,6 +222,8 @@ TypeTable* new_type_table(MemPool* mem_pool) {
     type_table->types = new_hash_table(DEFAULT_TYPE_TABLE_CAPACITY, sizeof(Type*));
     type_table->str_pool = new_str_pool(mem_pool);
     type_table->mem_pool = mem_pool;
+    type_table->type_count = 0;
+
     for (size_t i = 0; i < PRIM_TYPE_COUNT; ++i)
         type_table->prim_types[i] = get_or_insert_type(type_table, &(Type) { .tag = i });
     type_table->unknown_type = get_or_insert_type(type_table, &(Type) { .tag = TYPE_UNKNOWN });
@@ -322,7 +335,7 @@ const Type* make_poly_fun_type(
 
 static inline bool is_member_smaller_than(const Member* left, const Member* right) {
     return
-        left->tag < right->tag || (left->tag == right->tag &&
+        left->is_type < right->is_type || (left->is_type == right->is_type &&
         (left->type->id < right->type->id || (left->type->id == right->type->id &&
         strcmp(left->name, right->name) < 0)));
 }

@@ -84,6 +84,10 @@ bool is_subtype(const Type* left, const Type* right) {
     return false;
 }
 
+bool is_non_const_ptr_type(const Type* type) {
+    return type->tag == TYPE_PTR && !type->ptr_type.is_const;
+}
+
 size_t get_prim_type_bitwidth(TypeTag tag) {
     switch (tag) {
         case TYPE_BOOL: return 1;
@@ -128,10 +132,10 @@ static void print_params(FormatState* state, const Type** params, size_t param_c
 
 static void print_member(FormatState* state, const Member* member) {
     format(state, "\n", NULL);
-    print_keyword(state, member->tag == MEMBER_TYPE ? "type" : "const");
+    print_keyword(state, member->is_type ? "type" : "const");
     format(state, " {s}", (FormatArg[]) { { .s = member->name } });
     if (member->type) {
-        format(state, member->tag == MEMBER_TYPE ? " = " : ": ", NULL);
+        format(state, member->is_type ? " = " : ": ", NULL);
         print_type(state, member->type);
     }
     format(state, ";", NULL);

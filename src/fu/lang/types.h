@@ -26,10 +26,7 @@ typedef enum {
 } TypeTag;
 
 typedef struct Member {
-    enum {
-        MEMBER_TYPE,
-        MEMBER_VALUE
-    } tag;
+    bool is_type;
     const char* name;
     const Type* type;
 } Member;
@@ -95,6 +92,7 @@ bool is_signed_int_type(TypeTag);
 bool is_int_type(TypeTag);
 bool is_int_or_float_type(TypeTag);
 bool is_subtype(const Type*, const Type*);
+bool is_non_const_ptr_type(const Type*);
 
 size_t get_prim_type_bitwidth(TypeTag);
 size_t get_member_index_by_name(const Type*, const char*);

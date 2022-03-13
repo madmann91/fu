@@ -1,4 +1,5 @@
 #include "fu/lang/ast.h"
+#include "fu/lang/types.h"
 #include "fu/core/utils.h"
 
 #include <limits.h>
@@ -370,6 +371,9 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
                 print_ast(state, ast_node->call_expr.callee);
             print_with_parens(state, ast_node->call_expr.arg);
             break;
+        case AST_IDENT_PATTERN:
+            format(state, "{s}", (FormatArg[]) { { .s = ast_node->ident_pattern.name } });
+            break;
         case AST_CTOR_PATTERN:
             print_ast(state, ast_node->ctor_pattern.path);
             print_with_parens(state, ast_node->ctor_pattern.arg);
@@ -456,10 +460,25 @@ bool is_assign_expr(AstNodeTag tag) {
 #define f(name, ...) case AST_##name##_EXPR:
     AST_ASSIGN_EXPR_LIST(f)
 #undef f
+        case AST_ASSIGN_EXPR:
             return true;
         default:
             return false;
     }
+}
+
+bool is_assignable_expr(const AstNode* expr) {
+    assert(expr->type && "expression must have been type-checked first");
+    if (expr->tag == AST_DEREF_EXPR)
+        return is_non_const_ptr_type(expr->unary_expr.operand->type);
+    else if (expr->tag == AST_MEMBER_EXPR)
+        return is_assignable_expr(expr->member_expr.left);
+    else if (expr->tag == AST_PATH) {
+        return
+            expr->path.decl_site->tag == AST_IDENT_PATTERN &&
+            !expr->path.decl_site->ident_pattern.is_const;
+    }
+    return false;
 }
 
 size_t get_ast_list_length(const AstNode* node) {
@@ -547,6 +566,23 @@ const char* get_decl_keyword(AstNodeTag tag) {
         case AST_CONST_DECL:  return "const";
         default:
             assert(false && "invalid declaration");
+            return NULL;
+    }
+}
+
+const char* get_decl_name(const AstNode* decl) {
+    switch (decl->tag) {
+        case AST_TYPE_DECL:
+            return decl->type_decl.name;
+        case AST_STRUCT_DECL:
+        case AST_ENUM_DECL:
+            return decl->struct_decl.name;
+        case AST_SIG_DECL:
+        case AST_MOD_DECL:
+            return decl->mod_decl.name;
+        case AST_FUN_DECL:
+            return decl->fun_decl.name;
+        default:
             return NULL;
     }
 }

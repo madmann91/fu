@@ -737,6 +737,14 @@ static AstNode* parse_untyped_pattern(Parser* parser, bool is_fun_param) {
                 return parse_struct(parser, AST_STRUCT_PATTERN, path, parse_field_pattern);
             if (parser->ahead->tag == TOKEN_L_PAREN)
                 return parse_ctor_pattern(parser, path);
+            // If the pattern is just an identifier, then this is an identifier pattern, not a path
+            if (!path->path.elems->next && !path->path.elems->path_elem.type_args) {
+                *path = (AstNode) {
+                    .tag = AST_IDENT_PATTERN,
+                    .file_loc = path->file_loc,
+                    .ident_pattern.name = path->path.elems->path_elem.name
+                };
+            }
             return path;
         }
         case TOKEN_MINUS:

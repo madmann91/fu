@@ -3,6 +3,11 @@
 
 #include "fu/lang/ast.h"
 
+/*
+ * Front-end types, including a simple module system and HM-style polymorphism.
+ * Types should always be created via a `TypeTable` object.
+ */
+
 typedef struct Type Type;
 typedef struct TypeTable TypeTable;
 
@@ -17,25 +22,24 @@ typedef enum {
     TYPE_ARRAY,
     TYPE_FUN,
     TYPE_APP,
-    TYPE_PARAM,
     TYPE_STRUCT,
     TYPE_ENUM,
     TYPE_ALIAS,
     TYPE_SIG,
-    TYPE_PTR
+    TYPE_PTR,
+    TYPE_VAR
 } TypeTag;
 
-typedef struct Member {
-    bool is_type;
+typedef struct StructOrEnumMember {
     const char* name;
     const Type* type;
-} Member;
+} StructOrEnumMember;
 
-#define COMPOUND_TYPE_FIELDS(member_type) \
-    const Type** params; \
-    size_t param_count; \
-    member_type* members; \
-    size_t member_count;
+typedef struct SigMember {
+    const char* name;
+    const Type* type;
+    bool is_type;
+} SigMember;
 
 struct Type {
     TypeTag tag;
@@ -44,14 +48,19 @@ struct Type {
     size_t id;
     union {
         struct {
-            const char* name;
-        } type_param;
-        struct {
-            COMPOUND_TYPE_FIELDS(Member)
+            StructOrEnumMember* members;
+            size_t member_count;
+            const Type** type_params;
+            size_t type_param_count;
             const char* name;
         } struct_type, enum_type;
         struct {
-            COMPOUND_TYPE_FIELDS(const Member)
+            const SigMember* members;
+            size_t member_count;
+            const Type** type_params;
+            size_t type_param_count;
+            const Type** exist_vars;
+            size_t exist_var_count;
         } sig_type;
         struct {
             const Type* applied_type;
@@ -59,8 +68,8 @@ struct Type {
             size_t arg_count;
         } type_app;
         struct {
-            const Type** params;
-            size_t param_count;
+            const Type** type_params;
+            size_t type_param_count;
             const Type* dom;
             const Type* codom;
         } fun_type;
@@ -72,14 +81,15 @@ struct Type {
             const Type* elem_type;
         } array_type;
         struct {
-            const Type** params;
-            size_t param_count;
             const Type* aliased_type;
         } alias_type;
         struct {
             bool is_const;
             const Type* pointee;
         } ptr_type;
+        struct {
+            const char* name;
+        } type_var;
     };
 };
 

@@ -519,7 +519,7 @@ static const Type* infer_fun_decl(TypingContext* context, AstNode* fun_decl) {
 }
 
 static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
-    Member* members = new_dyn_array(sizeof(Member));
+    SigMember* members = new_dyn_array(sizeof(SigMember));
     for (AstNode* decl = mod_decl->mod_decl.decls; decl; decl = decl->next) {
         // TODO: variables
         infer_decl(context, decl);
@@ -528,21 +528,24 @@ static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
             decl->tag == AST_STRUCT_DECL ||
             decl->tag == AST_ENUM_DECL ||
             decl->tag == AST_TYPE_DECL;
-        push_on_dyn_array(members, &(Member) {
-            .is_type = is_type,
-            .name = get_decl_name(decl),
-            .type = decl->type
-        });
+        SigMember member = make_transp_sig_member(
+            context->type_table, get_decl_name(decl), decl->type, is_type);
+        push_on_dyn_array(members, &member);
     }
 
     const Type** type_params = new_dyn_array(sizeof(Type*));
     // TODO
 
+    const Type** exist_vars = new_dyn_array(sizeof(Type*));
+    // TODO
+
     mod_decl->type = make_sig_type(context->type_table,
         members, get_dyn_array_size(members),
-        type_params, get_dyn_array_size(type_params));
+        type_params, get_dyn_array_size(type_params),
+        exist_vars, get_dyn_array_size(exist_vars));
     free_dyn_array(members);
     free_dyn_array(type_params);
+    free_dyn_array(exist_vars);
     return mod_decl->type;
 }
 

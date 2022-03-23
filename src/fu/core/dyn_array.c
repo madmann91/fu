@@ -42,6 +42,10 @@ void pop_from_dyn_array_explicit(DynArray* array) {
     array->size--;
 }
 
+void resize_dyn_array_explicit(DynArray* array, size_t size) {
+    array->size = size;
+}
+
 void free_dyn_array_explicit(DynArray* array) {
     free(array);
 }

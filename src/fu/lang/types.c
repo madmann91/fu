@@ -122,15 +122,15 @@ static void print_many_types(FormatState* state, const char* sep, const Type** t
     }
 }
 
-static void print_params(FormatState* state, const Type** params, size_t param_count) {
-    if (param_count == 0)
+static void print_type_params(FormatState* state, const Type** type_params, size_t type_param_count) {
+    if (type_param_count == 0)
         return;
     format(state, "[", NULL);
-    print_many_types(state, ", ", params, param_count);
+    print_many_types(state, ", ", type_params, type_param_count);
     format(state, "]", NULL);
 }
 
-static void print_member(FormatState* state, const Member* member) {
+static void print_sig_member(FormatState* state, const SigMember* member) {
     format(state, "\n", NULL);
     print_keyword(state, member->is_type ? "type" : "const");
     format(state, " {s}", (FormatArg[]) { { .s = member->name } });
@@ -170,12 +170,12 @@ void print_type(FormatState* state, const Type* type) {
             print_type(state, type->array_type.elem_type);
             format(state, "]", NULL);
             break;
-        case TYPE_PARAM:
-            format(state, "{s}", (FormatArg[]) { { .s = type->type_param.name } });
+        case TYPE_VAR:
+            format(state, "{s}", (FormatArg[]) { { .s = type->type_var.name } });
             break;
         case TYPE_FUN:
             print_keyword(state, "fun");
-            print_params(state, type->fun_type.params, type->fun_type.param_count);
+            print_type_params(state, type->fun_type.type_params, type->fun_type.type_param_count);
             if (type->fun_type.dom->tag == TYPE_TUPLE)
                 print_type(state, type->fun_type.dom);
             else {
@@ -196,10 +196,10 @@ void print_type(FormatState* state, const Type* type) {
             break;
         case TYPE_SIG:
             print_keyword(state, "sig");
-            print_params(state, type->sig_type.params, type->sig_type.param_count);
+            print_type_params(state, type->sig_type.type_params, type->sig_type.type_param_count);
             format(state, " {{{>}", NULL);
             for (size_t i = 0; i < type->sig_type.member_count; ++i)
-                print_member(state, type->sig_type.members + i);
+                print_sig_member(state, type->sig_type.members + i);
             format(state, "{<}\n}", NULL);
             break;
         case TYPE_PTR:

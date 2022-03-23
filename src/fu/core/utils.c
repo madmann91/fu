@@ -13,6 +13,12 @@
 #include <unistd.h>
 #endif
 
+#ifndef NDEBUG
+#define CHUNK_SIZE 4
+#else
+#define CHUNK_SIZE 4096
+#endif
+
 static size_t convert_str_to_char_ord(const char* ptr, int base, char* res) {
     char* next = NULL;
     unsigned int ord = strtoul(ptr, &next, base);
@@ -54,8 +60,7 @@ char* read_file(const char* file_name, size_t* file_size) {
     FILE* file = fopen(file_name, "rb");
     if (!file)
         return NULL;
-
-    size_t chunk_size = 4096;
+    size_t chunk_size = CHUNK_SIZE;
     char* file_data = NULL;
     *file_size = 0;
     while (true) {

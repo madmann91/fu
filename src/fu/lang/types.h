@@ -99,6 +99,9 @@ size_t get_member_index_by_name(const Type*, const char*);
 const Type* get_member_type_by_name(const Type*, const char*);
 
 void print_type(FormatState*, const Type*);
+
+#ifndef NDEBUG
 void dump_type(const Type*);
+#endif
 
 #endif

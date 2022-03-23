@@ -410,6 +410,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
     }
 }
 
+#ifndef NDEBUG // GCOV_EXCL_START
 void dump_ast(const AstNode* ast_node) {
     FormatState state = new_format_state("    ", !is_color_supported(stdout));
     print_ast(&state, ast_node);
@@ -417,6 +418,7 @@ void dump_ast(const AstNode* ast_node) {
     free_format_state(&state);
     printf("\n");
 }
+#endif // GCOV_EXCL_STOP
 
 bool needs_semicolon(AstNodeTag tag) {
     switch (tag) {

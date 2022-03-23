@@ -216,6 +216,7 @@ void print_type(FormatState* state, const Type* type) {
     }
 }
 
+#ifndef NDEBUG // GCOV_EXCL_START
 void dump_type(const Type* type) {
     FormatState state = new_format_state("    ", !is_color_supported(stdout));
     print_type(&state, type);
@@ -223,3 +224,4 @@ void dump_type(const Type* type) {
     free_format_state(&state);
     printf("\n");
 }
+#endif // GCOV_EXCL_STOP

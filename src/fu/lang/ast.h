@@ -345,7 +345,10 @@ struct AstNode {
 };
 
 void print_ast(FormatState*, const AstNode*);
+
+#ifndef NDEBUG
 void dump_ast(const AstNode*);
+#endif
 
 bool needs_semicolon(AstNodeTag);
 bool is_tuple(AstNodeTag);

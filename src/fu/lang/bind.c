@@ -477,7 +477,7 @@ void bind_type(Env* env, AstNode* type) {
     switch (type->tag) {
         case AST_NORET_TYPE:
 #define f(name, ...) case AST_TYPE_##name:
-        AST_PRIM_TYPE_LIST(f)
+        PRIM_TYPE_LIST(f)
 #undef f
             break;
         case AST_PATH:

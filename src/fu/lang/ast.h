@@ -3,6 +3,7 @@
 
 #include "fu/core/format.h"
 #include "fu/core/log.h"
+#include "fu/lang/types.h"
 
 #define AST_ARITH_EXPR_LIST(f) \
     f(ADD, 3, PLUS,    "+", "add") \
@@ -61,19 +62,6 @@
     AST_PREFIX_EXPR_LIST(f) \
     AST_POSTFIX_EXPR_LIST(f)
 
-#define AST_PRIM_TYPE_LIST(f) \
-    f(BOOL, "bool") \
-    f(I8,   "i8") \
-    f(I16,  "i16") \
-    f(I32,  "i32") \
-    f(I64,  "i64") \
-    f(U8,   "u8") \
-    f(U16,  "u16") \
-    f(U32,  "u32") \
-    f(U64,  "u64") \
-    f(F32,  "f32") \
-    f(F64,  "f64")
-
 typedef enum {
     AST_ERROR,
     AST_PROGRAM,
@@ -90,7 +78,7 @@ typedef enum {
     AST_PTR_TYPE,
     AST_FUN_TYPE,
 #define f(name, ...) AST_TYPE_##name,
-    AST_PRIM_TYPE_LIST(f)
+    PRIM_TYPE_LIST(f)
 #undef f
     AST_NORET_TYPE,
     AST_WHERE_TYPE,
@@ -151,7 +139,6 @@ typedef enum {
 } AstNodeTag;
 
 typedef struct AstNode AstNode;
-typedef struct Type Type;
 
 struct AstNode {
     AstNodeTag tag;
@@ -220,7 +207,7 @@ struct AstNode {
         } member_expr;
         struct {
             const char* name;
-            AstNode* kind;
+            Kind kind;
         } type_param;
         struct {
             const char* name;
@@ -356,7 +343,7 @@ bool is_binary_expr(AstNodeTag);
 bool is_assign_expr(AstNodeTag);
 bool is_assignable_expr(const AstNode*);
 
-size_t get_ast_list_length(const AstNode*);
+size_t count_ast_nodes(const AstNode*);
 
 AstNodeTag assign_expr_to_binary_expr(AstNodeTag);
 const char* get_prim_type_name(AstNodeTag);

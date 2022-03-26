@@ -9,7 +9,7 @@
 bool is_prim_type(TypeTag tag) {
     switch (tag) {
 #define f(name, ...) case TYPE_##name:
-        AST_PRIM_TYPE_LIST(f)
+        PRIM_TYPE_LIST(f)
 #undef f
             return true;
         default:
@@ -91,7 +91,7 @@ bool is_non_const_ptr_type(const Type* type) {
 size_t get_prim_type_bitwidth(TypeTag tag) {
     switch (tag) {
         case TYPE_BOOL: return 1;
-        case TYPE_I8: case TYPE_U8: return 8;
+        case TYPE_I8:  case TYPE_U8:  return 8;
         case TYPE_I16: case TYPE_U16: return 16;
         case TYPE_I32: case TYPE_U32: case TYPE_F32: return 32;
         case TYPE_I64: case TYPE_U64: case TYPE_F64: return 64;
@@ -144,7 +144,7 @@ static void print_sig_member(FormatState* state, const SigMember* member) {
 void print_type(FormatState* state, const Type* type) {
     switch (type->tag) {
 #define f(name, str) case TYPE_##name: print_keyword(state, str); break;
-        AST_PRIM_TYPE_LIST(f);
+        PRIM_TYPE_LIST(f);
         case TYPE_UNKNOWN:
             format(state, "?", NULL);
             break;

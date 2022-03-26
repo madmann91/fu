@@ -93,6 +93,17 @@ static inline void print_decl_head(FormatState* state, const char* keyword, cons
         print_many_asts_with_delim(state, "[", ", ", "]", type_params);
 }
 
+static inline void print_kind(FormatState* state, Kind kind) {
+    const char* keyword = NULL;
+    switch (kind) {
+        case KIND_TYPE: keyword = "type"; break;
+        case KIND_NAT:  keyword = "nat";  break;
+        default:
+            return;
+    }
+    print_keyword(state, keyword);
+}
+
 void print_ast(FormatState* state, const AstNode* ast_node) {
     if (ast_node->attrs)
         print_many_asts_with_delim(state, "#[", ", ", "] ", ast_node->attrs);
@@ -141,7 +152,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             });
             break;
 #define f(name, ...) case AST_TYPE_##name:
-        AST_PRIM_TYPE_LIST(f)
+        PRIM_TYPE_LIST(f)
 #undef f
             print_prim_type(state, ast_node->tag);
             break;
@@ -197,8 +208,10 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             break;
         case AST_TYPE_PARAM:
             format(state, "{s}", (FormatArg[]) { { .s = ast_node->type_param.name } });
-            if (ast_node->type_param.kind)
-                print_ast_with_delim(state, ": ", "", ast_node->type_param.kind);
+            if (ast_node->type_param.kind != KIND_TYPE) {
+                format(state, ": ", NULL);
+                print_kind(state, ast_node->type_param.kind);
+            }
             break;
         case AST_TYPE_DECL:
             print_decl_head(state, "type", ast_node->type_decl.name, ast_node->type_decl.type_params);
@@ -483,7 +496,7 @@ bool is_assignable_expr(const AstNode* expr) {
     return false;
 }
 
-size_t get_ast_list_length(const AstNode* node) {
+size_t count_ast_nodes(const AstNode* node) {
     size_t len = 0;
     while (node)
         node = node->next, len++;
@@ -503,7 +516,7 @@ AstNodeTag assign_expr_to_binary_expr(AstNodeTag tag) {
 const char* get_prim_type_name(AstNodeTag tag) {
     switch (tag) {
 #define f(name, str) case AST_TYPE_##name: return str;
-        AST_PRIM_TYPE_LIST(f)
+        PRIM_TYPE_LIST(f)
 #undef f
         default:
             assert(false && "invalid primitive type");

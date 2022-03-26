@@ -15,7 +15,7 @@
 
 enum {
 #define f(name, ...) PRIM_TYPE_##name,
-    AST_PRIM_TYPE_LIST(f)
+    PRIM_TYPE_LIST(f)
 #undef f
     PRIM_TYPE_COUNT
 };
@@ -36,7 +36,7 @@ static uint32_t hash_type(uint32_t hash, const Type* type) {
     hash = hash_uint32(hash, type->tag);
     switch (type->tag) {
 #define f(name, ...) case TYPE_##name:
-    AST_PRIM_TYPE_LIST(f)
+    PRIM_TYPE_LIST(f)
 #undef f
         case TYPE_UNKNOWN:
         case TYPE_NORET:
@@ -92,7 +92,7 @@ static bool compare_types(const void* left, const void* right) {
         return false;
     switch (type_left->tag) {
 #define f(name, ...) case TYPE_##name:
-    AST_PRIM_TYPE_LIST(f)
+    PRIM_TYPE_LIST(f)
 #undef f
             break;
         case TYPE_TUPLE:
@@ -243,16 +243,12 @@ void free_type_table(TypeTable* type_table) {
     free(type_table);
 }
 
-SigMember make_transp_sig_member(TypeTable* type_table, const char* name, const Type* type, bool is_type) {
+SigMember make_sig_member(TypeTable* type_table, const char* name, const Type* type, bool is_type) {
     return (SigMember) {
         .name = make_str(&type_table->str_pool, name),
         .type = type,
         .is_type = is_type
     };
-}
-
-SigMember make_opaque_sig_member(TypeTable* type_table, const char* name) {
-    return make_transp_sig_member(type_table, name, NULL, true);
 }
 
 StructOrEnumMember make_struct_or_enum_member(TypeTable* type_table, const char* name, const Type* type) {
@@ -262,7 +258,8 @@ StructOrEnumMember make_struct_or_enum_member(TypeTable* type_table, const char*
     };
 }
 
-static Type* make_struct_or_enum_type(TypeTable* type_table, TypeTag tag, const char* name, size_t member_count, size_t type_param_count) {
+Type* make_struct_or_enum_type(TypeTable* type_table, TypeTag tag, const char* name, size_t member_count, size_t type_param_count) {
+    assert(tag == TYPE_STRUCT || tag == TYPE_ENUM);
     Type* type = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type));
     type->tag = tag;
     type->struct_type.name = make_str(&type_table->str_pool, name);
@@ -272,14 +269,6 @@ static Type* make_struct_or_enum_type(TypeTable* type_table, TypeTag tag, const 
     type->struct_type.type_param_count = type_param_count;
     type->id = type_table->type_count++;
     return type;
-}
-
-Type* make_struct_type(TypeTable* type_table, const char* name, size_t field_count, size_t type_param_count) {
-    return make_struct_or_enum_type(type_table, TYPE_STRUCT, name, field_count, type_param_count);
-}
-
-Type* make_enum_type(TypeTable* type_table, const char* name, size_t option_count, size_t type_param_count) {
-    return make_struct_or_enum_type(type_table, TYPE_ENUM, name, option_count, type_param_count);
 }
 
 const Type* make_prim_type(TypeTable* type_table, TypeTag tag) {
@@ -299,9 +288,13 @@ const Type* make_noret_type(TypeTable* type_table) {
     return type_table->noret_type;
 }
 
-const Type* make_type_var(TypeTable* type_table, const char* name) {
-    name = make_str(&type_table->str_pool, name);
-    return get_or_insert_type(type_table, &(Type) { .tag = TYPE_VAR, .type_var.name = name });
+const Type* make_type_var(TypeTable* type_table, const char* name, Kind kind) {
+    Type* type = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type));
+    type->tag = TYPE_VAR;
+    type->type_var.name = make_str(&type_table->str_pool, name);
+    type->type_var.kind = kind;
+    type->id = type_table->type_count++;
+    return type;
 }
 
 const Type* make_tuple_type(TypeTable* type_table, const Type** args, size_t arg_count) {

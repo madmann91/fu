@@ -1,6 +1,7 @@
 #ifndef FU_LANG_CHECK_H
 #define FU_LANG_CHECK_H
 
+#include "fu/lang/ast.h"
 #include "fu/lang/types.h"
 #include "fu/core/hash_table.h"
 

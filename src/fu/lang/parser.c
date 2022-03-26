@@ -309,12 +309,21 @@ static inline AstNode* parse_block_expr(Parser* parser) {
     });
 }
 
+static Kind parse_kind(Parser* parser) {
+    if (accept_token(parser, TOKEN_TYPE))
+        return KIND_TYPE;
+    if (accept_token(parser, TOKEN_NAT))
+        return KIND_NAT;
+    parse_error(parser, "kind");
+    return KIND_TYPE;
+}
+
 static AstNode* parse_type_param(Parser* parser) {
     FilePos begin = parser->ahead->file_loc.begin;
     const char* name = parse_ident(parser);
-    AstNode* kind = NULL;
+    Kind kind = KIND_TYPE;
     if (accept_token(parser, TOKEN_COLON))
-        kind = parse_type(parser);
+        kind = parse_kind(parser);
     return make_ast_node(parser, &begin, &(AstNode) {
         .tag = AST_TYPE_PARAM,
         .type_param = { .name = name, .kind = kind }
@@ -377,7 +386,7 @@ static inline AstNode* parse_where_type(Parser* parser, AstNode* path) {
 AstNode* parse_type(Parser* parser) {
     switch (parser->ahead->tag) {
 #define f(name, ...) case TOKEN_##name: return parse_basic_type(parser, AST_TYPE_##name);
-        AST_PRIM_TYPE_LIST(f)
+        PRIM_TYPE_LIST(f)
 #undef f
         case TOKEN_IDENT: {
             AstNode* path = parse_path(parser);
@@ -423,7 +432,7 @@ static AstNode* parse_field_name(Parser* parser) {
 static AstNode* parse_field_names(Parser* parser, TokenTag stop) {
     AstNode* field_names = parse_many(parser, stop, TOKEN_COMMA, parse_field_name);
     if (!field_names)
-        fail_expect(parser, "name", token_tag_to_str(parser->ahead->tag), &parser->ahead->file_loc);
+        fail_expect(parser, "field name", token_tag_to_str(parser->ahead->tag), &parser->ahead->file_loc);
     return field_names;
 }
 
@@ -759,7 +768,7 @@ static AstNode* parse_untyped_pattern(Parser* parser, bool is_fun_param) {
             }
             break;
 #define f(name, ...) case TOKEN_##name:
-        AST_PRIM_TYPE_LIST(f)
+        PRIM_TYPE_LIST(f)
 #undef f
         case TOKEN_BANG:
         case TOKEN_AMP:

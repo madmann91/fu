@@ -2,6 +2,7 @@
 #define FU_LANG_TOKEN_H
 
 #include "fu/core/log.h"
+#include "fu/lang/types.h"
 
 #define SYMBOL_LIST(f) \
     f(L_PAREN, "(") \
@@ -66,23 +67,14 @@
     f(VAR, "var") \
     f(CONST, "const") \
     f(TYPE, "type") \
+    f(NAT, "nat") \
     f(STRUCT, "struct") \
     f(ENUM, "enum") \
     f(MOD, "mod") \
     f(SIG, "sig") \
     f(WHERE, "where") \
     f(USING, "using") \
-    f(BOOL, "bool") \
-    f(I8, "i8") \
-    f(I16, "i16") \
-    f(I32, "i32") \
-    f(I64, "i64") \
-    f(U8, "u8") \
-    f(U16, "u16") \
-    f(U32, "u32") \
-    f(U64, "u64") \
-    f(F32, "f32") \
-    f(F64, "f64") \
+    PRIM_TYPE_LIST(f)
 
 #define SPECIAL_TOKEN_LIST(f) \
     f(IDENT, "identifier") \

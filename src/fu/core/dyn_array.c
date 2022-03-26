@@ -10,26 +10,28 @@ struct DynArray {
     alignas(max_align_t) char data[];
 };
 
-DynArray* ptr_to_dyn_array(const void* ptr) {
+static DynArray* ptr_to_dyn_array(const void* ptr) {
     return (DynArray*)(((char*)ptr) - offsetof(DynArray, data));
 }
 
-void* dyn_array_to_ptr(const DynArray* dyn_array) {
+static void* dyn_array_to_ptr(const DynArray* dyn_array) {
     return (void*)dyn_array->data;
 }
 
-DynArray* new_dyn_array_explicit(size_t elem_size, size_t capacity) {
+void* new_dyn_array(size_t elem_size) {
+    static const size_t capacity = 4;
     DynArray* dyn_array = malloc_or_die(sizeof(DynArray) + elem_size * capacity);
     dyn_array->size = 0;
     dyn_array->capacity = capacity;
-    return dyn_array;
+    return dyn_array_to_ptr(dyn_array);
 }
 
-size_t get_dyn_array_size_explicit(DynArray* array) {
-    return array->size;
+size_t get_dyn_array_size(const void* ptr) {
+    return ptr_to_dyn_array(ptr)->size;
 }
 
-void push_on_dyn_array_explicit(DynArray* array, const void* elem, size_t elem_size) {
+void push_on_dyn_array_explicit(void* ptr, const void* elem, size_t elem_size) {
+    DynArray* array = ptr_to_dyn_array(ptr);
     if (array->size >= array->capacity) {
         array->capacity *= 2;
         array = realloc_or_die(array, sizeof(DynArray) + elem_size * array->capacity);
@@ -38,14 +40,18 @@ void push_on_dyn_array_explicit(DynArray* array, const void* elem, size_t elem_s
     array->size++;
 }
 
-void pop_from_dyn_array_explicit(DynArray* array) {
-    array->size--;
+void pop_from_dyn_array(void* ptr) {
+    ptr_to_dyn_array(ptr)->size--;
 }
 
-void resize_dyn_array_explicit(DynArray* array, size_t size) {
-    array->size = size;
+void resize_dyn_array(void* ptr, size_t size) {
+    ptr_to_dyn_array(ptr)->size = size;
 }
 
-void free_dyn_array_explicit(DynArray* array) {
-    free(array);
+void clear_dyn_array(void* ptr) {
+    resize_dyn_array(ptr, 0);
+}
+
+void free_dyn_array(void* ptr) {
+    free(ptr_to_dyn_array(ptr));
 }

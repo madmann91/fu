@@ -1,19 +1,40 @@
 #ifndef FU_LANG_TYPES_H
 #define FU_LANG_TYPES_H
 
-#include "fu/lang/ast.h"
+#include "fu/core/format.h"
+
+#include <stddef.h>
+#include <stdbool.h>
 
 /*
  * Front-end types, including a simple module system and HM-style polymorphism.
  * Types should always be created via a `TypeTable` object.
  */
 
+#define PRIM_TYPE_LIST(f) \
+    f(BOOL, "bool") \
+    f(I8,   "i8") \
+    f(I16,  "i16") \
+    f(I32,  "i32") \
+    f(I64,  "i64") \
+    f(U8,   "u8") \
+    f(U16,  "u16") \
+    f(U32,  "u32") \
+    f(U64,  "u64") \
+    f(F32,  "f32") \
+    f(F64,  "f64")
+
 typedef struct Type Type;
 typedef struct TypeTable TypeTable;
 
 typedef enum {
+    KIND_TYPE,
+    KIND_NAT
+} Kind;
+
+typedef enum {
 #define f(name, ...) TYPE_##name,
-    AST_PRIM_TYPE_LIST(f)
+    PRIM_TYPE_LIST(f)
 #undef f
     TYPE_UNKNOWN,
     TYPE_NORET,
@@ -88,6 +109,7 @@ struct Type {
             const Type* pointee;
         } ptr_type;
         struct {
+            Kind kind;
             const char* name;
         } type_var;
     };

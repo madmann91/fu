@@ -3,33 +3,22 @@
 
 #include <stddef.h>
 
-#define DEFAULT_DYN_ARRAY_CAPACITY 4
+/*
+ * Dynamically-growing array implementation. The design is such that the
+ * returned array can be manipulated just like a regular pointer.
+ */
 
 typedef struct DynArray DynArray;
 
-#define new_dyn_array(T) \
-    dyn_array_to_ptr(new_dyn_array_explicit(sizeof(T), DEFAULT_DYN_ARRAY_CAPACITY))
-#define get_dyn_array_size(ptr) \
-    get_dyn_array_size_explicit(ptr_to_dyn_array(ptr))
-#define pop_from_dyn_array(ptr) \
-    pop_from_dyn_array_explicit(ptr_to_dyn_array(ptr))
-#define resize_dyn_array(ptr, size) \
-    resize_dyn_array_explicit(ptr_to_dyn_array(ptr), size)
-#define clear_dyn_array(ptr) \
-    resize_dyn_array(ptr, 0)
 #define push_on_dyn_array(ptr, ...) \
-    push_on_dyn_array_explicit(ptr_to_dyn_array(ptr), (__VA_ARGS__), sizeof(*(__VA_ARGS__)))
-#define free_dyn_array(ptr) \
-    free_dyn_array_explicit(ptr_to_dyn_array(ptr))
+    push_on_dyn_array_explicit(ptr, (__VA_ARGS__), sizeof(*(__VA_ARGS__)))
 
-DynArray* ptr_to_dyn_array(const void*);
-void* dyn_array_to_ptr(const DynArray*);
-
-DynArray* new_dyn_array_explicit(size_t, size_t);
-size_t get_dyn_array_size_explicit(DynArray*);
-void push_on_dyn_array_explicit(DynArray*, const void*, size_t);
-void pop_from_dyn_array_explicit(DynArray*);
-void resize_dyn_array_explicit(DynArray*, size_t);
-void free_dyn_array_explicit(DynArray*);
+void* new_dyn_array(size_t elem_size);
+size_t get_dyn_array_size(const void*);
+void push_on_dyn_array_explicit(void*, const void*, size_t);
+void pop_from_dyn_array(void*);
+void resize_dyn_array(void*, size_t);
+void clear_dyn_array(void*);
+void free_dyn_array(void*);
 
 #endif

@@ -72,6 +72,8 @@
     f(ENUM, "enum") \
     f(MOD, "mod") \
     f(SIG, "sig") \
+    f(PUB, "pub") \
+    f(OPAQUE, "opaque") \
     f(WHERE, "where") \
     f(USING, "using") \
     PRIM_TYPE_LIST(f)

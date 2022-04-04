@@ -101,7 +101,8 @@ size_t get_prim_type_bitwidth(TypeTag tag) {
     }
 }
 
-size_t get_member_index_by_name(const Type* type, const char* name) {
+size_t find_type_member_index(const Type* type, const char* name) {
+    assert(is_compound_type(type->tag));
     for (size_t i = 0; i < type->struct_type.member_count; ++i) {
         if (!strcmp(name, type->struct_type.members[i].name))
             return i;
@@ -109,9 +110,10 @@ size_t get_member_index_by_name(const Type* type, const char* name) {
     return SIZE_MAX;
 }
 
-const Type* get_member_type_by_name(const Type* type, const char* name) {
-    size_t index = get_member_index_by_name(type, name);
-    return index == SIZE_MAX ? NULL : type->struct_type.members[index].type;
+const TypeMember* get_type_member(const Type* type, size_t index) {
+    assert(is_compound_type(type->tag));
+    assert(index < type->struct_type.member_count);
+    return &type->struct_type.members[index];
 }
 
 static void print_many_types(FormatState* state, const char* sep, const Type** types, size_t count) {
@@ -130,7 +132,7 @@ static void print_type_params(FormatState* state, const Type** type_params, size
     format(state, "]", NULL);
 }
 
-static void print_sig_member(FormatState* state, const SigMember* member) {
+static void print_sig_member(FormatState* state, const TypeMember* member) {
     format(state, "\n", NULL);
     print_keyword(state, member->is_type ? "type" : "const");
     format(state, " {s}", (FormatArg[]) { { .s = member->name } });

@@ -115,6 +115,7 @@ typedef enum {
     AST_IF_EXPR,
     AST_FIELD_EXPR,
     AST_STRUCT_EXPR,
+    AST_UPDATE_EXPR,
     AST_TUPLE_EXPR,
     AST_CALL_EXPR,
     AST_TYPED_EXPR,
@@ -143,6 +144,7 @@ typedef struct AstNode AstNode;
 struct AstNode {
     AstNodeTag tag;
     FileLoc file_loc;
+    const Type* external_type;
     const Type* type;
     AstNode* next;
     AstNode* attrs;
@@ -175,6 +177,7 @@ struct AstNode {
         } attr;
         struct {
             const char* name;
+            size_t index;
         } field_name;
         struct {
             AstNode* args;
@@ -212,6 +215,7 @@ struct AstNode {
         struct {
             const char* name;
             AstNode* type_args;
+            size_t index;
         } path_elem;
         struct {
             AstNode* elems;
@@ -219,6 +223,7 @@ struct AstNode {
         } path;
         struct {
             const char* name;
+            bool is_public;
             AstNode* param;
             AstNode* type_params;
             AstNode* ret_type;
@@ -226,6 +231,7 @@ struct AstNode {
             AstNode* used_sigs;
         } fun_decl;
         struct {
+            bool is_public;
             AstNode* pattern;
             AstNode* init;
         } const_decl, var_decl;
@@ -240,11 +246,14 @@ struct AstNode {
         } option_decl;
         struct {
             const char* name;
+            bool is_public;
+            bool is_opaque;
             AstNode* type_params;
             AstNode* decls;
         } struct_decl, enum_decl;
         struct {
             const char* name;
+            bool is_public;
             AstNode* type_params;
             AstNode* decls;
             AstNode* type;
@@ -252,6 +261,8 @@ struct AstNode {
         } mod_decl, sig_decl;
         struct {
             const char* name;
+            bool is_public;
+            bool is_opaque;
             AstNode* type_params;
             AstNode* aliased_type;
         } type_decl;
@@ -295,12 +306,11 @@ struct AstNode {
         struct {
             AstNode* field_names;
             AstNode* val;
-            size_t index;
         } field_expr, field_pattern;
         struct {
             AstNode* left;
             AstNode* fields;
-        } struct_expr, struct_pattern;
+        } struct_expr, update_expr, struct_pattern;
         struct {
             AstNode* left;
             AstNode* type;

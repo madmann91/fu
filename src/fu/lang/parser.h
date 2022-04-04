@@ -5,12 +5,12 @@
 #include "fu/core/log.h"
 
 /*
- * The parser is LL(2), which means that it requires at most two tokens of look-ahead.
+ * The parser is LL(3), which means that it requires at most three tokens of look-ahead.
  * It is a simple recursive descent parser, implemented by hand, which allocates nodes
  * and strings on a memory pool.
  */
 
-#define LOOK_AHEAD 2
+#define LOOK_AHEAD 3
 
 typedef struct MemPool MemPool;
 typedef struct Lexer Lexer;

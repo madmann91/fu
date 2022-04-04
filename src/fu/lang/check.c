@@ -4,6 +4,7 @@
 #include "fu/core/hash.h"
 #include "fu/core/mem_pool.h"
 #include "fu/core/dyn_array.h"
+#include "fu/core/utils.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -55,8 +56,7 @@ static const Type** check_many(
 
 static const Type** infer_many(
     TypingContext* context,
-    AstNode* elems,
-    size_t count,
+    AstNode* elems, size_t count,
     const Type* (*infer_one)(TypingContext*, AstNode*))
 {
     const Type** types = malloc_or_die(sizeof(Type*) * count);
@@ -73,31 +73,53 @@ static const Type* expect_type(
     const FileLoc* file_loc)
 {
     bool matches_type = is_upper_bound ? is_subtype(type, expected_type) : is_subtype(expected_type, type);
-    if (!matches_type && !expected_type->contains_error && !type->contains_error) {
-        log_error(context->log, file_loc, "expected {s} type '{t}', but got type '{t}'",
-            (FormatArg[]) {
-                { .s = is_upper_bound ? "at most" : "at least" },
-                { .t = expected_type },
-                { .t = type }
-            });
+    if (!matches_type) {
+        if (!expected_type->contains_error && !type->contains_error) {
+            log_error(context->log, file_loc, "expected {s} type '{t}', but got type '{t}'",
+                (FormatArg[]) {
+                    { .s = is_upper_bound ? "at most" : "at least" },
+                    { .t = expected_type },
+                    { .t = type }
+                });
+        }
         return make_error_type(context->type_table);
     }
     return type;
 }
 
+static bool expect_type_with_tag(
+    TypingContext* context,
+    const Type* type,
+    TypeTag tag,
+    const char* msg,
+    const FileLoc* file_loc)
+{
+    if (type->tag != tag) {
+        if (!type->contains_error) {
+            log_error(context->log, file_loc,
+                "expected {s} type, but got '{t}'",
+                (FormatArg[]) { { .s = msg }, { .t = type } });
+        }
+        return false;
+    }
+    return true;
+}
+
 static const Type* expect_assignable(TypingContext* context, AstNode* expr) {
-    if (!is_assignable_expr(expr) && !expr->type->contains_error) {
-        log_error(context->log, &expr->file_loc,
-            "expression cannot be written to",
-            (FormatArg[]) { { .t = expr->type } });
-        if (expr->tag == AST_PATH &&
-            expr->path.decl_site && 
-            expr->path.decl_site->tag == AST_IDENT_PATTERN && 
-            expr->path.decl_site->ident_pattern.is_const)
-        {
-            log_note(context->log, &expr->path.decl_site->file_loc,
-                "'{s}' is declared as a constant here",
-                (FormatArg[]) { { .s = expr->path.decl_site->ident_pattern.name } });
+    if (!is_assignable_expr(expr)) {
+        if (!expr->type->contains_error) {
+            log_error(context->log, &expr->file_loc,
+                "expression cannot be written to",
+                (FormatArg[]) { { .t = expr->type } });
+            if (expr->tag == AST_PATH &&
+                expr->path.decl_site &&
+                expr->path.decl_site->tag == AST_IDENT_PATTERN &&
+                expr->path.decl_site->ident_pattern.is_const)
+            {
+                log_note(context->log, &expr->path.decl_site->file_loc,
+                    "'{s}' is declared as a constant here",
+                    (FormatArg[]) { { .s = expr->path.decl_site->ident_pattern.name } });
+            }
         }
         return make_error_type(context->type_table);
     }
@@ -123,6 +145,23 @@ static const Type* fail_infer(TypingContext* context, const char* msg, const Fil
     return make_error_type(context->type_table);
 }
 
+static size_t get_type_member_index_or_fail(
+    TypingContext* context,
+    const Type* type,
+    const char* member,
+    FileLoc* file_loc)
+{
+    if (is_compound_type(type->tag)) {
+        size_t index = find_type_member_index(type, member);
+        if (index != SIZE_MAX)
+            return index;
+    }
+    log_error(context->log, file_loc,
+        "type '{t}' does not have member '{s}'",
+        (FormatArg[]) { { .t = type }, { .s = member } });
+    return SIZE_MAX;
+}
+
 static const Type* infer_decl_site(TypingContext* context, AstNode* decl_site) {
     if (!decl_site->type) {
         if (!push_decl(context, decl_site)) {
@@ -138,11 +177,24 @@ static const Type* infer_decl_site(TypingContext* context, AstNode* decl_site) {
 }
 
 static const Type* infer_path(TypingContext* context, AstNode* path) {
-    // This error should have been reported by the name binding algorithm
-    if (!path->path.decl_site)
+    assert(path->path.elems);
+    if (!path->path.decl_site) {
+        // This error should have been reported by the name binding algorithm
         return path->type = make_error_type(context->type_table);
-    // TODO: Infer the rest of the path
-    return path->type = path->path.elems->type = infer_decl_site(context, path->path.decl_site);
+    }
+
+    path->path.elems->type = infer_decl_site(context, path->path.decl_site);
+    for (AstNode* elem = path->path.elems;; elem = elem->next) {
+        assert(elem && elem->type);
+        if (!elem->next)
+            return path->type = elem->type;
+        elem->path_elem.index = get_type_member_index_or_fail(
+            context, elem->type, elem->path_elem.name, &elem->file_loc);
+        if (elem->path_elem.index == SIZE_MAX)
+            return make_error_type(context->type_table);
+        // TODO: Instantiate type with type arguments
+        elem->next->type = get_type_member(elem->type, elem->path_elem.index)->type;
+    }
 }
 
 static const Type* infer_tuple(
@@ -200,6 +252,10 @@ static const Type* infer_type_with_noret(TypingContext* context, AstNode* type, 
             return make_fun_type(context->type_table,
                 infer_type(context, type->fun_type.dom_type),
                 infer_type_with_noret(context, type->fun_type.codom_type, true));
+        case AST_SIG_DECL:
+        case AST_STRUCT_DECL:
+        case AST_ENUM_DECL:
+            return infer_decl(context, type);
         default:
             assert(false && "invalid type");
             return make_error_type(context->type_table);
@@ -249,15 +305,11 @@ static const Type* check_call(
     TypingContext* context,
     AstNode* call_or_op,
     AstNode* arg,
-    const char* msg,
     const Type* callee_type,
     const Type* expected_type)
 {
-    if (callee_type->tag != TYPE_FUN) {
-        log_error(context->log, &call_or_op->file_loc, "expected function type in {s}, but got type '{t}'",
-            (FormatArg[]) { { .s = msg }, { .t = callee_type } });
+    if (!expect_type_with_tag(context, callee_type, TYPE_FUN, "function", &call_or_op->file_loc))
         return make_error_type(context->type_table);
-    }
     assert(callee_type->tag == TYPE_FUN);
     check_expr(context, arg, callee_type->fun_type.dom);
     return expect_type(context,
@@ -266,8 +318,7 @@ static const Type* check_call(
 
 static const Type* check_call_expr(TypingContext* context, AstNode* call_expr, const Type* expected_type) {
     const Type* callee_type = infer_expr(context, call_expr->call_expr.callee);
-    return call_expr->type = check_call(context,
-        call_expr, call_expr->call_expr.arg, "function call", callee_type, expected_type);
+    return call_expr->type = check_call(context, call_expr, call_expr->call_expr.arg, callee_type, expected_type);
 }
 
 static const Type* check_int_literal(TypingContext* context, AstNode* literal, const Type* expected_type) {
@@ -275,6 +326,13 @@ static const Type* check_int_literal(TypingContext* context, AstNode* literal, c
         return literal->type = make_prim_type(context->type_table, TYPE_I64);
     if (!is_int_or_float_type(expected_type->tag))
         return literal->type = fail_expect(context, "integer literal", expected_type, &literal->file_loc);
+    if (is_int_type(expected_type->tag) &&
+        ilog2(literal->int_literal.val) > get_prim_type_bitwidth(expected_type->tag)) {
+        log_error(context->log, &literal->file_loc,
+            "integer literal does not fit in type '{t}'",
+            (FormatArg[]) { { .t = expected_type } });
+        return literal->type = make_error_type(context->type_table);
+    }
     return literal->type = expected_type;
 }
 
@@ -300,6 +358,57 @@ static const Type* infer_logic_expr(TypingContext* context, AstNode* logic_expr)
     check_expr(context, logic_expr->binary_expr.left, bool_type);
     check_expr(context, logic_expr->binary_expr.right, bool_type);
     return bool_type;
+}
+
+static const Type* check_struct_expr(TypingContext* context, AstNode* struct_expr, const Type* expected_type) {
+    const Type* struct_type = infer_type(context, struct_expr->struct_expr.left);
+    if (!expect_type_with_tag(context, struct_type, TYPE_STRUCT, "structure", &struct_expr->file_loc))
+        return struct_expr->type = make_error_type(context->type_table);
+
+    bool* seen = calloc_or_die(struct_type->struct_type.member_count, sizeof(bool));
+    for (AstNode* field_expr = struct_expr->struct_expr.fields; field_expr; field_expr = field_expr->next) {
+        const Type* field_type = NULL;
+        for (AstNode* field_name = field_expr->field_expr.field_names; field_name; field_name = field_name->next) {
+            size_t field_index = get_type_member_index_or_fail(context, struct_type, field_name->field_name.name, &field_name->file_loc);
+            const TypeMember* type_member = get_type_member(struct_type, field_index);
+            if (type_member->is_type) {
+                log_error(context->log, &field_name->file_loc,
+                    "expected field name, but got '{s}'",
+                    (FormatArg[]) { { .s = field_name->field_name.name } });
+                goto fail;
+            }
+
+            if (!field_type)
+                field_type = type_member->type;
+            else if (is_subtype(type_member->type, field_type))
+                field_type = type_member->type;
+            else if (!is_subtype(field_type, type_member->type)) {
+                log_error(context->log, &field_name->file_loc,
+                    "expected compatible field types, but got '{t}' and '{t}'",
+                    (FormatArg[]) { { .t = type_member->type }, { .t = field_type } });
+                goto fail;
+            }
+
+            if (seen[field_index]) {
+                log_error(context->log, &field_name->file_loc,
+                    "field '{s}' is specified more than once",
+                    (FormatArg[]) { { .s = field_name->field_name.name } });
+                goto fail;
+            }
+            seen[field_index] = true;
+        }
+        assert(field_type);
+        check_expr(context, field_expr->field_expr.val, field_type);
+    }
+
+    struct_expr->type = expect_type(context, struct_type, expected_type, true, &struct_expr->file_loc);
+    goto cleanup;
+
+fail:
+    struct_expr->type = make_error_type(context->type_table);
+cleanup:
+    free(seen);
+    return struct_expr->type;
 }
 
 const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expected_type) {
@@ -362,7 +471,9 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
                 make_unit_type(context->type_table),
                 make_noret_type(context->type_table));
             return expect_type(context, type, expected_type, true, &expr->file_loc);
-       }
+        }
+        case AST_STRUCT_EXPR:
+            return check_struct_expr(context, expr, expected_type);
 #define f(name, ...) case AST_##name##_EXPR:
 #define g(name, ...) case AST_##name##_ASSIGN_EXPR:
         AST_ASSIGN_EXPR_LIST(g)
@@ -538,8 +649,8 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
             check_expr(context, field_decl->field_decl.val, field_type);
         for (AstNode* field_name = field_decl->field_decl.field_names; field_name; field_name = field_name->next) {
             assert(field_count < member_count);
-            struct_type->struct_type.members[field_count++] = make_struct_or_enum_member(
-                context->type_table, field_name->field_name.name, field_type);
+            struct_type->struct_type.members[field_count++] = make_type_member(
+                context->type_table, field_name->field_name.name, field_type, false);
         }
     }
     return struct_decl->type;
@@ -553,15 +664,20 @@ static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
         const Type* option_type = make_unit_type(context->type_table);
         if (option_decl->option_decl.param_type)
             option_type = infer_type(context, option_decl->option_decl.param_type);
-        enum_type->enum_type.members[option_count++] = make_struct_or_enum_member(
-            context->type_table, option_decl->option_decl.name, option_type);
+        enum_type->enum_type.members[option_count++] = make_type_member(
+            context->type_table, option_decl->option_decl.name, option_type, false);
     }
     return enum_decl->type;
 }
 
 static const Type* infer_type_decl(TypingContext* context, AstNode* type_decl) {
-    // TODO
-    return make_error_type(context->type_table);
+    const Type** type_params = infer_type_params(context, type_decl->type_decl.type_params);
+    size_t type_param_count = get_dyn_array_size(type_params);
+    Type* type = make_alias_type(context->type_table, type_decl->type_decl.name, type_param_count);
+    type->alias_type.aliased_type = infer_type(context, type_decl->type_decl.aliased_type);
+    memcpy(type->alias_type.type_params, type_params, sizeof(Type*) * type_param_count);
+    free_dyn_array(type_params);
+    return type_decl->type = type;
 }
 
 static const Type* infer_fun_decl(TypingContext* context, AstNode* fun_decl) {
@@ -582,31 +698,33 @@ static const Type* infer_fun_decl(TypingContext* context, AstNode* fun_decl) {
 }
 
 static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
-    SigMember* members = new_dyn_array(sizeof(SigMember));
-    const Type** exist_vars = new_dyn_array(sizeof(Type*));
+    TypeMember* members = new_dyn_array(sizeof(TypeMember));
     const Type** type_params = infer_type_params(context, mod_decl->mod_decl.type_params);
 
     for (AstNode* decl = mod_decl->mod_decl.decls; decl; decl = decl->next) {
         infer_decl(context, decl);
-        bool is_type =
-            decl->tag == AST_SIG_DECL ||
-            decl->tag == AST_STRUCT_DECL ||
-            decl->tag == AST_ENUM_DECL ||
-            decl->tag == AST_TYPE_DECL;
-        bool is_opaque = decl->tag == AST_TYPE_DECL && !decl->type_decl.aliased_type;
-        SigMember member = make_sig_member(
-            context->type_table, get_decl_name(decl), is_opaque ? NULL : decl->type, is_type);
-        push_on_dyn_array(members, &member);
+        if (decl->external_type) {
+            bool is_type =
+                decl->tag == AST_SIG_DECL ||
+                decl->tag == AST_STRUCT_DECL ||
+                decl->tag == AST_ENUM_DECL ||
+                decl->tag == AST_TYPE_DECL;
+            bool is_opaque = decl->tag == AST_TYPE_DECL && !decl->type_decl.aliased_type;
+            TypeMember member = make_type_member(
+                context->type_table,
+                get_decl_name(decl),
+                is_opaque ? NULL : decl->type,
+                is_type);
+            push_on_dyn_array(members, &member);
+        }
     }
 
     mod_decl->type = make_sig_type(context->type_table,
         members, get_dyn_array_size(members),
-        type_params, get_dyn_array_size(type_params),
-        exist_vars, get_dyn_array_size(exist_vars));
+        type_params, get_dyn_array_size(type_params));
 
     free_dyn_array(members);
     free_dyn_array(type_params);
-    free_dyn_array(exist_vars);
     return mod_decl->type;
 }
 

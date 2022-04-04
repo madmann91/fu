@@ -51,16 +51,11 @@ typedef enum {
     TYPE_VAR
 } TypeTag;
 
-typedef struct StructOrEnumMember {
-    const char* name;
-    const Type* type;
-} StructOrEnumMember;
-
-typedef struct SigMember {
+typedef struct TypeMember {
     const char* name;
     const Type* type;
     bool is_type;
-} SigMember;
+} TypeMember;
 
 struct Type {
     TypeTag tag;
@@ -69,19 +64,17 @@ struct Type {
     size_t id;
     union {
         struct {
-            StructOrEnumMember* members;
+            TypeMember* members;
             size_t member_count;
             const Type** type_params;
             size_t type_param_count;
             const char* name;
         } struct_type, enum_type;
         struct {
-            const SigMember* members;
+            const TypeMember* members;
             size_t member_count;
             const Type** type_params;
             size_t type_param_count;
-            const Type** exist_vars;
-            size_t exist_var_count;
         } sig_type;
         struct {
             const Type* applied_type;
@@ -102,7 +95,10 @@ struct Type {
             const Type* elem_type;
         } array_type;
         struct {
+            const Type** type_params;
+            size_t type_param_count;
             const Type* aliased_type;
+            const char* name;
         } alias_type;
         struct {
             bool is_const;
@@ -127,8 +123,8 @@ bool is_subtype(const Type*, const Type*);
 bool is_non_const_ptr_type(const Type*);
 
 size_t get_prim_type_bitwidth(TypeTag);
-size_t get_member_index_by_name(const Type*, const char*);
-const Type* get_member_type_by_name(const Type*, const char*);
+size_t find_type_member_index(const Type*, const char*);
+const TypeMember* get_type_member(const Type*, size_t);
 
 void print_type(FormatState*, const Type*);
 

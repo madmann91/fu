@@ -60,8 +60,6 @@ static uint32_t hash_type(uint32_t hash, const Type* type) {
         case TYPE_SIG:
             for (size_t i = 0; i < type->sig_type.type_param_count; ++i)
                 hash = hash_uint64(hash, type->sig_type.type_params[i]->id);
-            for (size_t i = 0; i < type->sig_type.exist_var_count; ++i)
-                hash = hash_uint64(hash, type->sig_type.exist_vars[i]->id);
             for (size_t i = 0; i < type->sig_type.member_count; ++i) {
                 hash = hash_str(hash, type->sig_type.members[i].name);
                 hash = hash_uint8(hash, type->sig_type.members[i].is_type);
@@ -121,8 +119,8 @@ static bool compare_types(const void* left, const void* right) {
                 !memcmp(type_left->fun_type.type_params, type_right->fun_type.type_params, params_size);
         }
         case TYPE_SIG: {
-            size_t params_size  = sizeof(Type*)     * type_left->sig_type.type_param_count;
-            size_t members_size = sizeof(SigMember) * type_left->sig_type.member_count;
+            size_t params_size  = sizeof(Type*)      * type_left->sig_type.type_param_count;
+            size_t members_size = sizeof(TypeMember) * type_left->sig_type.member_count;
             return
                 type_left->sig_type.type_param_count == type_right->sig_type.type_param_count &&
                 type_left->sig_type.member_count     == type_right->sig_type.member_count &&
@@ -150,10 +148,10 @@ static const Type** copy_types(TypeTable* type_table, const Type** types, size_t
     return types_copy;
 }
 
-static const SigMember* copy_sig_members(TypeTable* type_table, const SigMember* sig_members, size_t count) {
-    SigMember* sig_members_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(SigMember) * count);
-    memcpy(sig_members_copy, sig_members, sizeof(SigMember) * count);
-    return sig_members_copy;
+static const TypeMember* copy_members(TypeTable* type_table, const TypeMember* members, size_t count) {
+    TypeMember* members_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(TypeMember) * count);
+    memcpy(members_copy, members, sizeof(TypeMember) * count);
+    return members_copy;
 }
 
 static const Type* get_or_insert_type(TypeTable* type_table, const Type* type) {
@@ -205,9 +203,7 @@ static const Type* get_or_insert_type(TypeTable* type_table, const Type* type) {
             new_type->sig_type.type_params =
                 copy_types(type_table, type->sig_type.type_params, type->sig_type.type_param_count);
             new_type->sig_type.members =
-                copy_sig_members(type_table, type->sig_type.members, type->sig_type.member_count);
-            new_type->sig_type.exist_vars =
-                copy_types(type_table, type->sig_type.exist_vars, type->sig_type.exist_var_count);
+                copy_members(type_table, type->sig_type.members, type->sig_type.member_count);
             for (size_t i = 0; i < type->sig_type.member_count; ++i) {
                 new_type->contains_error   |= type->sig_type.members[i].type->contains_error;
                 new_type->contains_unknown |= type->sig_type.members[i].type->contains_unknown;
@@ -243,18 +239,11 @@ void free_type_table(TypeTable* type_table) {
     free(type_table);
 }
 
-SigMember make_sig_member(TypeTable* type_table, const char* name, const Type* type, bool is_type) {
-    return (SigMember) {
+TypeMember make_type_member(TypeTable* type_table, const char* name, const Type* type, bool is_type) {
+    return (TypeMember) {
         .name = make_str(&type_table->str_pool, name),
         .type = type,
         .is_type = is_type
-    };
-}
-
-StructOrEnumMember make_struct_or_enum_member(TypeTable* type_table, const char* name, const Type* type) {
-    return (StructOrEnumMember) {
-        .name = make_str(&type_table->str_pool, name),
-        .type = type
     };
 }
 
@@ -263,9 +252,19 @@ Type* make_struct_or_enum_type(TypeTable* type_table, TypeTag tag, const char* n
     Type* type = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type));
     type->tag = tag;
     type->struct_type.name = make_str(&type_table->str_pool, name);
-    type->struct_type.members = alloc_from_mem_pool(type_table->mem_pool, sizeof(StructOrEnumMember) * member_count);
+    type->struct_type.members = alloc_from_mem_pool(type_table->mem_pool, sizeof(TypeMember) * member_count);
     type->struct_type.type_params = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * type_param_count);
     type->struct_type.member_count = member_count;
+    type->struct_type.type_param_count = type_param_count;
+    type->id = type_table->type_count++;
+    return type;
+}
+
+Type* make_alias_type(TypeTable* type_table, const char* name, size_t type_param_count) {
+    Type* type = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type));
+    type->tag = TYPE_ALIAS;
+    type->struct_type.name = make_str(&type_table->str_pool, name);
+    type->struct_type.type_params = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * type_param_count);
     type->struct_type.type_param_count = type_param_count;
     type->id = type_table->type_count++;
     return type;
@@ -346,36 +345,32 @@ const Type* make_poly_fun_type(
     });
 }
 
-static inline bool is_sig_member_smaller_than(const SigMember* left, const SigMember* right) {
+static inline bool is_member_smaller_than(const TypeMember* left, const TypeMember* right) {
     return
         left->is_type < right->is_type || (left->is_type == right->is_type &&
         (left->type->id < right->type->id || (left->type->id == right->type->id &&
         strcmp(left->name, right->name) < 0)));
 }
 
-DECLARE_SHELL_SORT(sort_sig_members, SigMember, is_sig_member_smaller_than)
+DECLARE_SHELL_SORT(sort_members, TypeMember, is_member_smaller_than)
 
 const Type* make_sig_type(
     TypeTable* type_table,
-    SigMember* members,
+    TypeMember* members,
     size_t member_count,
     const Type** type_params,
-    size_t type_param_count,
-    const Type** exist_vars,
-    size_t exist_var_count)
+    size_t type_param_count)
 {
     // This ensures that signatures that have the same members compare equal,
     // regardless of the order in which members are declared.
-    sort_sig_members(members, member_count);
+    sort_members(members, member_count);
     return get_or_insert_type(type_table, &(Type) {
         .tag = TYPE_SIG,
         .sig_type = {
             .members = members,
             .member_count = member_count,
             .type_params = type_params,
-            .type_param_count = type_param_count,
-            .exist_vars = exist_vars,
-            .exist_var_count = exist_var_count
+            .type_param_count = type_param_count
         }
     });
 }

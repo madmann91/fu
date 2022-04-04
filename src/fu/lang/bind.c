@@ -407,6 +407,7 @@ void bind_expr(Env* env, AstNode* expr) {
             bind_expr(env, expr->field_expr.val);
             break;
         case AST_STRUCT_EXPR:
+        case AST_UPDATE_EXPR:
             bind_expr(env, expr->struct_expr.left);
             bind_many(env, expr->struct_expr.fields, bind_expr);
             break;
@@ -503,6 +504,7 @@ void bind_type(Env* env, AstNode* type) {
         case AST_SIG_DECL:
         case AST_STRUCT_DECL:
         case AST_ENUM_DECL:
+            insert_decl_in_env(env, type);
             bind_decl(env, type);
             break;
         default:

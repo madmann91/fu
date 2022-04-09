@@ -216,6 +216,7 @@ struct AstNode {
             const char* name;
             AstNode* type_args;
             size_t index;
+            bool is_type;
         } path_elem;
         struct {
             AstNode* elems;

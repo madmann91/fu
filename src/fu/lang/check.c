@@ -176,25 +176,43 @@ static const Type* infer_decl_site(TypingContext* context, AstNode* decl_site) {
     return decl_site->type;
 }
 
-static const Type* infer_path(TypingContext* context, AstNode* path) {
+static const Type* infer_path(TypingContext* context, AstNode* path, bool is_type_expected) {
     assert(path->path.elems);
     if (!path->path.decl_site) {
         // This error should have been reported by the name binding algorithm
         return path->type = make_error_type(context->type_table);
     }
 
-    path->path.elems->type = infer_decl_site(context, path->path.decl_site);
-    for (AstNode* elem = path->path.elems;; elem = elem->next) {
-        assert(elem && elem->type);
-        if (!elem->next)
-            return path->type = elem->type;
-        elem->path_elem.index = get_type_member_index_or_fail(
-            context, elem->type, elem->path_elem.name, &elem->file_loc);
-        if (elem->path_elem.index == SIZE_MAX)
+    AstNode* path_elem = path->path.elems;
+    path_elem->type = infer_decl_site(context, path->path.decl_site);
+    path_elem->path_elem.is_type =
+        path->path.decl_site->tag == AST_STRUCT_DECL ||
+        path->path.decl_site->tag == AST_ENUM_DECL ||
+        path->path.decl_site->tag == AST_TYPE_DECL ||
+        path->path.decl_site->tag == AST_TYPE_PARAM ||
+        path->path.decl_site->tag == AST_SIG_DECL;
+    while (path_elem->next)
+    {
+        AstNode* next_elem = path_elem->next;
+        next_elem->path_elem.index = get_type_member_index_or_fail(
+            context, path_elem->type, next_elem->path_elem.name, &next_elem->file_loc);
+        if (next_elem->path_elem.index == SIZE_MAX)
             return make_error_type(context->type_table);
-        // TODO: Instantiate type with type arguments
-        elem->next->type = get_type_member(elem->type, elem->path_elem.index)->type;
+        const TypeMember* member = get_type_member(path_elem->type, next_elem->path_elem.index);
+        next_elem->path_elem.is_type = member->is_type;
+        next_elem->type = member->type;
+        path_elem = next_elem;
     }
+    if (path_elem->path_elem.is_type != is_type_expected)
+    {
+        log_error(context->log, &path->file_loc,
+            is_type_expected
+                ? "expected type, but got value named '{s}'"
+                : "expected value, but got type named '{s}'",
+            (FormatArg[]) { { .s = path_elem->path_elem.name } });
+        return make_error_type(context->type_table);
+    }
+    return path->type = path_elem->type;
 }
 
 static const Type* infer_tuple(
@@ -241,7 +259,7 @@ static const Type* infer_type_with_noret(TypingContext* context, AstNode* type, 
         PRIM_TYPE_LIST(f)
 #undef f
         case AST_PATH:
-            return infer_path(context, type);
+            return infer_path(context, type, true);
         case AST_NORET_TYPE:
             if (!accept_noret)
                 log_error(context->log, &type->file_loc, "type '!' can only be used as a return type", NULL);
@@ -426,7 +444,7 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
     switch (expr->tag) {
         case AST_PATH:
             return expr->type = expect_type(context,
-                infer_path(context, expr), expected_type, true, &expr->file_loc);
+                infer_path(context, expr, false), expected_type, true, &expr->file_loc);
         case AST_INT_LITERAL:
             return check_int_literal(context, expr, expected_type);
         case AST_FLOAT_LITERAL:
@@ -539,7 +557,7 @@ const Type* check_pattern(TypingContext* context, AstNode* pattern, const Type* 
                 return pattern->type = fail_infer(context, "pattern", &pattern->file_loc);
             return pattern->type = expected_type;
         case AST_PATH:
-            return infer_path(context, pattern);
+            return infer_path(context, pattern, true);
         default:
             assert(false && "invalid pattern");
             return make_error_type(context->type_table);

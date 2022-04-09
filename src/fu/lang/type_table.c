@@ -239,15 +239,28 @@ void free_type_table(TypeTable* type_table) {
     free(type_table);
 }
 
-TypeMember make_type_member(TypeTable* type_table, const char* name, const Type* type, bool is_type) {
+TypeMember make_type_member(
+    TypeTable* type_table,
+    const char* name,
+    const Type* type,
+    bool is_type,
+    bool has_default)
+{
     return (TypeMember) {
         .name = make_str(&type_table->str_pool, name),
         .type = type,
-        .is_type = is_type
+        .is_type = is_type,
+        .has_default = has_default
     };
 }
 
-Type* make_struct_or_enum_type(TypeTable* type_table, TypeTag tag, const char* name, size_t member_count, size_t type_param_count) {
+Type* make_struct_or_enum_type(
+    TypeTable* type_table,
+    TypeTag tag,
+    const char* name,
+    size_t member_count,
+    size_t type_param_count)
+{
     assert(tag == TYPE_STRUCT || tag == TYPE_ENUM);
     Type* type = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type));
     type->tag = tag;

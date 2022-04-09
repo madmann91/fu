@@ -401,6 +401,17 @@ static const Type* check_struct_expr(TypingContext* context, AstNode* struct_exp
         check_expr(context, field_expr->field_expr.val, field_type);
     }
 
+    for (size_t i = 0; i < struct_type->struct_type.member_count; ++i) {
+        if (!seen[i] &&
+            !struct_type->struct_type.members[i].is_type &&
+            !struct_type->struct_type.members[i].has_default)
+        {
+            log_error(context->log, &struct_expr->file_loc,
+                "missing initializer for field '{s}'",
+                (FormatArg[]) { { .s = struct_type->struct_type.members[i].name } });
+        }
+    }
+
     struct_expr->type = expect_type(context, struct_type, expected_type, true, &struct_expr->file_loc);
     goto cleanup;
 
@@ -650,7 +661,7 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
         for (AstNode* field_name = field_decl->field_decl.field_names; field_name; field_name = field_name->next) {
             assert(field_count < member_count);
             struct_type->struct_type.members[field_count++] = make_type_member(
-                context->type_table, field_name->field_name.name, field_type, false);
+                context->type_table, field_name->field_name.name, field_type, false, field_decl->field_decl.val);
         }
     }
     return struct_decl->type;
@@ -665,7 +676,7 @@ static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
         if (option_decl->option_decl.param_type)
             option_type = infer_type(context, option_decl->option_decl.param_type);
         enum_type->enum_type.members[option_count++] = make_type_member(
-            context->type_table, option_decl->option_decl.name, option_type, false);
+            context->type_table, option_decl->option_decl.name, option_type, false, false);
     }
     return enum_decl->type;
 }
@@ -714,7 +725,7 @@ static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
                 context->type_table,
                 get_decl_name(decl),
                 is_opaque ? NULL : decl->type,
-                is_type);
+                is_type, false);
             push_on_dyn_array(members, &member);
         }
     }

@@ -54,7 +54,8 @@ typedef enum {
 typedef struct TypeMember {
     const char* name;
     const Type* type;
-    bool is_type;
+    bool is_type : 1;
+    bool has_default : 1;
 } TypeMember;
 
 struct Type {

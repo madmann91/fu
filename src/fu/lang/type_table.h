@@ -14,7 +14,12 @@ typedef struct MemPool MemPool;
 TypeTable* new_type_table(MemPool*);
 void free_type_table(TypeTable*);
 
-TypeMember make_type_member(TypeTable*, const char* name, const Type* type, bool is_type);
+TypeMember make_type_member(
+    TypeTable*,
+    const char* name,
+    const Type* type,
+    bool is_type,
+    bool has_default);
 
 Type* make_struct_or_enum_type(
     TypeTable*,

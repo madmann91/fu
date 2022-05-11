@@ -814,7 +814,7 @@ static inline AstNode* parse_type_params(Parser* parser) {
     if (accept_token(parser, TOKEN_L_BRACKET)) {
         AstNode* type_params = parse_many(parser, TOKEN_R_BRACKET, TOKEN_COMMA, parse_type_param);
         if (!type_params)
-            log_error(parser->lexer->log, &parser->ahead->file_loc, "empty type parameters are not allowed", NULL);
+            log_error(parser->lexer->log, &parser->ahead->file_loc, "empty type parameter lists are not allowed", NULL);
         expect_token(parser, TOKEN_R_BRACKET);
         return type_params;
     }
@@ -941,7 +941,10 @@ static inline AstNode* parse_struct_decl(Parser* parser, bool is_public, bool is
 }
 
 static inline AstNode* parse_enum_decl(Parser* parser, bool is_public, bool is_opaque) {
-    return parse_struct_or_enum_decl(parser, is_public, is_opaque, TOKEN_ENUM, AST_ENUM_DECL, parse_option_decl);
+    AstNode* enum_decl = parse_struct_or_enum_decl(parser, is_public, is_opaque, TOKEN_ENUM, AST_ENUM_DECL, parse_option_decl);
+    if (!enum_decl->enum_decl.decls)
+        log_error(parser->lexer->log, &enum_decl->file_loc, "empty enumerations are not allowed", NULL);
+    return enum_decl;
 }
 
 static inline AstNode* parse_mod_or_sig_decl(

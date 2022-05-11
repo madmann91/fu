@@ -1,6 +1,6 @@
 struct S0 {}
 struct S1 { a: i32 }
-struct S2[T] { a: T }
-struct S3[T, U] { a: T, b: U }
-struct S4[T] { a, b: T }
-struct S5[T, U] { a, b: T, c, d: U }
+struct S2 { a: i32, b: i64 }
+struct S3[T] { a: T }
+struct S4[T] { a: T, b: T }
+struct S5[T, U] { a: T, b: U }

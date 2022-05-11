@@ -1,0 +1,11 @@
+struct Foo[T] {}
+struct Bar[T] { i: T }
+struct Baz[T, U] { i: T, j: U }
+struct Bob[T, U] { i: i16, j: T, k: U }
+
+fun test() {
+    const foo = Foo[i32] {};
+    const bar = Bar[i32] { i = 1:i32 };
+    const baz = Baz[i32, i64] { i = 1:i32, j = 2:i64 };
+    const bob = Bob[i32, i64] { i = 1:i16, j = 2:i32, k = 3:i64 };
+}

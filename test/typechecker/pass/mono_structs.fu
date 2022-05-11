@@ -1,0 +1,11 @@
+struct Foo {}
+struct Bar { i: i32 }
+struct Baz { i: i32, j: i64 }
+struct Bob { i: i32 = 1, j: i64 }
+
+fun test() {
+    const foo = Foo {};
+    const bar = Bar { i = 1 };
+    const baz = Baz { i = 1, j = 2 };
+    const bob = Bob { j = 2 };
+}

@@ -753,9 +753,6 @@ static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
             .param_type = infer_option_decl(context, option_decl, enum_type)
         });
     }
-
-    if (get_dyn_array_size(enum_type->enum_type.options) == 0)
-        log_error(context->log, &enum_decl->file_loc, "empty enumerations are not allowed", NULL);
     return freeze_type(context->type_table, enum_type);
 }
 

@@ -256,6 +256,7 @@ void free_type_table(TypeTable* type_table) {
 static Type* alloc_nominal_type(TypeTable* type_table, TypeTag tag) {
     assert(tag == TYPE_ENUM || tag == TYPE_STRUCT);
     Type* type = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type));
+    memset(type, 0, sizeof(Type));
     type->id = type_table->type_count++;
     type->tag = tag;
     return type;
@@ -266,8 +267,6 @@ Type* make_struct_type(TypeTable* type_table, const char* name) {
     struct_type->struct_type.name = make_str(&type_table->str_pool, name);
     struct_type->struct_type.fields = new_dyn_array(sizeof(StructField));
     struct_type->struct_type.type_params = new_dyn_array(sizeof(Type*));
-    struct_type->struct_type.field_count = 0;
-    struct_type->struct_type.type_param_count = 0;
     return struct_type;
 }
 

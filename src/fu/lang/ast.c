@@ -87,9 +87,9 @@ static inline void print_assign_expr(FormatState* state, const AstNode* ast_node
 
 static inline void print_decl_head(
     FormatState* state,
+    const char* keyword,
     bool is_public,
     bool is_opaque,
-    const char* keyword,
     const char* name,
     const AstNode* type_params)
 {
@@ -223,10 +223,10 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             }
             break;
         case AST_TYPE_DECL:
-            print_decl_head(state,
+            print_decl_head(state, "type",
                 ast_node->type_decl.is_public,
                 ast_node->type_decl.is_opaque,
-                "type", ast_node->type_decl.name,
+                ast_node->type_decl.name,
                 ast_node->type_decl.type_params);
             if (ast_node->type_decl.aliased_type)
                 print_ast_with_delim(state, " = ", ";", ast_node->type_decl.aliased_type);
@@ -250,9 +250,9 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             }
             break;
         case AST_FUN_DECL:
-            print_decl_head(state,
+            print_decl_head(state, "fun",
                 ast_node->fun_decl.is_public, false,
-                "fun", ast_node->fun_decl.name,
+                ast_node->fun_decl.name,
                 ast_node->fun_decl.type_params);
             print_with_parens(state, ast_node->fun_decl.param);
             if (ast_node->fun_decl.ret_type)
@@ -271,42 +271,57 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             } else
                 format(state, ";", NULL);
             break;
-        case AST_STRUCT_DECL:
         case AST_ENUM_DECL: {
-            print_decl_head(state,
+            print_decl_head(state, "enum",
+                ast_node->enum_decl.is_public,
+                ast_node->enum_decl.is_opaque,
+                ast_node->enum_decl.name,
+                ast_node->enum_decl.type_params);
+            format(state, " ", NULL);
+            print_many_asts_inside_block(state, ",\n", ast_node->enum_decl.options);
+            break;
+        }
+        case AST_STRUCT_DECL: {
+            print_decl_head(state, "struct",
                 ast_node->struct_decl.is_public,
                 ast_node->struct_decl.is_opaque,
-                get_decl_keyword(ast_node->tag),
                 ast_node->struct_decl.name,
                 ast_node->struct_decl.type_params);
             format(state, " ", NULL);
-            print_many_asts_inside_block(state, ",\n", ast_node->struct_decl.decls);
+            print_many_asts_inside_block(state, ",\n", ast_node->struct_decl.fields);
             break;
         }
-        case AST_MOD_DECL:
         case AST_SIG_DECL: {
-            if (is_top_level_mod_decl(ast_node)) {
-                print_many_asts(state, "\n", ast_node->mod_decl.decls);
+            print_decl_head(state, "sig",
+                ast_node->sig_decl.is_public, false,
+                ast_node->sig_decl.name,
+                ast_node->sig_decl.type_params);
+            format(state, " ", NULL);
+            print_many_asts_inside_block(state, "\n", ast_node->sig_decl.members);
+            break;
+        }
+        case AST_MOD_DECL: {
+            if (!ast_node->mod_decl.name) {
+                print_many_asts(state, "\n", ast_node->mod_decl.members);
                 break;
             }
-            print_decl_head(state,
+            print_decl_head(state, "mod",
                 ast_node->mod_decl.is_public, false,
-                get_decl_keyword(ast_node->tag),
                 ast_node->mod_decl.name,
                 ast_node->mod_decl.type_params);
-            if (ast_node->mod_decl.type)
-                print_ast_with_delim(state, " : ", "", ast_node->mod_decl.type);
-            if (ast_node->mod_decl.decls) {
+            if (ast_node->mod_decl.signature)
+                print_ast_with_delim(state, " : ", "", ast_node->mod_decl.signature);
+            if (ast_node->mod_decl.members) {
                 format(state, " ", NULL);
-                print_many_asts_inside_block(state, "\n", ast_node->struct_decl.decls);
-            } else if (ast_node->mod_decl.alias_val)
-                print_ast_with_delim(state, " = ", ";", ast_node->mod_decl.alias_val);
+                print_many_asts_inside_block(state, "\n", ast_node->mod_decl.members);
+            } else if (ast_node->mod_decl.aliased_mod)
+                print_ast_with_delim(state, " = ", ";", ast_node->mod_decl.aliased_mod);
             else
                 format(state, ";", NULL);
             break;
         }
         case AST_USING_DECL:
-            print_decl_head(state, false, false, "using", NULL, ast_node->using_decl.type_params);
+            print_decl_head(state, "using", false, false, NULL, ast_node->using_decl.type_params);
             print_ast_with_delim(state, " ", ";", ast_node->using_decl.used_mod);
             break;
         case AST_CONST_DECL:
@@ -530,10 +545,6 @@ bool is_assignable_expr(const AstNode* expr) {
     return false;
 }
 
-bool is_top_level_mod_decl(const AstNode* ast_node) {
-    return ast_node->tag == AST_MOD_DECL && ast_node->mod_decl.name == NULL;
-}
-
 size_t count_ast_nodes(const AstNode* node) {
     size_t len = 0;
     while (node)
@@ -634,6 +645,7 @@ const char* get_decl_name(const AstNode* decl) {
         case AST_TYPE_DECL:
             return decl->type_decl.name;
         case AST_STRUCT_DECL:
+            return decl->enum_decl.name;
         case AST_ENUM_DECL:
             return decl->struct_decl.name;
         case AST_SIG_DECL:

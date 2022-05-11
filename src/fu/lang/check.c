@@ -720,7 +720,7 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
     Type* struct_type = make_struct_type(context->type_table, struct_decl->struct_decl.name);
     infer_type_params(context, struct_decl->struct_decl.type_params, struct_type->struct_type.type_params);
     struct_decl->type = struct_type;
-    for (AstNode* field_decl = struct_decl->struct_decl.decls; field_decl; field_decl = field_decl->next) {
+    for (AstNode* field_decl = struct_decl->struct_decl.fields; field_decl; field_decl = field_decl->next) {
         StructField field = infer_field_decl(context, field_decl);
         push_on_dyn_array(struct_type->struct_type.fields, &field);
     }
@@ -747,7 +747,7 @@ static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
     infer_type_params(context, enum_decl->enum_decl.type_params, enum_type->enum_type.type_params);
 
     enum_decl->type = enum_type;
-    for (AstNode* option_decl = enum_decl->enum_decl.decls; option_decl; option_decl = option_decl->next) {
+    for (AstNode* option_decl = enum_decl->enum_decl.options; option_decl; option_decl = option_decl->next) {
         push_on_dyn_array(enum_type->enum_type.options, &(EnumOption) {
             .name = option_decl->option_decl.name,
             .param_type = infer_option_decl(context, option_decl, enum_type)
@@ -796,7 +796,7 @@ static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
     const Type** type_params = new_dyn_array(sizeof(Type*));
 
     infer_type_params(context, mod_decl->mod_decl.type_params, type_params);
-    for (AstNode* decl = mod_decl->mod_decl.decls; decl; decl = decl->next) {
+    for (AstNode* decl = mod_decl->mod_decl.members; decl; decl = decl->next) {
         infer_decl(context, decl);
         if (decl->external_type) {
             bool is_type =

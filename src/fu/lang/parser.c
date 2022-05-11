@@ -109,6 +109,26 @@ static AstNode* parse_many(Parser* parser, TokenTag end, TokenTag sep, AstNode* 
     return list.first;
 }
 
+static AstNode* parse_many_at_least_one(
+    Parser* parser,
+    const char* msg,
+    TokenTag end, TokenTag sep,
+    AstNode* (*parse_one)(Parser*))
+{
+    FilePos begin = parser->ahead->file_loc.begin;
+    AstNode* ast_nodes = parse_many(parser, end, sep, parse_one);
+    if (!ast_nodes) {
+        FileLoc file_loc = {
+            .file_name = parser->lexer->file_name,
+            .begin = begin,
+            .end = parser->ahead->file_loc.end
+        };
+        log_error(parser->lexer->log, &file_loc,
+            "empty {s} are not allowed", (FormatArg[]) { { .s = msg } });
+    }
+    return ast_nodes;
+}
+
 static inline const char* parse_ident(Parser* parser) {
     const char* name = copy_file_data(parser,
         parser->ahead->file_loc.begin.byte_offset,
@@ -812,9 +832,8 @@ static inline AstNode* parse_while_loop(Parser* parser) {
 
 static inline AstNode* parse_type_params(Parser* parser) {
     if (accept_token(parser, TOKEN_L_BRACKET)) {
-        AstNode* type_params = parse_many(parser, TOKEN_R_BRACKET, TOKEN_COMMA, parse_type_param);
-        if (!type_params)
-            log_error(parser->lexer->log, &parser->ahead->file_loc, "empty type parameter lists are not allowed", NULL);
+        AstNode* type_params = parse_many_at_least_one(
+            parser, "type parameter lists", TOKEN_R_BRACKET, TOKEN_COMMA, parse_type_param);
         expect_token(parser, TOKEN_R_BRACKET);
         return type_params;
     }
@@ -905,81 +924,47 @@ static AstNode* parse_option_decl(Parser* parser) {
     });
 }
 
-static inline AstNode* parse_struct_or_enum_decl(
-    Parser* parser,
-    bool is_public,
-    bool is_opaque,
-    TokenTag token_tag,
-    AstNodeTag ast_node_tag,
-    AstNode* (*parse_decl)(Parser*))
-{
+static inline AstNode* parse_struct_decl(Parser* parser, bool is_public, bool is_opaque) {
     FilePos begin = parser->ahead->file_loc.begin;
-    eat_token(parser, token_tag);
+    eat_token(parser, TOKEN_STRUCT);
     const char* name = parse_ident(parser);
     AstNode* type_params = parse_type_params(parser);
-    AstNode* decls = NULL;
+    AstNode* fields = NULL;
     if (parser->ahead->tag == TOKEN_L_BRACE) {
         expect_token(parser, TOKEN_L_BRACE);
-        decls = parse_many(parser, TOKEN_R_BRACE, TOKEN_COMMA, parse_decl);
+        fields = parse_many(parser, TOKEN_R_BRACE, TOKEN_COMMA, parse_field_decl);
         expect_token(parser, TOKEN_R_BRACE);
     } else
         expect_token(parser, TOKEN_SEMICOLON);
     return make_ast_node(parser, &begin, &(AstNode) {
-        .tag = ast_node_tag,
+        .tag = AST_STRUCT_DECL,
         .struct_decl = {
             .name = name,
             .is_public = is_public,
             .is_opaque = is_opaque,
             .type_params = type_params,
-            .decls = decls
+            .fields = fields
         }
     });
 }
 
-static inline AstNode* parse_struct_decl(Parser* parser, bool is_public, bool is_opaque) {
-    return parse_struct_or_enum_decl(parser, is_public, is_opaque, TOKEN_STRUCT, AST_STRUCT_DECL, parse_field_decl);
-}
-
 static inline AstNode* parse_enum_decl(Parser* parser, bool is_public, bool is_opaque) {
-    AstNode* enum_decl = parse_struct_or_enum_decl(parser, is_public, is_opaque, TOKEN_ENUM, AST_ENUM_DECL, parse_option_decl);
-    if (!enum_decl->enum_decl.decls)
-        log_error(parser->lexer->log, &enum_decl->file_loc, "empty enumerations are not allowed", NULL);
-    return enum_decl;
-}
-
-static inline AstNode* parse_mod_or_sig_decl(
-    Parser* parser,
-    TokenTag token_tag,
-    AstNodeTag ast_node_tag,
-    AstNode* (*parse_decl)(Parser*))
-{
     FilePos begin = parser->ahead->file_loc.begin;
-    eat_token(parser, token_tag);
-    const char* name = parser->ahead->tag == TOKEN_IDENT ? parse_ident(parser) : NULL;
+    eat_token(parser, TOKEN_ENUM);
+    const char* name = parse_ident(parser);
     AstNode* type_params = parse_type_params(parser);
-    AstNode* alias_val = NULL;
-    AstNode* type = NULL;
-    if (accept_token(parser, TOKEN_COLON))
-        type = parse_type(parser);
-    AstNode* decls = NULL;
-    if (accept_token(parser, TOKEN_L_BRACE)) {
-        decls = parse_many(parser, TOKEN_R_BRACE, TOKEN_ERROR, parse_decl);
-        if (!decls)
-            parse_error(parser, "declaration");
-        expect_token(parser, TOKEN_R_BRACE);
-    } else {
-        if (accept_token(parser, TOKEN_EQUAL))
-            alias_val = parse_type(parser);
-        expect_token(parser, TOKEN_SEMICOLON);
-    }
+    expect_token(parser, TOKEN_L_BRACE);
+    AstNode* options = parse_many_at_least_one(
+        parser, "enumerations", TOKEN_R_BRACE, TOKEN_COMMA, parse_option_decl);
+    expect_token(parser, TOKEN_R_BRACE);
     return make_ast_node(parser, &begin, &(AstNode) {
-        .tag = ast_node_tag,
-        .mod_decl = {
+        .tag = AST_ENUM_DECL,
+        .enum_decl = {
             .name = name,
+            .is_public = is_public,
+            .is_opaque = is_opaque,
             .type_params = type_params,
-            .decls = decls,
-            .alias_val = alias_val,
-            .type = type
+            .options = options
         }
     });
 }
@@ -988,12 +973,55 @@ static AstNode* parse_sig_member_decl(Parser* parser) {
     return parse_decl_without_attr_list(parser, false, false);
 }
 
-static inline AstNode* parse_mod_decl(Parser* parser) {
-    return parse_mod_or_sig_decl(parser, TOKEN_MOD, AST_MOD_DECL, parse_decl);
+static inline AstNode* parse_sig_decl(Parser* parser) {
+    FilePos begin = parser->ahead->file_loc.begin;
+    eat_token(parser, TOKEN_SIG);
+    const char* name = parser->ahead->tag == TOKEN_IDENT ? parse_ident(parser) : NULL;
+    AstNode* type_params = parse_type_params(parser);
+    AstNode* members = NULL;
+    if (accept_token(parser, TOKEN_L_BRACE)) {
+        members = parse_many_at_least_one(
+            parser, "signatures", TOKEN_R_BRACE, TOKEN_ERROR, parse_sig_member_decl);
+        expect_token(parser, TOKEN_R_BRACE);
+    }
+    return make_ast_node(parser, &begin, &(AstNode) {
+        .tag = AST_SIG_DECL,
+        .mod_decl = {
+            .name = name,
+            .type_params = type_params,
+            .members = members,
+        }
+    });
 }
 
-static inline AstNode* parse_sig_decl(Parser* parser) {
-    return parse_mod_or_sig_decl(parser, TOKEN_SIG, AST_SIG_DECL, parse_sig_member_decl);
+static inline AstNode* parse_mod_decl(Parser* parser) {
+    FilePos begin = parser->ahead->file_loc.begin;
+    eat_token(parser, TOKEN_MOD);
+    const char* name = parse_ident(parser);
+    AstNode* type_params = parse_type_params(parser);
+    AstNode* signature = NULL;
+    if (accept_token(parser, TOKEN_COLON))
+        signature = parse_type(parser);
+    AstNode* aliased_mod = NULL;
+    AstNode* members = NULL;
+    if (accept_token(parser, TOKEN_L_BRACE)) {
+        members = parse_many_at_least_one(parser, "modules", TOKEN_R_BRACE, TOKEN_ERROR, parse_decl);
+        expect_token(parser, TOKEN_R_BRACE);
+    } else {
+        if (accept_token(parser, TOKEN_EQUAL))
+            aliased_mod = parse_type(parser);
+        expect_token(parser, TOKEN_SEMICOLON);
+    }
+    return make_ast_node(parser, &begin, &(AstNode) {
+        .tag = AST_MOD_DECL,
+        .mod_decl = {
+            .name = name,
+            .type_params = type_params,
+            .members = members,
+            .aliased_mod = aliased_mod,
+            .signature = signature
+        }
+    });
 }
 
 static inline AstNode* parse_type_decl(Parser* parser, bool is_public, bool is_opaque) {
@@ -1107,9 +1135,9 @@ AstNode* parse_decl(Parser* parser) {
 
 AstNode* parse_program(Parser* parser) {
     FilePos begin = parser->ahead->file_loc.begin;
-    AstNode* decls = parse_many(parser, TOKEN_EOF, TOKEN_ERROR, parse_decl);
+    AstNode* members = parse_many(parser, TOKEN_EOF, TOKEN_ERROR, parse_decl);
     return make_ast_node(parser, &begin, &(AstNode) {
         .tag = AST_MOD_DECL,
-        .mod_decl = { .decls = decls }
+        .mod_decl = { .members = members }
     });
 }

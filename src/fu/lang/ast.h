@@ -240,23 +240,37 @@ struct AstNode {
         } option_decl;
         struct {
             const char* name;
-            bool is_public;
-            bool is_opaque;
+            bool is_public : 1;
+            bool is_opaque : 1;
+            bool is_tuple_like : 1;
             AstNode* type_params;
-            AstNode* decls;
-        } struct_decl, enum_decl;
+            AstNode* fields;
+        } struct_decl;
+        struct {
+            const char* name;
+            bool is_public : 1;
+            bool is_opaque : 1;
+            AstNode* type_params;
+            AstNode* options;
+        } enum_decl;
         struct {
             const char* name;
             bool is_public;
             AstNode* type_params;
-            AstNode* decls;
-            AstNode* type;
-            AstNode* alias_val;
-        } mod_decl, sig_decl;
+            AstNode* members;
+        } sig_decl;
         struct {
             const char* name;
             bool is_public;
-            bool is_opaque;
+            AstNode* type_params;
+            AstNode* signature;
+            AstNode* aliased_mod;
+            AstNode* members;
+        } mod_decl;
+        struct {
+            const char* name;
+            bool is_public : 1;
+            bool is_opaque : 1;
             AstNode* type_params;
             AstNode* aliased_type;
         } type_decl;

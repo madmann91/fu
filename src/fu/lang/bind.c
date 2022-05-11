@@ -308,6 +308,14 @@ static void bind_type_params(Env* env, AstNode* type_params) {
     bind_many(env, type_params, bind_type_param);
 }
 
+static void bind_members(Env* env, AstNode* decl, AstNode* type_params, AstNode* members) {
+    push_scope(env, decl);
+    bind_type_params(env, type_params);
+    insert_many_decls_in_env(env, members);
+    bind_many(env, members, bind_decl);
+    pop_scope(env);
+}
+
 void bind_decl(Env* env, AstNode* decl) {
     switch (decl->tag) {
         case AST_FIELD_DECL:
@@ -321,25 +329,21 @@ void bind_decl(Env* env, AstNode* decl) {
                     bind_type(env, decl->option_decl.param_type);
             }
             break;
-        case AST_STRUCT_DECL:
         case AST_ENUM_DECL:
-            push_scope(env, decl);
-            bind_type_params(env, decl->struct_decl.type_params);
-            insert_many_decls_in_env(env, decl->struct_decl.decls);
-            bind_many(env, decl->struct_decl.decls, bind_decl);
-            pop_scope(env);
+            bind_members(env, decl, decl->enum_decl.type_params, decl->enum_decl.options);
+            break;
+        case AST_STRUCT_DECL:
+            bind_members(env, decl, decl->struct_decl.type_params, decl->struct_decl.fields);
+            break;
+        case AST_SIG_DECL:
+            bind_members(env, decl, decl->sig_decl.type_params, decl->sig_decl.members);
             break;
         case AST_MOD_DECL:
-        case AST_SIG_DECL:
-            if (decl->mod_decl.type)
-                bind_type(env, decl->mod_decl.type);
-            push_scope(env, decl);
-            bind_type_params(env, decl->mod_decl.type_params);
-            insert_many_decls_in_env(env, decl->mod_decl.decls);
-            bind_many(env, decl->mod_decl.decls, bind_decl);
-            if (decl->mod_decl.alias_val)
-                bind_type(env, decl->mod_decl.alias_val);
-            pop_scope(env);
+            if (decl->mod_decl.signature)
+                bind_type(env, decl->mod_decl.signature);
+            if (decl->mod_decl.aliased_mod)
+                bind_type(env, decl->mod_decl.aliased_mod);
+            bind_members(env, decl, decl->mod_decl.type_params, decl->mod_decl.members);
             break;
         case AST_TYPE_DECL:
             push_scope(env, decl);

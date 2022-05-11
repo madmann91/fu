@@ -64,8 +64,6 @@
 
 typedef enum {
     AST_ERROR,
-    AST_PROGRAM,
-    AST_FIELD_NAME,
     AST_TYPE_PARAM,
     AST_ATTR,
     AST_IMPLICIT_CAST,
@@ -150,9 +148,6 @@ struct AstNode {
     AstNode* attrs;
     union {
         struct {
-            AstNode* decls;
-        } program;
-        struct {
             AstNode* expr;
         } implicit_cast;
         struct {
@@ -175,10 +170,6 @@ struct AstNode {
             const char* name;
             AstNode* val;
         } attr;
-        struct {
-            const char* name;
-            size_t index;
-        } field_name;
         struct {
             AstNode* args;
         } tuple_type, tuple_expr, tuple_pattern;
@@ -237,12 +228,14 @@ struct AstNode {
             AstNode* init;
         } const_decl, var_decl;
         struct {
-            AstNode* field_names;
+            const char* name;
+            size_t index;
             AstNode* type;
             AstNode* val;
         } field_decl;
         struct {
             const char* name;
+            bool is_struct_like;
             AstNode* param_type;
         } option_decl;
         struct {
@@ -305,7 +298,8 @@ struct AstNode {
             AstNode* cases;
         } match_expr;
         struct {
-            AstNode* field_names;
+            const char* name;
+            size_t index;
             AstNode* val;
         } field_expr, field_pattern;
         struct {
@@ -353,8 +347,10 @@ bool is_tuple(AstNodeTag);
 bool is_binary_expr(AstNodeTag);
 bool is_assign_expr(AstNodeTag);
 bool is_assignable_expr(const AstNode*);
+bool is_top_level_mod_decl(const AstNode*);
 
 size_t count_ast_nodes(const AstNode*);
+const AstNode* get_last_ast_node(const AstNode*);
 
 AstNodeTag assign_expr_to_binary_expr(AstNodeTag);
 const char* get_prim_type_name(AstNodeTag);

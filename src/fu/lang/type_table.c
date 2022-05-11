@@ -5,7 +5,7 @@
 #include "fu/core/hash_table.h"
 #include "fu/core/hash.h"
 #include "fu/core/utils.h"
-#include "fu/core/sort.h"
+#include "fu/core/dyn_array.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -32,6 +32,12 @@ struct TypeTable {
     const Type* error_type;
 };
 
+static uint32_t hash_types(uint32_t hash, const Type** types, size_t count) {
+    for (size_t i = 0; i < count; ++i)
+        hash = hash_uint64(hash, types[i]->id);
+    return hash;
+}
+
 static uint32_t hash_type(uint32_t hash, const Type* type) {
     hash = hash_uint32(hash, type->tag);
     switch (type->tag) {
@@ -41,6 +47,19 @@ static uint32_t hash_type(uint32_t hash, const Type* type) {
         case TYPE_UNKNOWN:
         case TYPE_NORET:
         case TYPE_ERROR:
+            break;
+        case TYPE_ALIAS:
+            hash = hash_types(hash, type->type_alias.type_params, type->type_alias.type_param_count);
+            hash = hash_str(hash, type->type_alias.name);
+            hash = hash_uint64(hash, type->type_alias.aliased_type->id);
+            break;
+        case TYPE_SIGNATURE:
+            hash = hash_types(hash, type->signature.type_params, type->signature.type_param_count);
+            for (size_t i = 0; i < type->signature.member_count; ++i) {
+                hash = hash_str(hash, type->signature.members[i].name);
+                hash = hash_uint64(hash, type->signature.members[i].type->id);
+                hash = hash_uint8(hash, type->signature.members[i].is_type);
+            }
             break;
         case TYPE_TUPLE:
             for (size_t i = 0; i < type->tuple_type.arg_count; ++i)
@@ -52,19 +71,9 @@ static uint32_t hash_type(uint32_t hash, const Type* type) {
                 hash = hash_uint64(hash, type->type_app.args[i]->id);
             break;
         case TYPE_FUN:
-            for (size_t i = 0; i < type->fun_type.type_param_count; ++i)
-                hash = hash_uint64(hash, type->fun_type.type_params[i]->id);
+            hash = hash_types(hash, type->fun_type.type_params, type->fun_type.type_param_count);
             hash = hash_uint64(hash, type->fun_type.dom->id);
             hash = hash_uint64(hash, type->fun_type.codom->id);
-            break;
-        case TYPE_SIG:
-            for (size_t i = 0; i < type->sig_type.type_param_count; ++i)
-                hash = hash_uint64(hash, type->sig_type.type_params[i]->id);
-            for (size_t i = 0; i < type->sig_type.member_count; ++i) {
-                hash = hash_str(hash, type->sig_type.members[i].name);
-                hash = hash_uint8(hash, type->sig_type.members[i].is_type);
-                hash = hash_uint64(hash, type->sig_type.members[i].type->id);
-            }
             break;
         case TYPE_ARRAY:
             hash = hash_uint64(hash, type->array_type.elem_type->id);
@@ -93,39 +102,43 @@ static bool compare_types(const void* left, const void* right) {
     PRIM_TYPE_LIST(f)
 #undef f
             break;
-        case TYPE_TUPLE:
-            if (type_left->tuple_type.arg_count != type_right->tuple_type.arg_count)
-                return false;
-            for (size_t i = 0; i < type_left->tuple_type.arg_count; ++i) {
-                if (type_left->tuple_type.args[i] != type_right->tuple_type.args[i])
-                    return false;
-            }
-            break;
-        case TYPE_APP:
-            if (type_left->type_app.arg_count != type_right->type_app.arg_count ||
-                type_left->type_app.applied_type != type_right->type_app.applied_type)
-                return false;
-            for (size_t i = 0; i < type_left->type_app.arg_count; ++i) {
-                if (type_left->type_app.args[i] != type_right->type_app.args[i])
-                    return false;
-            }
-            break;
+        case TYPE_TUPLE: {
+            return
+                type_left->tuple_type.arg_count == type_right->tuple_type.arg_count &&
+                !memcmp(type_left->tuple_type.args, type_right->tuple_type.args,
+                    sizeof(Type*) * type_left->tuple_type.arg_count);
+        }
+        case TYPE_ALIAS: {
+            return
+                type_left->type_alias.aliased_type == type_right->type_alias.aliased_type &&
+                type_left->type_alias.type_param_count == type_right->type_alias.type_param_count &&
+                type_left->type_alias.name == type_right->type_alias.name &&
+                !memcmp(type_left->type_alias.type_params, type_right->type_alias.type_params,
+                    sizeof(Type*) * type_left->type_alias.type_param_count);
+        }
+        case TYPE_SIGNATURE: {
+            return
+                type_left->signature.type_param_count == type_right->signature.type_param_count &&
+                type_left->signature.member_count == type_right->signature.member_count &&
+                !memcmp(type_left->signature.members, type_right->signature.members,
+                    sizeof(SignatureMember) * type_left->signature.member_count) &&
+                !memcmp(type_left->signature.type_params, type_right->signature.type_params,
+                    sizeof(Type*) * type_left->signature.type_param_count);
+        }
+        case TYPE_APP: {
+            return
+                type_left->type_app.arg_count == type_right->type_app.arg_count &&
+                type_left->type_app.applied_type == type_right->type_app.applied_type &&
+                !memcmp(type_left->type_app.args, type_right->type_app.args,
+                    sizeof(Type*) * type_left->type_app.arg_count);
+        }
         case TYPE_FUN: {
-            size_t params_size = sizeof(Type*) * type_left->fun_type.type_param_count;
             return
                 type_left->fun_type.type_param_count == type_right->fun_type.type_param_count &&
                 type_left->fun_type.dom == type_right->fun_type.dom &&
                 type_left->fun_type.codom == type_right->fun_type.codom &&
-                !memcmp(type_left->fun_type.type_params, type_right->fun_type.type_params, params_size);
-        }
-        case TYPE_SIG: {
-            size_t params_size  = sizeof(Type*)      * type_left->sig_type.type_param_count;
-            size_t members_size = sizeof(TypeMember) * type_left->sig_type.member_count;
-            return
-                type_left->sig_type.type_param_count == type_right->sig_type.type_param_count &&
-                type_left->sig_type.member_count     == type_right->sig_type.member_count &&
-                !memcmp(type_left->sig_type.type_params, type_right->sig_type.type_params, params_size) &&
-                !memcmp(type_left->sig_type.members, type_right->sig_type.members, members_size);
+                !memcmp(type_left->fun_type.type_params, type_right->fun_type.type_params,
+                    sizeof(Type*) * type_left->fun_type.type_param_count);
         }
         case TYPE_ARRAY:
             return type_left->array_type.elem_type == type_right->array_type.elem_type;
@@ -146,12 +159,6 @@ static const Type** copy_types(TypeTable* type_table, const Type** types, size_t
     const Type** types_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * count);
     memcpy(types_copy, types, sizeof(Type*) * count);
     return types_copy;
-}
-
-static const TypeMember* copy_members(TypeTable* type_table, const TypeMember* members, size_t count) {
-    TypeMember* members_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(TypeMember) * count);
-    memcpy(members_copy, members, sizeof(TypeMember) * count);
-    return members_copy;
 }
 
 static const Type* get_or_insert_type(TypeTable* type_table, const Type* type) {
@@ -177,6 +184,23 @@ static const Type* get_or_insert_type(TypeTable* type_table, const Type* type) {
                 new_type->contains_unknown |= type->tuple_type.args[i]->contains_unknown;
             }
             break;
+        case TYPE_ALIAS:
+            new_type->type_alias.type_params =
+                copy_types(type_table, type->type_alias.type_params, type->type_alias.type_param_count);
+            new_type->contains_error   |= type->type_alias.aliased_type->contains_error;
+            new_type->contains_unknown |= type->type_alias.aliased_type->contains_unknown;
+            break;
+        case TYPE_SIGNATURE:
+            new_type->signature.type_params =
+                copy_types(type_table, type->signature.type_params, type->signature.type_param_count);
+            new_type->signature.members =
+                alloc_from_mem_pool(type_table->mem_pool, sizeof(SignatureMember) * type->signature.member_count);
+            for (size_t i = 0; i < type->signature.member_count; ++i) {
+                new_type->signature.members[i] = type->signature.members[i];
+                new_type->contains_error   |= type->signature.members[i].type->contains_error;
+                new_type->contains_unknown |= type->signature.members[i].type->contains_unknown;
+            }
+            break;
         case TYPE_APP:
             new_type->type_app.args =
                 copy_types(type_table, type->type_app.args, type->type_app.arg_count);
@@ -188,7 +212,7 @@ static const Type* get_or_insert_type(TypeTable* type_table, const Type* type) {
             }
             break;
         case TYPE_ARRAY:
-            new_type->contains_error |= type->array_type.elem_type->contains_error;
+            new_type->contains_error   |= type->array_type.elem_type->contains_error;
             new_type->contains_unknown |= type->array_type.elem_type->contains_unknown;
             break;
         case TYPE_FUN:
@@ -198,16 +222,6 @@ static const Type* get_or_insert_type(TypeTable* type_table, const Type* type) {
             new_type->contains_error |= type->fun_type.codom->contains_error;
             new_type->contains_unknown |= type->fun_type.dom->contains_unknown;
             new_type->contains_unknown |= type->fun_type.codom->contains_unknown;
-            break;
-        case TYPE_SIG:
-            new_type->sig_type.type_params =
-                copy_types(type_table, type->sig_type.type_params, type->sig_type.type_param_count);
-            new_type->sig_type.members =
-                copy_members(type_table, type->sig_type.members, type->sig_type.member_count);
-            for (size_t i = 0; i < type->sig_type.member_count; ++i) {
-                new_type->contains_error   |= type->sig_type.members[i].type->contains_error;
-                new_type->contains_unknown |= type->sig_type.members[i].type->contains_unknown;
-            }
             break;
         default:
             break;
@@ -239,48 +253,32 @@ void free_type_table(TypeTable* type_table) {
     free(type_table);
 }
 
-TypeMember make_type_member(
-    TypeTable* type_table,
-    const char* name,
-    const Type* type,
-    bool is_type,
-    bool has_default)
-{
-    return (TypeMember) {
-        .name = make_str(&type_table->str_pool, name),
-        .type = type,
-        .is_type = is_type,
-        .has_default = has_default
-    };
-}
-
-Type* make_struct_or_enum_type(
-    TypeTable* type_table,
-    TypeTag tag,
-    const char* name,
-    size_t member_count,
-    size_t type_param_count)
-{
-    assert(tag == TYPE_STRUCT || tag == TYPE_ENUM);
+static Type* alloc_nominal_type(TypeTable* type_table, TypeTag tag) {
+    assert(tag == TYPE_ENUM || tag == TYPE_STRUCT);
     Type* type = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type));
+    type->id = type_table->type_count++;
     type->tag = tag;
-    type->struct_type.name = make_str(&type_table->str_pool, name);
-    type->struct_type.members = alloc_from_mem_pool(type_table->mem_pool, sizeof(TypeMember) * member_count);
-    type->struct_type.type_params = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * type_param_count);
-    type->struct_type.member_count = member_count;
-    type->struct_type.type_param_count = type_param_count;
-    type->id = type_table->type_count++;
     return type;
 }
 
-Type* make_alias_type(TypeTable* type_table, const char* name, size_t type_param_count) {
-    Type* type = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type));
-    type->tag = TYPE_ALIAS;
-    type->struct_type.name = make_str(&type_table->str_pool, name);
-    type->struct_type.type_params = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * type_param_count);
-    type->struct_type.type_param_count = type_param_count;
-    type->id = type_table->type_count++;
-    return type;
+Type* make_struct_type(TypeTable* type_table, const char* name) {
+    Type* struct_type = alloc_nominal_type(type_table, TYPE_STRUCT);
+    struct_type->struct_type.name = make_str(&type_table->str_pool, name);
+    struct_type->struct_type.fields = new_dyn_array(sizeof(StructField));
+    struct_type->struct_type.type_params = new_dyn_array(sizeof(Type*));
+    struct_type->struct_type.field_count = 0;
+    struct_type->struct_type.type_param_count = 0;
+    return struct_type;
+}
+
+Type* make_enum_type(TypeTable* type_table, const char* name) {
+    Type* enum_type = alloc_nominal_type(type_table, TYPE_ENUM);
+    enum_type->enum_type.name = make_str(&type_table->str_pool, name);
+    enum_type->enum_type.options = new_dyn_array(sizeof(EnumOption));
+    enum_type->enum_type.type_params = new_dyn_array(sizeof(Type*));
+    enum_type->enum_type.option_count = 0;
+    enum_type->enum_type.type_param_count = 0;
+    return enum_type;
 }
 
 const Type* make_prim_type(TypeTable* type_table, TypeTag tag) {
@@ -336,8 +334,54 @@ const Type* make_array_type(TypeTable* type_table, const Type* elem_type) {
     });
 }
 
+const Type* make_ptr_type(TypeTable* type_table, bool is_const, const Type* pointee_type) {
+    return get_or_insert_type(type_table, &(Type) {
+        .tag = TYPE_PTR,
+        .ptr_type = { .is_const = is_const, .pointee = pointee_type }
+    });
+}
+
 const Type* make_fun_type(TypeTable* type_table, const Type* dom, const Type* codom) {
     return make_poly_fun_type(type_table, NULL, 0, dom, codom);
+}
+
+const Type* make_type_alias(
+    TypeTable* type_table,
+    const char* name,
+    const Type** type_params,
+    size_t type_param_count,
+    const Type* aliased_type)
+{
+    return get_or_insert_type(type_table, &(Type) {
+        .tag = TYPE_ALIAS,
+        .type_alias = {
+            .name = make_str(&type_table->str_pool, name),
+            .type_params = type_params,
+            .type_param_count = type_param_count,
+            .aliased_type = aliased_type,
+        }
+    });
+}
+
+const Type* make_signature_type(
+    TypeTable* type_table,
+    const Type** type_params,
+    size_t type_param_count,
+    SignatureMember* members,
+    size_t member_count)
+{
+    for (size_t i = 0; i < member_count; ++i)
+        members[i].name = make_str(&type_table->str_pool, members[i].name);
+    qsort(members, member_count, sizeof(SignatureMember), compare_signature_members);
+    return get_or_insert_type(type_table, &(Type) {
+        .tag = TYPE_SIGNATURE,
+        .signature = {
+            .type_params = type_params,
+            .type_param_count = type_param_count,
+            .members = members,
+            .member_count = member_count
+        }
+    });
 }
 
 const Type* make_poly_fun_type(
@@ -358,32 +402,137 @@ const Type* make_poly_fun_type(
     });
 }
 
-static inline bool is_member_smaller_than(const TypeMember* left, const TypeMember* right) {
-    return
-        left->is_type < right->is_type || (left->is_type == right->is_type &&
-        (left->type->id < right->type->id || (left->type->id == right->type->id &&
-        strcmp(left->name, right->name) < 0)));
+const Type* replace_types_with_map(TypeTable* type_table, const Type* type, TypeMap* type_map) {
+    switch (type->tag) {
+#define f(name, ...) case TYPE_##name:
+    PRIM_TYPE_LIST(f)
+#undef f
+        case TYPE_UNKNOWN:
+        case TYPE_NORET:
+        case TYPE_ERROR:
+        case TYPE_STRUCT:
+        case TYPE_ENUM:
+            return type;
+        case TYPE_TUPLE: {
+            const Type** types = malloc(sizeof(Type*) * type->tuple_type.arg_count);
+            for (size_t i = 0, n = type->tuple_type.arg_count; i < n; ++i)
+                types[i] = replace_types_with_map(type_table, type->tuple_type.args[i], type_map);
+            type = make_tuple_type(type_table, types, type->tuple_type.arg_count);
+            free(types);
+            return type;
+        }
+        case TYPE_ALIAS: {
+            return make_type_alias(type_table,
+                type->type_alias.name,
+                type->type_alias.type_params,
+                type->type_alias.type_param_count,
+                replace_types_with_map(type_table, type->type_alias.aliased_type, type_map));
+        }
+        case TYPE_SIGNATURE: {
+            SignatureMember* members = malloc(sizeof(SignatureMember) * type->signature.member_count);
+            memcpy(members, type->signature.members, sizeof(SignatureMember) * type->signature.member_count);
+            for (size_t i = 0, n = type->signature.member_count; i < n; ++i)
+                members[i].type = replace_types_with_map(type_table, members[i].type, type_map);
+            type = make_signature_type(type_table,
+                type->signature.type_params,
+                type->signature.type_param_count, members,
+                type->signature.member_count);
+            free(members);
+            return type;
+        }
+        case TYPE_APP: {
+            const Type** args = malloc(sizeof(Type*) * type->type_app.arg_count);
+            for (size_t i = 0, n = type->type_app.arg_count; i < n; ++i)
+                args[i] = replace_types_with_map(type_table, type->type_app.args[i], type_map);
+            type = make_type_app(type_table,
+                replace_types_with_map(type_table, type->type_app.applied_type, type_map),
+                args, type->type_app.arg_count);
+            free(args);
+            return type;
+        }
+        case TYPE_FUN: {
+            return make_poly_fun_type(type_table,
+                type->fun_type.type_params,
+                type->fun_type.type_param_count,
+                replace_types_with_map(type_table, type->fun_type.dom, type_map),
+                replace_types_with_map(type_table, type->fun_type.codom, type_map));
+        }
+        case TYPE_ARRAY: {
+            return make_array_type(type_table,
+                replace_types_with_map(type_table, type->array_type.elem_type, type_map));
+        }
+        case TYPE_VAR: {
+            const Type* mapped_type = find_type_in_map(type_map, type);
+            return mapped_type ? mapped_type : type;
+        }
+        case TYPE_PTR: {
+            return make_ptr_type(type_table,
+                type->ptr_type.is_const,
+                replace_types_with_map(type_table, type->ptr_type.pointee, type_map));
+        }
+        default:
+            assert(false && "invalid type");
+            break;
+    }
 }
 
-DECLARE_SHELL_SORT(sort_members, TypeMember, is_member_smaller_than)
-
-const Type* make_sig_type(
+const Type* replace_types(
     TypeTable* type_table,
-    TypeMember* members,
-    size_t member_count,
-    const Type** type_params,
-    size_t type_param_count)
+    const Type* type,
+    const Type** src_types,
+    const Type** dst_types,
+    size_t type_count)
 {
-    // This ensures that signatures that have the same members compare equal,
-    // regardless of the order in which members are declared.
-    sort_members(members, member_count);
-    return get_or_insert_type(type_table, &(Type) {
-        .tag = TYPE_SIG,
-        .sig_type = {
-            .members = members,
-            .member_count = member_count,
-            .type_params = type_params,
-            .type_param_count = type_param_count
-        }
-    });
+    TypeMap type_map = new_type_map();
+    for (size_t i = 0; i < type_count; ++i)
+        insert_type_in_map(&type_map, src_types[i], dst_types[i]);
+    const Type* replaced_type = replace_types_with_map(type_table, type, &type_map);
+    free_type_map(&type_map);
+    return replaced_type;
+}
+
+static StructField* copy_and_sort_struct_fields(TypeTable* type_table, StructField* fields) {
+    size_t field_count = get_dyn_array_size(fields);
+    StructField* fields_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(StructField) * field_count);
+    memcpy(fields_copy, fields, sizeof(StructField) * field_count);
+    for (size_t i = 0; i < field_count; ++i)
+        fields_copy[i].name = make_str(&type_table->str_pool, fields[i].name);
+    qsort(fields_copy, field_count, sizeof(StructField), compare_struct_fields_by_name);
+    free_dyn_array(fields);
+    return fields_copy;
+}
+
+static EnumOption* copy_and_sort_enum_options(TypeTable* type_table, EnumOption* options) {
+    size_t option_count = get_dyn_array_size(options);
+    EnumOption* options_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(EnumOption) * option_count);
+    memcpy(options_copy, options, sizeof(EnumOption) * option_count);
+    for (size_t i = 0; i < option_count; ++i)
+        options_copy[i].name = make_str(&type_table->str_pool, options[i].name);
+    qsort(options_copy, option_count, sizeof(EnumOption), compare_enum_options_by_name);
+    free_dyn_array(options);
+    return options_copy;
+}
+
+static const Type** copy_type_params(TypeTable* type_table, const Type** type_params, size_t* type_param_count) {
+    *type_param_count = get_dyn_array_size(type_params);
+    const Type** type_params_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * *type_param_count);
+    memcpy(type_params_copy, type_params, sizeof(Type*) * *type_param_count);
+    free_dyn_array(type_params);
+    return type_params_copy;
+}
+
+const Type* freeze_type(TypeTable* type_table, Type* type) {
+    if (type->tag == TYPE_ENUM) {
+        type->enum_type.option_count = get_dyn_array_size(type->enum_type.options);
+        type->enum_type.options = copy_and_sort_enum_options(type_table, type->enum_type.options);
+        type->enum_type.type_params =
+            copy_type_params(type_table, type->enum_type.type_params, &type->enum_type.type_param_count);
+    } else if (type->tag == TYPE_STRUCT) {
+        type->struct_type.field_count = get_dyn_array_size(type->struct_type.fields);
+        type->struct_type.fields = copy_and_sort_struct_fields(type_table, type->struct_type.fields);
+        type->struct_type.type_params =
+            copy_type_params(type_table, type->struct_type.type_params, &type->struct_type.type_param_count);
+    } else
+        assert(false && "invalid nominal type");
+    return type;
 }

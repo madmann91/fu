@@ -405,9 +405,6 @@ AstNode* parse_type(Parser* parser) {
         case TOKEN_FUN:       return parse_fun_type(parser);
         case TOKEN_BANG:      return parse_basic_type(parser, AST_NORET_TYPE);
         case TOKEN_AMP:       return parse_ptr_type(parser);
-        case TOKEN_STRUCT:    return parse_struct_decl(parser, false, false);
-        case TOKEN_ENUM:      return parse_enum_decl(parser, false, false);
-        case TOKEN_TYPE:      return parse_type_decl(parser, false, false);
         case TOKEN_SIG:       return parse_sig_decl(parser);
         default:
             return parse_error(parser, "type");
@@ -429,27 +426,14 @@ static AstNode* parse_struct(
     });
 }
 
-static AstNode* parse_field_name(Parser* parser) {
-    FilePos begin = parser->ahead->file_loc.begin;
-    const char* name = parse_ident(parser);
-    return make_ast_node(parser, &begin, &(AstNode) { .tag = AST_FIELD_NAME, .field_name.name = name });
-}
-
-static AstNode* parse_field_names(Parser* parser, TokenTag stop) {
-    AstNode* field_names = parse_many(parser, stop, TOKEN_COMMA, parse_field_name);
-    if (!field_names)
-        fail_expect(parser, "field name", token_tag_to_str(parser->ahead->tag), &parser->ahead->file_loc);
-    return field_names;
-}
-
 static AstNode* parse_field(Parser* parser, AstNodeTag tag, AstNode* (*parse_val)(Parser*)) {
     FilePos begin = parser->ahead->file_loc.begin;
-    AstNode* field_names = parse_field_names(parser, TOKEN_EQUAL);
+    const char* name = parse_ident(parser);
     expect_token(parser, TOKEN_EQUAL);
     AstNode* val = parse_val(parser);
     return make_ast_node(parser, &begin, &(AstNode) {
         .tag = tag,
-        .field_expr = { .field_names = field_names, .val = val }
+        .field_expr = { .name = name, .val = val }
     });
 }
 
@@ -829,6 +813,8 @@ static inline AstNode* parse_while_loop(Parser* parser) {
 static inline AstNode* parse_type_params(Parser* parser) {
     if (accept_token(parser, TOKEN_L_BRACKET)) {
         AstNode* type_params = parse_many(parser, TOKEN_R_BRACKET, TOKEN_COMMA, parse_type_param);
+        if (!type_params)
+            log_error(parser->lexer->log, &parser->ahead->file_loc, "empty type parameters are not allowed", NULL);
         expect_token(parser, TOKEN_R_BRACKET);
         return type_params;
     }
@@ -885,7 +871,7 @@ static inline AstNode* parse_fun_decl(Parser* parser) {
 
 static AstNode* parse_field_decl(Parser* parser) {
     FilePos begin = parser->ahead->file_loc.begin;
-    AstNode* field_names = parse_field_names(parser, TOKEN_COLON);
+    const char* name = parse_ident(parser);
     expect_token(parser, TOKEN_COLON);
     AstNode* type = parse_type(parser);
     AstNode* val = NULL;
@@ -893,19 +879,29 @@ static AstNode* parse_field_decl(Parser* parser) {
         val = parse_expr(parser);
     return make_ast_node(parser, &begin, &(AstNode) {
         .tag = AST_FIELD_DECL,
-        .field_decl = { .field_names = field_names, .type = type, .val = val }
+        .field_decl = { .name = name, .type = type, .val = val }
     });
 }
 
 static AstNode* parse_option_decl(Parser* parser) {
     FilePos begin = parser->ahead->file_loc.begin;
     const char* name = parse_ident(parser);
+    bool is_struct_like = false;
     AstNode* param_type = NULL;
     if (parser->ahead->tag == TOKEN_L_PAREN)
         param_type = parse_tuple_type(parser);
+    else if (accept_token(parser, TOKEN_L_BRACE)) {
+        is_struct_like = true;
+        param_type = parse_many(parser, TOKEN_R_BRACE, TOKEN_COMMA, parse_field_decl);
+        expect_token(parser, TOKEN_R_BRACE);
+    }
     return make_ast_node(parser, &begin, &(AstNode) {
         .tag = AST_OPTION_DECL,
-        .option_decl = { .name = name, .param_type = param_type }
+        .option_decl = {
+            .name = name,
+            .is_struct_like = is_struct_like,
+            .param_type = param_type
+        }
     });
 }
 
@@ -1109,5 +1105,8 @@ AstNode* parse_decl(Parser* parser) {
 AstNode* parse_program(Parser* parser) {
     FilePos begin = parser->ahead->file_loc.begin;
     AstNode* decls = parse_many(parser, TOKEN_EOF, TOKEN_ERROR, parse_decl);
-    return make_ast_node(parser, &begin, &(AstNode) { .tag = AST_PROGRAM, .program.decls = decls });
+    return make_ast_node(parser, &begin, &(AstNode) {
+        .tag = AST_MOD_DECL,
+        .mod_decl = { .decls = decls }
+    });
 }

@@ -21,15 +21,24 @@ typedef struct {
     void* elems;
 } HashTable;
 
-typedef bool (*CompareFn) (const void*, const void*);
-
 HashTable new_hash_table(size_t capacity, size_t elem_size);
 void free_hash_table(HashTable*);
 
 bool is_bucket_occupied(const HashTable*, size_t);
 
-bool insert_in_hash_table(HashTable*, const void* elem, uint32_t hash, size_t elem_size, CompareFn compare);
-void* find_in_hash_table(const HashTable*, const void* elem, uint32_t hash, size_t elem_size, CompareFn compare);
+bool insert_in_hash_table(HashTable*,
+    const void* elem,
+    uint32_t hash,
+    size_t elem_size,
+    bool (*compare)(const void*, const void*));
+
+void* find_in_hash_table(
+    const HashTable*,
+    const void* elem,
+    uint32_t hash,
+    size_t elem_size,
+    bool (*compare)(const void*, const void*));
+
 void remove_from_hash_table(HashTable*, void* elem, size_t elem_size);
 void clear_hash_table(HashTable*);
 

@@ -14,21 +14,8 @@ typedef struct MemPool MemPool;
 TypeTable* new_type_table(MemPool*);
 void free_type_table(TypeTable*);
 
-TypeMember make_type_member(
-    TypeTable*,
-    const char* name,
-    const Type* type,
-    bool is_type,
-    bool has_default);
-
-Type* make_struct_or_enum_type(
-    TypeTable*,
-    TypeTag,
-    const char* name,
-    size_t member_count,
-    size_t type_param_count);
-
-Type* make_alias_type(TypeTable*, const char* name, size_t type_param_count);
+Type* make_struct_type(TypeTable*, const char* name);
+Type* make_enum_type(TypeTable*, const char* name);
 
 const Type* make_prim_type(TypeTable*, TypeTag);
 const Type* make_unknown_type(TypeTable*);
@@ -42,14 +29,19 @@ const Type* make_fun_type(TypeTable*, const Type* dom, const Type* codom);
 const Type* make_array_type(TypeTable*, const Type* elem_type);
 const Type* make_ptr_type(TypeTable*, bool is_const, const Type* pointee_type);
 
-// Note: The members may need to be sorted before creating a signature type,
-// which is why they are passed as a non-const pointer to this function.
-const Type* make_sig_type(
+const Type* make_type_alias(
     TypeTable*,
-    TypeMember* members,
-    size_t member_count,
+    const char* name,
     const Type** type_params,
-    size_t type_param_count);
+    size_t type_param_count,
+    const Type* aliased_type);
+
+const Type* make_signature_type(
+    TypeTable*,
+    const Type** type_params,
+    size_t type_param_count,
+    SignatureMember* members,
+    size_t member_count);
 
 const Type* make_poly_fun_type(
     TypeTable*,
@@ -57,5 +49,9 @@ const Type* make_poly_fun_type(
     size_t type_param_count,
     const Type* dom,
     const Type* codom);
+
+const Type* replace_types_with_map(TypeTable*, const Type*, TypeMap*);
+const Type* replace_types(TypeTable*, const Type*, const Type**, const Type**, size_t);
+const Type* freeze_type(TypeTable*, Type*);
 
 #endif

@@ -314,8 +314,12 @@ void bind_decl(Env* env, AstNode* decl) {
             bind_type(env, decl->field_decl.type);
             break;
         case AST_OPTION_DECL:
-            if (decl->option_decl.param_type)
-                bind_type(env, decl->option_decl.param_type);
+            if (decl->option_decl.param_type) {
+                if (decl->option_decl.is_struct_like)
+                    bind_many(env, decl->option_decl.param_type, bind_decl);
+                else
+                    bind_type(env, decl->option_decl.param_type);
+            }
             break;
         case AST_STRUCT_DECL:
         case AST_ENUM_DECL:
@@ -514,8 +518,5 @@ void bind_type(Env* env, AstNode* type) {
 }
 
 void bind_program(Env* env, AstNode* program) {
-    push_scope(env, program);
-    insert_many_decls_in_env(env, program->program.decls);
-    bind_many(env, program->program.decls, bind_decl);
-    pop_scope(env);
+    bind_decl(env, program);
 }

@@ -78,7 +78,7 @@ bool insert_in_hash_table(
     const void* elem,
     uint32_t hash,
     size_t elem_size,
-    CompareFn compare)
+    bool (*compare)(const void*, const void*))
 {
     hash |= OCCUPIED_MASK;
     size_t index = mod_prime(hash, hash_table->capacity);
@@ -101,7 +101,7 @@ void* find_in_hash_table(
     const void* elem,
     uint32_t hash,
     size_t elem_size,
-    CompareFn compare)
+    bool (*compare)(const void*, const void*))
 {
     hash |= OCCUPIED_MASK;
     size_t index = mod_prime(hash, hash_table->capacity);

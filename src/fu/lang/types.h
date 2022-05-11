@@ -2,6 +2,7 @@
 #define FU_LANG_TYPES_H
 
 #include "fu/core/format.h"
+#include "fu/core/hash_table.h"
 
 #include <stddef.h>
 #include <stdbool.h>
@@ -37,26 +38,36 @@ typedef enum {
     PRIM_TYPE_LIST(f)
 #undef f
     TYPE_UNKNOWN,
-    TYPE_NORET,
-    TYPE_ERROR,
-    TYPE_TUPLE,
-    TYPE_ARRAY,
-    TYPE_FUN,
-    TYPE_APP,
     TYPE_STRUCT,
     TYPE_ENUM,
     TYPE_ALIAS,
-    TYPE_SIG,
+    TYPE_SIGNATURE,
     TYPE_PTR,
-    TYPE_VAR
+    TYPE_VAR,
+    TYPE_NORET,
+    TYPE_ERROR,
+    TYPE_ARRAY,
+    TYPE_FUN,
+    TYPE_TUPLE,
+    TYPE_APP
 } TypeTag;
 
-typedef struct TypeMember {
+typedef struct SignatureMember {
     const char* name;
     const Type* type;
-    bool is_type : 1;
-    bool has_default : 1;
-} TypeMember;
+    bool is_type;
+} SignatureMember;
+
+typedef struct StructField {
+    const char* name;
+    const Type* type;
+    bool has_default;
+} StructField;
+
+typedef struct EnumOption {
+    const char* name;
+    const Type* param_type;
+} EnumOption;
 
 struct Type {
     TypeTag tag;
@@ -65,18 +76,38 @@ struct Type {
     size_t id;
     union {
         struct {
-            TypeMember* members;
-            size_t member_count;
-            const Type** type_params;
-            size_t type_param_count;
             const char* name;
-        } struct_type, enum_type;
-        struct {
-            const TypeMember* members;
-            size_t member_count;
             const Type** type_params;
             size_t type_param_count;
-        } sig_type;
+            const Type* aliased_type;
+        } type_alias;
+        struct {
+            const char* name;
+            const Type* parent;
+            const Type** type_params;
+            size_t type_param_count;
+            EnumOption* options;
+            size_t option_count;
+        } enum_type;
+        struct {
+            const char* name;
+            const Type* parent;
+            const Type** type_params;
+            size_t type_param_count;
+            StructField* fields;
+            size_t field_count;
+            const Type* parent_enum;
+        } struct_type;
+        struct {
+            const Type** args;
+            size_t arg_count;
+        } tuple_type;
+        struct {
+            const Type** type_params;
+            size_t type_param_count;
+            SignatureMember* members;
+            size_t member_count;
+        } signature;
         struct {
             const Type* applied_type;
             const Type** args;
@@ -89,18 +120,8 @@ struct Type {
             const Type* codom;
         } fun_type;
         struct {
-            const Type** args;
-            size_t arg_count;
-        } tuple_type;
-        struct {
             const Type* elem_type;
         } array_type;
-        struct {
-            const Type** type_params;
-            size_t type_param_count;
-            const Type* aliased_type;
-            const char* name;
-        } alias_type;
         struct {
             bool is_const;
             const Type* pointee;
@@ -112,8 +133,14 @@ struct Type {
     };
 };
 
+typedef HashTable TypeMap;
+
+TypeMap new_type_map(void);
+void free_type_map(TypeMap*);
+bool insert_type_in_map(TypeMap*, const Type*, const Type*);
+const Type* find_type_in_map(const TypeMap*, const Type*);
+
 bool is_prim_type(TypeTag);
-bool is_compound_type(TypeTag);
 bool is_nominal_type(TypeTag);
 bool is_float_type(TypeTag);
 bool is_unsigned_int_type(TypeTag);
@@ -122,10 +149,20 @@ bool is_int_type(TypeTag);
 bool is_int_or_float_type(TypeTag);
 bool is_subtype(const Type*, const Type*);
 bool is_non_const_ptr_type(const Type*);
+bool is_struct_like_option(const EnumOption*);
 
+const Type* skip_type_app(const Type*);
 size_t get_prim_type_bitwidth(TypeTag);
-size_t find_type_member_index(const Type*, const char*);
-const TypeMember* get_type_member(const Type*, size_t);
+size_t get_type_param_count(const Type*);
+
+int compare_signature_members(const void*, const void*);
+int compare_signature_members_by_name(const void*, const void*);
+int compare_struct_fields_by_name(const void*, const void*);
+int compare_enum_options_by_name(const void*, const void*);
+
+const SignatureMember* find_signature_member(const Type*, const char*);
+const EnumOption* find_enum_option(const Type*, const char*);
+const StructField* find_struct_field(const Type*, const char*);
 
 void print_type(FormatState*, const Type*);
 

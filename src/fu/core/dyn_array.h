@@ -11,7 +11,7 @@
 typedef struct DynArray DynArray;
 
 #define push_on_dyn_array(ptr, ...) \
-    push_on_dyn_array_explicit(ptr, (__VA_ARGS__), sizeof(*(__VA_ARGS__)))
+    push_on_dyn_array_explicit(ptr, (__VA_ARGS__), sizeof(ptr[0]))
 
 void* new_dyn_array(size_t elem_size);
 size_t get_dyn_array_size(const void*);

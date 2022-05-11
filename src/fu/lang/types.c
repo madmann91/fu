@@ -1,10 +1,47 @@
 #include "fu/lang/types.h"
 #include "fu/lang/type_table.h"
+#include "fu/core/hash.h"
 #include "fu/core/utils.h"
 #include "fu/core/alloc.h"
 
 #include <assert.h>
 #include <string.h>
+
+#define DEFAULT_TYPE_MAP_CAPACITY 8
+
+typedef struct TypeMapElem {
+    const Type* from;
+    const Type* to;
+} TypeMapElem;
+
+TypeMap new_type_map(void) {
+    return new_hash_table(DEFAULT_TYPE_MAP_CAPACITY, sizeof(TypeMapElem));
+}
+
+void free_type_map(TypeMap* type_map) {
+    free_hash_table(type_map);
+}
+
+static bool compare_type_map_elems(const void* left, const void* right) {
+    return ((TypeMapElem*)left)->from == ((TypeMapElem*)right)->from;
+}
+
+bool insert_type_in_map(TypeMap* type_map, const Type* from, const Type* to) {
+    return insert_in_hash_table(type_map,
+        &(TypeMapElem) { .from = from, .to = to },
+        hash_uint64(hash_init(), from->id),
+        sizeof(TypeMapElem),
+        compare_type_map_elems);
+}
+
+const Type* find_type_in_map(const TypeMap* type_map, const Type* from) {
+    const TypeMapElem* elem = find_in_hash_table(type_map,
+        &(TypeMapElem) { .from = from },
+        hash_uint64(hash_init(), from->id),
+        sizeof(TypeMapElem),
+        compare_type_map_elems);
+    return elem ? elem->to : NULL;
+}
 
 bool is_prim_type(TypeTag tag) {
     switch (tag) {
@@ -17,12 +54,8 @@ bool is_prim_type(TypeTag tag) {
     }
 }
 
-bool is_compound_type(TypeTag tag) {
-    return tag == TYPE_STRUCT || tag == TYPE_ENUM || tag == TYPE_SIG;
-}
-
 bool is_nominal_type(TypeTag tag) {
-    return tag == TYPE_STRUCT || tag == TYPE_ENUM || tag == TYPE_ALIAS;
+    return tag == TYPE_STRUCT || tag == TYPE_ENUM;
 }
 
 bool is_float_type(TypeTag tag) {
@@ -45,14 +78,6 @@ bool is_int_or_float_type(TypeTag tag) {
     return is_int_type(tag) || is_float_type(tag);
 }
 
-static bool are_all_subtypes(const Type** left_types, const Type** right_types, size_t count) {
-    for (size_t i = 0; i < count; ++i) {
-        if (!is_subtype(left_types[i], right_types[i]))
-            return false;
-    }
-    return true;
-}
-
 bool is_subtype(const Type* left, const Type* right) {
     if (left == right ||
         left->tag == TYPE_NORET ||
@@ -69,10 +94,11 @@ bool is_subtype(const Type* left, const Type* right) {
         return false;
 
     if (left->tag == TYPE_TUPLE && left->tuple_type.arg_count == right->tuple_type.arg_count) {
-        return are_all_subtypes(
-            left->tuple_type.args,
-            right->tuple_type.args,
-            left->tuple_type.arg_count);
+        for (size_t i = 0; i < left->tuple_type.arg_count; ++i) {
+            if (!is_subtype(left->tuple_type.args[i], right->tuple_type.args[i]))
+                return false;
+        }
+        return true;
     }
 
     if (left->tag == TYPE_FUN) {
@@ -88,6 +114,17 @@ bool is_non_const_ptr_type(const Type* type) {
     return type->tag == TYPE_PTR && !type->ptr_type.is_const;
 }
 
+bool is_struct_like_option(const EnumOption* option) {
+    return
+        option->param_type &&
+        option->param_type->tag == TYPE_STRUCT &&
+        option->param_type->struct_type.parent_enum;
+}
+
+const Type* skip_type_app(const Type* type) {
+    return type->tag == TYPE_APP ? type->type_app.applied_type : type;
+}
+
 size_t get_prim_type_bitwidth(TypeTag tag) {
     switch (tag) {
         case TYPE_BOOL: return 1;
@@ -101,19 +138,91 @@ size_t get_prim_type_bitwidth(TypeTag tag) {
     }
 }
 
-size_t find_type_member_index(const Type* type, const char* name) {
-    assert(is_compound_type(type->tag));
-    for (size_t i = 0; i < type->struct_type.member_count; ++i) {
-        if (!strcmp(name, type->struct_type.members[i].name))
-            return i;
-    }
-    return SIZE_MAX;
+size_t get_type_param_count(const Type* type) {
+    return
+        type->tag == TYPE_STRUCT ? type->struct_type.type_param_count :
+        type->tag == TYPE_ENUM ? type->enum_type.type_param_count : 0;
 }
 
-const TypeMember* get_type_member(const Type* type, size_t index) {
-    assert(is_compound_type(type->tag));
-    assert(index < type->struct_type.member_count);
-    return &type->struct_type.members[index];
+#define LEXICOGRAPHICAL_COMPARE(l, r) \
+    if (l < r) return -1; \
+    if (l > r) return 1;
+
+int compare_signature_members(const void* left, const void* right) {
+    const SignatureMember* left_member = left;
+    const SignatureMember* right_member = right;
+    int d = strcmp(left_member->name, right_member->name);
+    LEXICOGRAPHICAL_COMPARE(d, 0)
+    LEXICOGRAPHICAL_COMPARE(left_member->type->id, right_member->type->id)
+    LEXICOGRAPHICAL_COMPARE(left_member->is_type, right_member->is_type)
+    return 0;
+}
+
+#undef LEXICOGRAPHICAL_COMPARE
+
+int compare_signature_members_by_name(const void* left, const void* right) {
+    return strcmp(((SignatureMember*)left)->name, ((SignatureMember*)right)->name);
+}
+
+int compare_struct_fields_by_name(const void* left, const void* right) {
+    return strcmp(((StructField*)left)->name, ((StructField*)right)->name);
+}
+
+int compare_enum_options_by_name(const void* left, const void* right) {
+    return strcmp(((EnumOption*)left)->name, ((EnumOption*)right)->name);
+}
+
+static inline bool is_sorted(
+    const void* elems,
+    size_t elem_count,
+    size_t elem_size,
+    int (*compare_elems)(const void*, const void*))
+{
+    for (size_t i = 1; i < elem_count; ++i) {
+        if (compare_elems(
+            ((char*)elems) + elem_size * (i - 1),
+            ((char*)elems) + elem_size * i) > 0)
+            return false;
+    }
+    return true;
+}
+
+static inline void* safe_bsearch(
+    const void* key,
+    const void* elems,
+    size_t elem_count,
+    size_t elem_size,
+    int (*compare_elems)(const void*, const void*))
+{
+    assert(is_sorted(elems, elem_count, elem_size, compare_elems));
+    return bsearch(key, elems, elem_count, elem_size, compare_elems);
+}
+
+const SignatureMember* find_signature_member(const Type* signature, const char* name) {
+    assert(signature->tag == TYPE_SIGNATURE);
+    return safe_bsearch(&(StructField) { .name = name },
+        signature->signature.members,
+        signature->signature.member_count,
+        sizeof(SignatureMember),
+        compare_signature_members_by_name);
+}
+
+const StructField* find_struct_field(const Type* struct_type, const char* name) {
+    assert(struct_type->tag == TYPE_STRUCT);
+    return safe_bsearch(&(StructField) { .name = name },
+        struct_type->struct_type.fields,
+        struct_type->struct_type.field_count,
+        sizeof(StructField),
+        compare_struct_fields_by_name);
+}
+
+const EnumOption* find_enum_option(const Type* enum_type, const char* name) {
+    assert(enum_type->tag == TYPE_ENUM);
+    return safe_bsearch(&(EnumOption) { .name = name },
+        enum_type->enum_type.options,
+        enum_type->enum_type.option_count,
+        sizeof(EnumOption),
+        compare_enum_options_by_name);
 }
 
 static void print_many_types(FormatState* state, const char* sep, const Type** types, size_t count) {
@@ -132,7 +241,7 @@ static void print_type_params(FormatState* state, const Type** type_params, size
     format(state, "]", NULL);
 }
 
-static void print_sig_member(FormatState* state, const TypeMember* member) {
+static void print_signature_member(FormatState* state, const SignatureMember* member) {
     format(state, "\n", NULL);
     print_keyword(state, member->is_type ? "type" : "const");
     format(state, " {s}", (FormatArg[]) { { .s = member->name } });
@@ -196,13 +305,15 @@ void print_type(FormatState* state, const Type* type) {
             print_keyword(state, "struct");
             format(state, " {s}", (FormatArg[]) { { .s = type->struct_type.name } });
             break;
-        case TYPE_SIG:
+        case TYPE_SIGNATURE:
             print_keyword(state, "sig");
-            print_type_params(state, type->sig_type.type_params, type->sig_type.type_param_count);
-            format(state, " {{{>}", NULL);
-            for (size_t i = 0; i < type->sig_type.member_count; ++i)
-                print_sig_member(state, type->sig_type.members + i);
-            format(state, "{<}\n}", NULL);
+            format(state, " {{ ", NULL);
+            for (size_t i = 0, n = type->signature.member_count; i < n; ++i) {
+                print_signature_member(state, type->signature.members + i);
+                if (i != n - 1)
+                    format(state, ", ", NULL);
+            }
+            format(state, " }", NULL);
             break;
         case TYPE_PTR:
             format(state, "&", NULL);

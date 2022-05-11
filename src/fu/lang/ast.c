@@ -191,14 +191,8 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             if (ast_node->path_elem.type_args)
                 print_many_asts_with_delim(state, "[", ", ", "]", ast_node->path_elem.type_args);
             break;
-        case AST_PROGRAM:
-            print_many_asts(state, "\n", ast_node->program.decls);
-            break;
         case AST_ERROR:
             print_with_style(state, "<error>", error_style);
-            break;
-        case AST_FIELD_NAME:
-            format(state, "{s}", (FormatArg[]) { { .s = ast_node->field_name.name } });
             break;
 #define f(name, ...) case AST_##name##_EXPR:
         AST_PREFIX_EXPR_LIST(f)
@@ -240,15 +234,20 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
                 format(state, ";", NULL);
             break;
         case AST_FIELD_DECL:
-            print_many_asts_with_delim(state, "", ", ", ": ", ast_node->field_decl.field_names);
+            format(state, "{s}: ", (FormatArg[]) { { .s = ast_node->field_decl.name } });
             print_ast(state, ast_node->field_decl.type);
             if (ast_node->field_decl.val)
                 print_ast_with_delim(state, " = ", "", ast_node->field_decl.val);
             break;
         case AST_OPTION_DECL:
             format(state, "{s}", (FormatArg[]) { { .s = ast_node->option_decl.name } });
-            if (ast_node->option_decl.param_type)
-                print_with_parens(state, ast_node->option_decl.param_type);
+            if (ast_node->option_decl.param_type) {
+                if (ast_node->option_decl.is_struct_like) {
+                    format(state, " ", NULL);
+                    print_many_asts_inside_block(state, ",\n", ast_node->option_decl.param_type);
+                } else
+                    print_with_parens(state, ast_node->option_decl.param_type);
+            }
             break;
         case AST_FUN_DECL:
             print_decl_head(state,
@@ -286,6 +285,10 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
         }
         case AST_MOD_DECL:
         case AST_SIG_DECL: {
+            if (is_top_level_mod_decl(ast_node)) {
+                print_many_asts(state, "\n", ast_node->mod_decl.decls);
+                break;
+            }
             print_decl_head(state,
                 ast_node->mod_decl.is_public, false,
                 get_decl_keyword(ast_node->tag),
@@ -320,7 +323,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             break;
         case AST_FIELD_PATTERN:
         case AST_FIELD_EXPR:
-            print_many_asts_with_delim(state, "", ", ", " = ", ast_node->field_pattern.field_names);
+            format(state, "{s} = ", (FormatArg[]) { { .s = ast_node->field_pattern.name } });
             print_ast(state, ast_node->field_pattern.val);
             break;
         case AST_STRUCT_PATTERN:
@@ -527,11 +530,21 @@ bool is_assignable_expr(const AstNode* expr) {
     return false;
 }
 
+bool is_top_level_mod_decl(const AstNode* ast_node) {
+    return ast_node->tag == AST_MOD_DECL && ast_node->mod_decl.name == NULL;
+}
+
 size_t count_ast_nodes(const AstNode* node) {
     size_t len = 0;
     while (node)
         node = node->next, len++;
     return len;
+}
+
+const AstNode* get_last_ast_node(const AstNode* node) {
+    const AstNode* prev = node;
+    for (; node; prev = node, node = node->next);
+    return prev;
 }
 
 AstNodeTag assign_expr_to_binary_expr(AstNodeTag tag) {
@@ -568,7 +581,7 @@ const char* get_binary_expr_op(AstNodeTag tag) {
 
 const char* get_unary_expr_op(AstNodeTag tag) {
     switch (tag) {
-#define f(name, tok, str, ...) case AST_##name##_EXPR: return str;
+#define f(name, tok, str) case AST_##name##_EXPR: return str;
         AST_UNARY_EXPR_LIST(f)
 #undef f
         default:

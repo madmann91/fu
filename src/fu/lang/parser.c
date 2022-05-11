@@ -929,6 +929,11 @@ static inline AstNode* parse_struct_decl(Parser* parser, bool is_public, bool is
     eat_token(parser, TOKEN_STRUCT);
     const char* name = parse_ident(parser);
     AstNode* type_params = parse_type_params(parser);
+
+    AstNode* super = NULL;
+    if (accept_token(parser, TOKEN_COLON))
+        super = parse_type(parser);
+
     AstNode* fields = NULL;
     if (parser->ahead->tag == TOKEN_L_BRACE) {
         expect_token(parser, TOKEN_L_BRACE);
@@ -936,10 +941,12 @@ static inline AstNode* parse_struct_decl(Parser* parser, bool is_public, bool is
         expect_token(parser, TOKEN_R_BRACE);
     } else
         expect_token(parser, TOKEN_SEMICOLON);
+
     return make_ast_node(parser, &begin, &(AstNode) {
         .tag = AST_STRUCT_DECL,
         .struct_decl = {
             .name = name,
+            .super = super,
             .is_public = is_public,
             .is_opaque = is_opaque,
             .type_params = type_params,
@@ -953,14 +960,21 @@ static inline AstNode* parse_enum_decl(Parser* parser, bool is_public, bool is_o
     eat_token(parser, TOKEN_ENUM);
     const char* name = parse_ident(parser);
     AstNode* type_params = parse_type_params(parser);
+
+    AstNode* super = NULL;
+    if (accept_token(parser, TOKEN_COLON))
+        super = parse_type(parser);
+
     expect_token(parser, TOKEN_L_BRACE);
     AstNode* options = parse_many_at_least_one(
         parser, "enumerations", TOKEN_R_BRACE, TOKEN_COMMA, parse_option_decl);
     expect_token(parser, TOKEN_R_BRACE);
+
     return make_ast_node(parser, &begin, &(AstNode) {
         .tag = AST_ENUM_DECL,
         .enum_decl = {
             .name = name,
+            .super = super,
             .is_public = is_public,
             .is_opaque = is_opaque,
             .type_params = type_params,

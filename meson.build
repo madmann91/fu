@@ -27,6 +27,8 @@ fu = executable('fu',
   link_with: libfu)
 
 root = meson.source_root()
+
+# General tests
 test('usage', fu, workdir: root, args: ['-h'], should_fail: true)
 test('missing-file',          fu, workdir: root, args: [], should_fail: true)
 test('invalid-option',        fu, workdir: root, args: ['--flurp'], should_fail: true)
@@ -34,6 +36,7 @@ test('missing-option-value',  fu, workdir: root, args: ['--max-errors'], should_
 test('all-options-enabled',   fu, workdir: root, args: ['--max-errors', '3', '--no-color', '--print-ast', '--no-type-check', 'test/parser/pass/empty.fu'])
 test('non-existing-file',     fu, workdir: root, args: ['this-file-hopefully-does-not-exist.fu'], should_fail: true)
 
+# Parser tests
 test('parser-pass-enums',     fu, workdir: root, args: ['--no-type-check', '--print-ast', 'test/parser/pass/enums.fu'])
 test('parser-pass-structs',   fu, workdir: root, args: ['--no-type-check', '--print-ast', 'test/parser/pass/structs.fu'])
 test('parser-pass-literals',  fu, workdir: root, args: ['--no-type-check', '--print-ast', 'test/parser/pass/literals.fu'])
@@ -51,6 +54,8 @@ test('parser-pass-attrs',     fu, workdir: root, args: ['--no-type-check', '--pr
 test('parser-fail-empty-type-params', fu, workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_enum.fu'])
 test('parser-fail-empty-enum',        fu, workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_type_params.fu'])
 
-test('typechecker-pass-mono-structs', fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/mono_structs.fu'])
-test('typechecker-pass-poly-structs', fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/poly_structs.fu'])
+# Typechecker tests
+test('typechecker-pass-mono-structs',        fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/mono_structs.fu'])
+test('typechecker-pass-poly-structs',        fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/poly_structs.fu'])
+test('typechecker-pass-structs-inheritance', fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/struct_inheritance.fu'])
 

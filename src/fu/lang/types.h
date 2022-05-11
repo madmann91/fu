@@ -83,7 +83,7 @@ struct Type {
         } type_alias;
         struct {
             const char* name;
-            const Type* parent;
+            const Type* super;
             const Type** type_params;
             size_t type_param_count;
             EnumOption* options;
@@ -91,7 +91,7 @@ struct Type {
         } enum_type;
         struct {
             const char* name;
-            const Type* parent;
+            const Type* super;
             const Type** type_params;
             size_t type_param_count;
             StructField* fields;

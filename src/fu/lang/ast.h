@@ -243,6 +243,7 @@ struct AstNode {
             bool is_public : 1;
             bool is_opaque : 1;
             bool is_tuple_like : 1;
+            AstNode* super;
             AstNode* type_params;
             AstNode* fields;
         } struct_decl;
@@ -250,6 +251,7 @@ struct AstNode {
             const char* name;
             bool is_public : 1;
             bool is_opaque : 1;
+            AstNode* super;
             AstNode* type_params;
             AstNode* options;
         } enum_decl;

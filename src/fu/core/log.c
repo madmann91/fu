@@ -90,7 +90,7 @@ static size_t find_line_end(FILE* file, size_t offset) {
 
 static size_t count_digits(size_t i) {
     size_t n = 1;
-    while (i > 10) {
+    while (i >= 10) {
         i /= 10;
         n++;
     }

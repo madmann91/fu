@@ -275,8 +275,6 @@ Type* make_enum_type(TypeTable* type_table, const char* name) {
     enum_type->enum_type.name = make_str(&type_table->str_pool, name);
     enum_type->enum_type.options = new_dyn_array(sizeof(EnumOption));
     enum_type->enum_type.type_params = new_dyn_array(sizeof(Type*));
-    enum_type->enum_type.option_count = 0;
-    enum_type->enum_type.type_param_count = 0;
     return enum_type;
 }
 
@@ -522,18 +520,26 @@ static const Type** copy_type_params(TypeTable* type_table, const Type** type_pa
 
 const Type* freeze_struct_type(TypeTable* type_table, Type* type) {
     assert(type->tag == TYPE_STRUCT);
+    assert(!type->enum_type.is_frozen);
     type->struct_type.field_count = get_dyn_array_size(type->struct_type.fields);
     type->struct_type.fields = copy_and_sort_struct_fields(type_table, type->struct_type.fields);
     type->struct_type.type_params =
         copy_type_params(type_table, type->struct_type.type_params, &type->struct_type.type_param_count);
+#ifndef NDEBUG
+    type->struct_type.is_frozen = true;
+#endif
     return type;
 }
 
 const Type* freeze_enum_type(TypeTable* type_table, Type* type) {
     assert(type->tag == TYPE_ENUM);
+    assert(!type->enum_type.is_frozen);
     type->enum_type.option_count = get_dyn_array_size(type->enum_type.options);
     type->enum_type.options = copy_and_sort_enum_options(type_table, type->enum_type.options);
     type->enum_type.type_params =
         copy_type_params(type_table, type->enum_type.type_params, &type->enum_type.type_param_count);
+#ifndef NDEBUG
+    type->enum_type.is_frozen = true;
+#endif
     return type;
 }

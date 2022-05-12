@@ -88,6 +88,9 @@ struct Type {
             size_t type_param_count;
             EnumOption* options;
             size_t option_count;
+#ifndef NDEBUG
+            bool is_frozen;
+#endif
         } enum_type;
         struct {
             const char* name;
@@ -97,6 +100,9 @@ struct Type {
             StructField* fields;
             size_t field_count;
             const Type* parent_enum;
+#ifndef NDEBUG
+            bool is_frozen;
+#endif
         } struct_type;
         struct {
             const Type** args;

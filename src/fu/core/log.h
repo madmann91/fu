@@ -6,6 +6,11 @@
 #include "fu/core/format.h"
 #include "fu/core/hash_table.h"
 
+/*
+ * The log object is used to report messages from various passes of the compiler.
+ * It also caches source files, so as to print error diagnostics efficiently.
+ */
+
 typedef struct {
     uint32_t row, col;
     size_t byte_offset;

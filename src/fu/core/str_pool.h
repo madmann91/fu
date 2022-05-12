@@ -3,6 +3,11 @@
 
 #include "fu/core/hash_table.h"
 
+/*
+ * The string pool is a hashed container for strings. Each string contained in the pool is stored
+ * uniquely, which allows fast comparison (strings can then be compared by their address).
+ */
+
 typedef struct MemPool MemPool;
 
 typedef struct {

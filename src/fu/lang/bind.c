@@ -308,9 +308,11 @@ static void bind_type_params(Env* env, AstNode* type_params) {
     bind_many(env, type_params, bind_type_param);
 }
 
-static void bind_members(Env* env, AstNode* decl, AstNode* type_params, AstNode* members) {
+static void bind_members(Env* env, AstNode* decl, AstNode* type_params, AstNode* super, AstNode* members) {
     push_scope(env, decl);
     bind_type_params(env, type_params);
+    if (super)
+        bind_type(env, super);
     insert_many_decls_in_env(env, members);
     bind_many(env, members, bind_decl);
     pop_scope(env);
@@ -330,20 +332,26 @@ void bind_decl(Env* env, AstNode* decl) {
             }
             break;
         case AST_ENUM_DECL:
-            bind_members(env, decl, decl->enum_decl.type_params, decl->enum_decl.options);
+            bind_members(env, decl,
+                decl->enum_decl.type_params,
+                decl->enum_decl.super,
+                decl->enum_decl.options);
             break;
         case AST_STRUCT_DECL:
-            bind_members(env, decl, decl->struct_decl.type_params, decl->struct_decl.fields);
+            bind_members(env, decl,
+                decl->struct_decl.type_params,
+                decl->struct_decl.super,
+                decl->struct_decl.fields);
             break;
         case AST_SIG_DECL:
-            bind_members(env, decl, decl->sig_decl.type_params, decl->sig_decl.members);
+            bind_members(env, decl, decl->sig_decl.type_params, NULL, decl->sig_decl.members);
             break;
         case AST_MOD_DECL:
             if (decl->mod_decl.signature)
                 bind_type(env, decl->mod_decl.signature);
             if (decl->mod_decl.aliased_mod)
                 bind_type(env, decl->mod_decl.aliased_mod);
-            bind_members(env, decl, decl->mod_decl.type_params, decl->mod_decl.members);
+            bind_members(env, decl, decl->mod_decl.type_params, NULL, decl->mod_decl.members);
             break;
         case AST_TYPE_DECL:
             push_scope(env, decl);

@@ -371,6 +371,8 @@ const Type* make_type_var(TypeTable* type_table, const char* name, Kind kind) {
 const Type* make_tuple_type(TypeTable* type_table, const Type** args, size_t arg_count) {
     if (arg_count == 0)
         return type_table->unit_type;
+    if (arg_count == 1)
+        return args[0];
     return get_or_insert_type(type_table, &(Type) {
         .tag = TYPE_TUPLE,
         .tuple_type = { .args = args, .arg_count = arg_count }
@@ -382,6 +384,7 @@ const Type* make_unit_type(TypeTable* type_table) {
 }
 
 const Type* make_type_app(TypeTable* type_table, const Type* applied_type, const Type** args, size_t arg_count) {
+    assert(arg_count == get_type_param_count(applied_type));
     return get_or_insert_type(type_table, &(Type) {
         .tag = TYPE_APP,
         .type_app = { .applied_type = applied_type, .args = args, .arg_count = arg_count }

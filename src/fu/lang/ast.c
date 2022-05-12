@@ -287,8 +287,14 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
                 ast_node->struct_decl.is_opaque,
                 ast_node->struct_decl.name,
                 ast_node->struct_decl.type_params);
-            format(state, " ", NULL);
-            print_many_asts_inside_block(state, ",\n", ast_node->struct_decl.fields);
+            if (ast_node->struct_decl.is_tuple_like) {
+                if (ast_node->struct_decl.fields)
+                    print_many_asts_with_delim(state, "(", ", ", ")", ast_node->struct_decl.fields);
+                format(state, ";", NULL);
+            } else {
+                format(state, " ", NULL);
+                print_many_asts_inside_block(state, ",\n", ast_node->struct_decl.fields);
+            }
             break;
         }
         case AST_SIG_DECL: {

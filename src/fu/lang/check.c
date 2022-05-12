@@ -230,6 +230,36 @@ fail:
     return fail_member_access(context, next_elem->path_elem.name, inner_type, &next_elem->file_loc);
 }
 
+static bool is_tuple_like_struct(const Type* type) {
+    type = skip_type_app(type);
+    return type->tag == TYPE_STRUCT && type->struct_type.is_tuple_like;
+}
+
+static const Type* make_tuple_like_struct_constructor(TypeTable* type_table, const Type* type) {
+    assert(is_tuple_like_struct(type));
+    const Type* struct_type = skip_type_app(type);
+
+    // Using the tuple-like name as a value results produces a constructor that
+    // types as a function (only for tuple-like structures with parameters).
+    if (struct_type->struct_type.field_count > 0) {
+        const Type** arg_types = malloc_or_die(sizeof(Type*) * struct_type->struct_type.field_count);
+        for (size_t i = 0, n = struct_type->struct_type.field_count; i < n; ++i) {
+            if (type->tag == TYPE_APP) {
+                arg_types[i] = replace_types(type_table,
+                    struct_type->struct_type.fields[i].type,
+                    struct_type->struct_type.type_params,
+                    type->type_app.args,
+                    struct_type->struct_type.type_param_count);
+            } else
+                arg_types[i] = struct_type->struct_type.fields[i].type;
+        }
+        const Type* param_type = make_tuple_type(type_table, arg_types, struct_type->struct_type.field_count);
+        free(arg_types);
+        return make_fun_type(type_table, param_type, type);
+    }
+    return type;
+}
+
 static const Type* infer_path(TypingContext* context, AstNode* path, bool is_type_expected) {
     assert(path->path.elems);
     if (!path->path.decl_site) {
@@ -255,6 +285,14 @@ static const Type* infer_path(TypingContext* context, AstNode* path, bool is_typ
         path_elem = path_elem->next;
     }
 
+    // A tuple-like structure like `Foo` can either be a type or a value,
+    // depending on where it appears. We deal with this ambiguity here.
+    if (!is_type_expected && is_tuple_like_struct(path_elem->type)) {
+        path_elem->type = make_tuple_like_struct_constructor(context->type_table, path_elem->type);
+        path_elem->path_elem.is_type = false;
+    }
+
+    // Make sure we do not use a type as a value, and vice-versa
     if (path_elem->path_elem.is_type != is_type_expected) {
         log_error(context->log, &path->file_loc,
             is_type_expected
@@ -376,7 +414,9 @@ static const Type* check_call(
     const Type* callee_type,
     const Type* expected_type)
 {
-    if (!expect_type_with_tag(context, callee_type, TYPE_FUN, "function", &call_or_op->file_loc))
+    const FileLoc* callee_loc =
+        call_or_op->tag == AST_CALL_EXPR ? &call_or_op->call_expr.callee->file_loc : &call_or_op->file_loc;
+    if (!expect_type_with_tag(context, callee_type, TYPE_FUN, "function", callee_loc))
         return make_error_type(context->type_table);
     assert(callee_type->tag == TYPE_FUN);
     check_expr(context, arg, callee_type->fun_type.dom);
@@ -716,10 +756,19 @@ static StructField infer_field_decl(TypingContext* context, AstNode* field_decl)
 
 static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_decl) {
     Type* struct_type = make_struct_type(context->type_table, struct_decl->struct_decl.name);
+    struct_type->struct_type.is_tuple_like = struct_decl->struct_decl.is_tuple_like;
+
     infer_type_params(context, struct_decl->struct_decl.type_params, struct_type->struct_type.type_params);
     struct_decl->type = struct_type;
     for (AstNode* field_decl = struct_decl->struct_decl.fields; field_decl; field_decl = field_decl->next) {
-        StructField field = infer_field_decl(context, field_decl);
+        StructField field;
+        if (struct_decl->struct_decl.is_tuple_like) {
+            field = (StructField) {
+                .name = "",
+                .type = infer_type(context, field_decl)
+            };
+        } else
+            field = infer_field_decl(context, field_decl);
         push_on_dyn_array(struct_type->struct_type.fields, &field);
     }
     return freeze_struct_type(context->type_table, struct_type);
@@ -731,6 +780,7 @@ static const Type* infer_option_decl(TypingContext* context, AstNode* option_dec
     if (!option_decl->option_decl.is_struct_like)
         return option_decl->type = infer_type(context, option_decl->option_decl.param_type);
 
+    // If the option is struct-like, we need to create an adequate structure type to represent it
     Type* struct_type = make_struct_type(context->type_table, option_decl->option_decl.name);
     struct_type->struct_type.parent_enum = enum_type;
     for (AstNode* field_decl = option_decl->option_decl.param_type; field_decl; field_decl = field_decl->next) {

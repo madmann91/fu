@@ -115,15 +115,9 @@ static AstNode* parse_many_at_least_one(
     TokenTag end, TokenTag sep,
     AstNode* (*parse_one)(Parser*))
 {
-    FilePos begin = parser->ahead->file_loc.begin;
     AstNode* ast_nodes = parse_many(parser, end, sep, parse_one);
     if (!ast_nodes) {
-        FileLoc file_loc = {
-            .file_name = parser->lexer->file_name,
-            .begin = begin,
-            .end = parser->ahead->file_loc.end
-        };
-        log_error(parser->lexer->log, &file_loc,
+        log_error(parser->lexer->log, &parser->ahead->file_loc,
             "empty {s} are not allowed", (FormatArg[]) { { .s = msg } });
     }
     return ast_nodes;
@@ -935,12 +929,18 @@ static inline AstNode* parse_struct_decl(Parser* parser, bool is_public, bool is
         super = parse_type(parser);
 
     AstNode* fields = NULL;
-    if (parser->ahead->tag == TOKEN_L_BRACE) {
-        expect_token(parser, TOKEN_L_BRACE);
+    bool is_tuple_like = false;
+    if (accept_token(parser, TOKEN_L_BRACE)) {
         fields = parse_many(parser, TOKEN_R_BRACE, TOKEN_COMMA, parse_field_decl);
         expect_token(parser, TOKEN_R_BRACE);
-    } else
+    } else {
+        is_tuple_like = true;
+        if (!super && accept_token(parser, TOKEN_L_PAREN)) {
+            fields = parse_many_at_least_one(parser, "structure fields", TOKEN_R_PAREN, TOKEN_COMMA, parse_type);
+            expect_token(parser, TOKEN_R_PAREN);
+        }
         expect_token(parser, TOKEN_SEMICOLON);
+    }
 
     return make_ast_node(parser, &begin, &(AstNode) {
         .tag = AST_STRUCT_DECL,
@@ -949,6 +949,7 @@ static inline AstNode* parse_struct_decl(Parser* parser, bool is_public, bool is
             .super = super,
             .is_public = is_public,
             .is_opaque = is_opaque,
+            .is_tuple_like = is_tuple_like,
             .type_params = type_params,
             .fields = fields
         }

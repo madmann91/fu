@@ -336,10 +336,17 @@ void bind_decl(Env* env, AstNode* decl) {
                 decl->enum_decl.options);
             break;
         case AST_STRUCT_DECL:
-            bind_members(env, decl,
-                decl->struct_decl.type_params,
-                decl->struct_decl.super,
-                decl->struct_decl.fields);
+            if (decl->struct_decl.is_tuple_like) {
+                push_scope(env, decl);
+                bind_type_params(env, decl->struct_decl.type_params);
+                bind_many(env, decl->struct_decl.fields, bind_type);
+                pop_scope(env);
+            } else {
+                bind_members(env, decl,
+                    decl->struct_decl.type_params,
+                    decl->struct_decl.super,
+                    decl->struct_decl.fields);
+            }
             break;
         case AST_SIG_DECL:
             bind_members(env, decl, decl->sig_decl.type_params, NULL, decl->sig_decl.members);

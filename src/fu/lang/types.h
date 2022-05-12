@@ -100,6 +100,7 @@ struct Type {
             StructField* fields;
             size_t field_count;
             const Type* parent_enum;
+            bool is_tuple_like;
 #ifndef NDEBUG
             bool is_frozen;
 #endif

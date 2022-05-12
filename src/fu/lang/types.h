@@ -66,7 +66,7 @@ typedef struct StructField {
 
 typedef struct EnumOption {
     const char* name;
-    const Type* param_type;  ///< Type of the enumeration value, if any (can be NULL)
+    const Type* param_type;
 } EnumOption;
 
 struct Type {

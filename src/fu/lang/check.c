@@ -28,6 +28,8 @@ static bool compare_decls(const void* left, const void* right) {
 }
 
 static bool push_decl(TypingContext* context, AstNode* decl) {
+    // Push a declaration in the context, so that recursion can
+    // be stopped when we encounter it again.
     return insert_in_hash_table(&context->visited_decls,
         &decl, hash_ptr(hash_init(), decl), sizeof(AstNode*), compare_decls);
 }

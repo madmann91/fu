@@ -520,18 +520,20 @@ static const Type** copy_type_params(TypeTable* type_table, const Type** type_pa
     return type_params_copy;
 }
 
-const Type* freeze_type(TypeTable* type_table, Type* type) {
-    if (type->tag == TYPE_ENUM) {
-        type->enum_type.option_count = get_dyn_array_size(type->enum_type.options);
-        type->enum_type.options = copy_and_sort_enum_options(type_table, type->enum_type.options);
-        type->enum_type.type_params =
-            copy_type_params(type_table, type->enum_type.type_params, &type->enum_type.type_param_count);
-    } else if (type->tag == TYPE_STRUCT) {
-        type->struct_type.field_count = get_dyn_array_size(type->struct_type.fields);
-        type->struct_type.fields = copy_and_sort_struct_fields(type_table, type->struct_type.fields);
-        type->struct_type.type_params =
-            copy_type_params(type_table, type->struct_type.type_params, &type->struct_type.type_param_count);
-    } else
-        assert(false && "invalid nominal type");
+const Type* freeze_struct_type(TypeTable* type_table, Type* type) {
+    assert(type->tag == TYPE_STRUCT);
+    type->struct_type.field_count = get_dyn_array_size(type->struct_type.fields);
+    type->struct_type.fields = copy_and_sort_struct_fields(type_table, type->struct_type.fields);
+    type->struct_type.type_params =
+        copy_type_params(type_table, type->struct_type.type_params, &type->struct_type.type_param_count);
+    return type;
+}
+
+const Type* freeze_enum_type(TypeTable* type_table, Type* type) {
+    assert(type->tag == TYPE_ENUM);
+    type->enum_type.option_count = get_dyn_array_size(type->enum_type.options);
+    type->enum_type.options = copy_and_sort_enum_options(type_table, type->enum_type.options);
+    type->enum_type.type_params =
+        copy_type_params(type_table, type->enum_type.type_params, &type->enum_type.type_param_count);
     return type;
 }

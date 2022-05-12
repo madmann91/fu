@@ -724,7 +724,7 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
         StructField field = infer_field_decl(context, field_decl);
         push_on_dyn_array(struct_type->struct_type.fields, &field);
     }
-    return freeze_type(context->type_table, struct_type);
+    return freeze_struct_type(context->type_table, struct_type);
 }
 
 static const Type* infer_option_decl(TypingContext* context, AstNode* option_decl, Type* enum_type) {
@@ -739,7 +739,7 @@ static const Type* infer_option_decl(TypingContext* context, AstNode* option_dec
         StructField field = infer_field_decl(context, field_decl);
         push_on_dyn_array(struct_type->struct_type.fields, &field);
     }
-    return option_decl->type = freeze_type(context->type_table, struct_type);
+    return option_decl->type = freeze_struct_type(context->type_table, struct_type);
 }
 
 static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
@@ -753,7 +753,7 @@ static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
             .param_type = infer_option_decl(context, option_decl, enum_type)
         });
     }
-    return freeze_type(context->type_table, enum_type);
+    return freeze_enum_type(context->type_table, enum_type);
 }
 
 static const Type* infer_type_decl(TypingContext* context, AstNode* type_decl) {

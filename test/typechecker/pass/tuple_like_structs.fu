@@ -1,0 +1,11 @@
+struct Foo;
+struct Bar(i32);
+struct Baz[T](T);
+struct Bob[T, U](T, U);
+
+fun test() {
+    const x = Foo;
+    const y = Bar(1);
+    const z = Baz[i32](1);
+    const w = Bob[i32, i8](1, 2);
+}

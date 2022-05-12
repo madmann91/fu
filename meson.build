@@ -57,5 +57,6 @@ test('parser-fail-empty-enum',        fu, workdir: root, should_fail: true, args
 # Typechecker tests
 test('typechecker-pass-mono-structs',        fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/mono_structs.fu'])
 test('typechecker-pass-poly-structs',        fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/poly_structs.fu'])
-test('typechecker-pass-structs-inheritance', fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/struct_inheritance.fu'])
+test('typechecker-pass-tuple-like-structs',  fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/tuple_like_structs.fu'])
+#test('typechecker-pass-structs-inheritance', fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/struct_inheritance.fu'])
 

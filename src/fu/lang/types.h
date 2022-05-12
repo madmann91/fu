@@ -159,6 +159,7 @@ bool is_non_const_ptr_type(const Type*);
 bool is_struct_like_option(const EnumOption*);
 
 const Type* skip_type_app(const Type*);
+const Type** get_type_params(const Type*);
 size_t get_prim_type_bitwidth(TypeTag);
 size_t get_type_param_count(const Type*);
 

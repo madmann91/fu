@@ -41,6 +41,15 @@ static void pop_decl(TypingContext* context, AstNode* decl) {
     remove_from_hash_table(&context->visited_decls, ptr, sizeof(AstNode*));
 }
 
+static const Type* apply_type_app(TypeTable* type_table, const Type* type, const Type* type_app) {
+    if (type_app->tag != TYPE_APP)
+        return type;
+    return replace_types(type_table, type,
+        get_type_params(skip_type_app(type_app)),
+        type_app->type_app.args,
+        type_app->type_app.arg_count);
+}
+
 static const Type** check_many(
     TypingContext* context,
     AstNode* elems,
@@ -245,16 +254,8 @@ static const Type* make_tuple_like_struct_constructor(TypeTable* type_table, con
     // types as a function (only for tuple-like structures with parameters).
     if (struct_type->struct_type.field_count > 0) {
         const Type** arg_types = malloc_or_die(sizeof(Type*) * struct_type->struct_type.field_count);
-        for (size_t i = 0, n = struct_type->struct_type.field_count; i < n; ++i) {
-            if (type->tag == TYPE_APP) {
-                arg_types[i] = replace_types(type_table,
-                    struct_type->struct_type.fields[i].type,
-                    struct_type->struct_type.type_params,
-                    type->type_app.args,
-                    struct_type->struct_type.type_param_count);
-            } else
-                arg_types[i] = struct_type->struct_type.fields[i].type;
-        }
+        for (size_t i = 0, n = struct_type->struct_type.field_count; i < n; ++i)
+            arg_types[i] = apply_type_app(type_table, struct_type->struct_type.fields[i].type, type);
         const Type* param_type = make_tuple_type(type_table, arg_types, struct_type->struct_type.field_count);
         free(arg_types);
         return make_fun_type(type_table, param_type, type);
@@ -497,14 +498,7 @@ static const Type* check_struct_expr(TypingContext* context, AstNode* struct_exp
         field_expr->field_expr.index = field_index;
 
         // Check that the value of the field matches its type
-        const Type* field_type = field->type;
-        if (type_app) {
-            field_type = replace_types(context->type_table,
-                field->type,
-                struct_type->struct_type.type_params,
-                type_app->type_app.args,
-                struct_type->struct_type.type_param_count);
-        }
+        const Type* field_type = apply_type_app(context->type_table, field->type, type_app);
         check_expr(context, field_expr->field_expr.val, field_type);
     }
 

@@ -123,6 +123,12 @@ const Type* skip_type_app(const Type* type) {
     return type->tag == TYPE_APP ? type->type_app.applied_type : type;
 }
 
+const Type** get_type_params(const Type* type) {
+    if (type->tag == TYPE_STRUCT) return type->struct_type.type_params;
+    if (type->tag == TYPE_ENUM)   return type->enum_type.type_params;
+    return NULL;
+}
+
 size_t get_prim_type_bitwidth(TypeTag tag) {
     switch (tag) {
         case TYPE_BOOL: return 1;
@@ -137,9 +143,9 @@ size_t get_prim_type_bitwidth(TypeTag tag) {
 }
 
 size_t get_type_param_count(const Type* type) {
-    return
-        type->tag == TYPE_STRUCT ? type->struct_type.type_param_count :
-        type->tag == TYPE_ENUM ? type->enum_type.type_param_count : 0;
+    if (type->tag == TYPE_STRUCT) return type->struct_type.type_param_count;
+    if (type->tag == TYPE_ENUM)   return type->enum_type.type_param_count;
+    return 0;
 }
 
 static int compare_signature_members_by_name(const void* left, const void* right) {

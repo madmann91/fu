@@ -4,13 +4,15 @@
 #include <stdint.h>
 #include <stddef.h>
 
-uint32_t hash_init();
-uint32_t hash_ptr(uint32_t, const void*);
-uint32_t hash_uint8(uint32_t, uint8_t);
-uint32_t hash_uint16(uint32_t, uint16_t);
-uint32_t hash_uint32(uint32_t, uint32_t);
-uint32_t hash_uint64(uint32_t, uint64_t);
-uint32_t hash_str(uint32_t, const char*);
-uint32_t hash_raw_bytes(uint32_t, const void*, size_t);
+typedef uint32_t HashCode;
+
+HashCode hash_init();
+HashCode hash_ptr(HashCode, const void*);
+HashCode hash_uint8(HashCode, uint8_t);
+HashCode hash_uint16(HashCode, uint16_t);
+HashCode hash_uint32(HashCode, uint32_t);
+HashCode hash_uint64(HashCode, uint64_t);
+HashCode hash_str(HashCode, const char*);
+HashCode hash_raw_bytes(HashCode, const void*, size_t);
 
 #endif

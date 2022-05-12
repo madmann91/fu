@@ -10,14 +10,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DEFAULT_DECL_CAPACITY 8
-
 TypingContext new_typing_context(TypeTable* type_table, MemPool* mem_pool, Log* log) {
     return (TypingContext) {
         .log = log,
         .type_table = type_table,
         .mem_pool = mem_pool,
-        .visited_decls = new_hash_table(DEFAULT_DECL_CAPACITY, sizeof(AstNode*))
+        .visited_decls = new_hash_table(sizeof(AstNode*))
     };
 }
 

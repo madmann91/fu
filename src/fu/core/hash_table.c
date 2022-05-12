@@ -7,6 +7,7 @@
 #include <assert.h>
 
 #define OCCUPIED_MASK UINT32_C(0x80000000)
+#define DEFAULT_HASH_TABLE_CAPACITY 4
 #define MAX_LOAD_FACTOR 70//%
 
 static inline size_t increment_wrap(size_t capacity, size_t index) {
@@ -21,10 +22,14 @@ static inline bool needs_rehash(const HashTable* hash_table) {
     return hash_table->size * 100 >= hash_table->capacity * MAX_LOAD_FACTOR;
 }
 
-HashTable new_hash_table(size_t capacity, size_t elem_size) {
+HashTable new_hash_table(size_t elem_size) {
+    return new_hash_table_with_capacity(elem_size, DEFAULT_HASH_TABLE_CAPACITY);
+}
+
+HashTable new_hash_table_with_capacity(size_t elem_size, size_t capacity) {
     capacity = next_prime(capacity);
     void* elems = malloc_or_die(capacity * elem_size);
-    uint32_t* hashes = calloc_or_die(capacity, sizeof(uint32_t));
+    HashCode* hashes = calloc_or_die(capacity, sizeof(HashCode));
     return (HashTable) {
         .elems    = elems,
         .hashes   = hashes,
@@ -38,7 +43,7 @@ void free_hash_table(HashTable* hash_table) {
     hash_table->capacity = hash_table->size = 0;
 }
 
-static inline bool is_occupied_hash(uint32_t hash) {
+static inline bool is_occupied_hash(HashCode hash) {
     return hash & OCCUPIED_MASK;
 }
 
@@ -51,9 +56,9 @@ static inline void rehash_table(HashTable* hash_table, size_t elem_size) {
     if (new_capacity <= hash_table->capacity)
         new_capacity = hash_table->capacity * 2 + 1;
     void* new_elems = malloc_or_die(new_capacity * elem_size);
-    uint32_t* new_hashes = calloc_or_die(new_capacity, elem_size);
+    HashCode* new_hashes = calloc_or_die(new_capacity, elem_size);
     for (size_t i = 0, n = hash_table->capacity; i < n; ++i) {
-        uint32_t hash = hash_table->hashes[i];
+        HashCode hash = hash_table->hashes[i];
         if (!is_occupied_hash(hash))
             continue;
         size_t index = mod_prime(hash, new_capacity);
@@ -76,7 +81,7 @@ static inline void rehash_table(HashTable* hash_table, size_t elem_size) {
 bool insert_in_hash_table(
     HashTable* hash_table,
     const void* elem,
-    uint32_t hash,
+    HashCode hash,
     size_t elem_size,
     bool (*compare)(const void*, const void*))
 {
@@ -99,7 +104,7 @@ bool insert_in_hash_table(
 void* find_in_hash_table(
     const HashTable* hash_table,
     const void* elem,
-    uint32_t hash,
+    HashCode hash,
     size_t elem_size,
     bool (*compare)(const void*, const void*))
 {
@@ -125,7 +130,7 @@ void remove_from_hash_table(HashTable* hash_table, void* elem, size_t elem_size)
     assert(is_bucket_occupied(hash_table, index));
     size_t next_index = increment_wrap(hash_table->capacity, index);
     while (is_bucket_occupied(hash_table, next_index)) {
-        uint32_t next_hash = hash_table->hashes[next_index];
+        HashCode next_hash = hash_table->hashes[next_index];
         size_t desired_index = mod_prime(next_hash, hash_table->capacity);
         // If the next element is part of the collision chain, move it
         if (desired_index <= index || desired_index > next_index) {
@@ -145,5 +150,5 @@ void clear_hash_table(HashTable* hash_table) {
     if (hash_table->size == 0)
         return;
     hash_table->size = 0;
-    memset(hash_table->hashes, 0, sizeof(uint32_t) * hash_table->capacity);
+    memset(hash_table->hashes, 0, sizeof(HashCode) * hash_table->capacity);
 }

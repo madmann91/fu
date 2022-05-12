@@ -9,8 +9,6 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#define DEFAULT_SCOPE_CAPACITY 8
-
 typedef struct {
     const char* name;
     AstNode* decl_site;
@@ -30,7 +28,7 @@ static Scope* new_scope(Scope* prev) {
     Scope* scope = malloc_or_die(sizeof(Scope));
     scope->prev = prev;
     scope->next = NULL;
-    scope->symbols = new_hash_table(DEFAULT_SCOPE_CAPACITY, sizeof(Symbol));
+    scope->symbols = new_hash_table(sizeof(Symbol));
     if (prev)
         prev->next = scope;
     return scope;

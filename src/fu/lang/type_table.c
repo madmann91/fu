@@ -11,8 +11,6 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#define DEFAULT_TYPE_TABLE_CAPACITY 16
-
 enum {
 #define f(name, ...) PRIM_TYPE_##name,
     PRIM_TYPE_LIST(f)
@@ -32,13 +30,13 @@ struct TypeTable {
     const Type* error_type;
 };
 
-static uint32_t hash_types(uint32_t hash, const Type** types, size_t count) {
+static HashCode hash_types(HashCode hash, const Type** types, size_t count) {
     for (size_t i = 0; i < count; ++i)
         hash = hash_uint64(hash, types[i]->id);
     return hash;
 }
 
-static uint32_t hash_type(uint32_t hash, const Type* type) {
+static HashCode hash_type(HashCode hash, const Type* type) {
     hash = hash_uint32(hash, type->tag);
     switch (type->tag) {
 #define f(name, ...) case TYPE_##name:
@@ -92,62 +90,60 @@ static uint32_t hash_type(uint32_t hash, const Type* type) {
     return hash;
 }
 
-static bool compare_types(const void* left, const void* right) {
-    const Type* type_left = *(const Type**)left;
-    const Type* type_right = *(const Type**)right;
-    if (type_left->tag != type_right->tag)
+static bool compare_types(const Type* left, const Type* right) {
+    if (left->tag != right->tag)
         return false;
-    switch (type_left->tag) {
+    switch (left->tag) {
 #define f(name, ...) case TYPE_##name:
     PRIM_TYPE_LIST(f)
 #undef f
             break;
         case TYPE_TUPLE: {
             return
-                type_left->tuple_type.arg_count == type_right->tuple_type.arg_count &&
-                !memcmp(type_left->tuple_type.args, type_right->tuple_type.args,
-                    sizeof(Type*) * type_left->tuple_type.arg_count);
+                left->tuple_type.arg_count == right->tuple_type.arg_count &&
+                !memcmp(left->tuple_type.args, right->tuple_type.args,
+                    sizeof(Type*) * left->tuple_type.arg_count);
         }
         case TYPE_ALIAS: {
             return
-                type_left->type_alias.aliased_type == type_right->type_alias.aliased_type &&
-                type_left->type_alias.type_param_count == type_right->type_alias.type_param_count &&
-                type_left->type_alias.name == type_right->type_alias.name &&
-                !memcmp(type_left->type_alias.type_params, type_right->type_alias.type_params,
-                    sizeof(Type*) * type_left->type_alias.type_param_count);
+                left->type_alias.aliased_type == right->type_alias.aliased_type &&
+                left->type_alias.type_param_count == right->type_alias.type_param_count &&
+                left->type_alias.name == right->type_alias.name &&
+                !memcmp(left->type_alias.type_params, right->type_alias.type_params,
+                    sizeof(Type*) * left->type_alias.type_param_count);
         }
         case TYPE_SIGNATURE: {
             return
-                type_left->signature.type_param_count == type_right->signature.type_param_count &&
-                type_left->signature.member_count == type_right->signature.member_count &&
-                !memcmp(type_left->signature.members, type_right->signature.members,
-                    sizeof(SignatureMember) * type_left->signature.member_count) &&
-                !memcmp(type_left->signature.type_params, type_right->signature.type_params,
-                    sizeof(Type*) * type_left->signature.type_param_count);
+                left->signature.type_param_count == right->signature.type_param_count &&
+                left->signature.member_count == right->signature.member_count &&
+                !memcmp(left->signature.members, right->signature.members,
+                    sizeof(SignatureMember) * left->signature.member_count) &&
+                !memcmp(left->signature.type_params, right->signature.type_params,
+                    sizeof(Type*) * left->signature.type_param_count);
         }
         case TYPE_APP: {
             return
-                type_left->type_app.arg_count == type_right->type_app.arg_count &&
-                type_left->type_app.applied_type == type_right->type_app.applied_type &&
-                !memcmp(type_left->type_app.args, type_right->type_app.args,
-                    sizeof(Type*) * type_left->type_app.arg_count);
+                left->type_app.arg_count == right->type_app.arg_count &&
+                left->type_app.applied_type == right->type_app.applied_type &&
+                !memcmp(left->type_app.args, right->type_app.args,
+                    sizeof(Type*) * left->type_app.arg_count);
         }
         case TYPE_FUN: {
             return
-                type_left->fun_type.type_param_count == type_right->fun_type.type_param_count &&
-                type_left->fun_type.dom == type_right->fun_type.dom &&
-                type_left->fun_type.codom == type_right->fun_type.codom &&
-                !memcmp(type_left->fun_type.type_params, type_right->fun_type.type_params,
-                    sizeof(Type*) * type_left->fun_type.type_param_count);
+                left->fun_type.type_param_count == right->fun_type.type_param_count &&
+                left->fun_type.dom == right->fun_type.dom &&
+                left->fun_type.codom == right->fun_type.codom &&
+                !memcmp(left->fun_type.type_params, right->fun_type.type_params,
+                    sizeof(Type*) * left->fun_type.type_param_count);
         }
         case TYPE_ARRAY:
-            return type_left->array_type.elem_type == type_right->array_type.elem_type;
+            return left->array_type.elem_type == right->array_type.elem_type;
         case TYPE_VAR:
-            return type_left->type_var.name == type_right->type_var.name;
+            return left->type_var.name == right->type_var.name;
         case TYPE_PTR:
             return
-                type_left->ptr_type.is_const == type_right->ptr_type.is_const &&
-                type_left->ptr_type.pointee  == type_right->ptr_type.pointee;
+                left->ptr_type.is_const == right->ptr_type.is_const &&
+                left->ptr_type.pointee  == right->ptr_type.pointee;
         default:
             assert(false && "invalid type");
             break;
@@ -161,11 +157,15 @@ static const Type** copy_types(TypeTable* type_table, const Type** types, size_t
     return types_copy;
 }
 
+static bool compare_types_wrapper(const void* left, const void* right) {
+    return compare_types(left, right);
+}
+
 static const Type* get_or_insert_type(TypeTable* type_table, const Type* type) {
     assert(!is_nominal_type(type->tag));
 
     uint32_t hash = hash_type(hash_init(), type);
-    const Type** type_ptr = find_in_hash_table(&type_table->types, &type, hash, sizeof(Type*), compare_types);
+    const Type** type_ptr = find_in_hash_table(&type_table->types, &type, hash, sizeof(Type*), compare_types_wrapper);
     if (type_ptr)
         return *type_ptr;
 
@@ -227,13 +227,13 @@ static const Type* get_or_insert_type(TypeTable* type_table, const Type* type) {
             break;
     }
 
-    must_succeed(insert_in_hash_table(&type_table->types, &new_type, hash, sizeof(Type*), compare_types));
+    must_succeed(insert_in_hash_table(&type_table->types, &new_type, hash, sizeof(Type*), compare_types_wrapper));
     return new_type;
 }
 
 TypeTable* new_type_table(MemPool* mem_pool) {
     TypeTable* type_table = malloc_or_die(sizeof(TypeTable));
-    type_table->types = new_hash_table(DEFAULT_TYPE_TABLE_CAPACITY, sizeof(Type*));
+    type_table->types = new_hash_table(sizeof(Type*));
     type_table->str_pool = new_str_pool(mem_pool);
     type_table->mem_pool = mem_pool;
     type_table->type_count = 0;
@@ -276,6 +276,70 @@ Type* make_enum_type(TypeTable* type_table, const char* name) {
     enum_type->enum_type.options = new_dyn_array(sizeof(EnumOption));
     enum_type->enum_type.type_params = new_dyn_array(sizeof(Type*));
     return enum_type;
+}
+
+static int compare_struct_fields_by_name(const void* left, const void* right) {
+    return strcmp(((StructField*)left)->name, ((StructField*)right)->name);
+}
+
+static int compare_enum_options_by_name(const void* left, const void* right) {
+    return strcmp(((EnumOption*)left)->name, ((EnumOption*)right)->name);
+}
+
+static StructField* copy_and_sort_struct_fields(TypeTable* type_table, StructField* fields) {
+    size_t field_count = get_dyn_array_size(fields);
+    StructField* fields_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(StructField) * field_count);
+    memcpy(fields_copy, fields, sizeof(StructField) * field_count);
+    for (size_t i = 0; i < field_count; ++i)
+        fields_copy[i].name = make_str(&type_table->str_pool, fields[i].name);
+    qsort(fields_copy, field_count, sizeof(StructField), compare_struct_fields_by_name);
+    free_dyn_array(fields);
+    return fields_copy;
+}
+
+static EnumOption* copy_and_sort_enum_options(TypeTable* type_table, EnumOption* options) {
+    size_t option_count = get_dyn_array_size(options);
+    EnumOption* options_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(EnumOption) * option_count);
+    memcpy(options_copy, options, sizeof(EnumOption) * option_count);
+    for (size_t i = 0; i < option_count; ++i)
+        options_copy[i].name = make_str(&type_table->str_pool, options[i].name);
+    qsort(options_copy, option_count, sizeof(EnumOption), compare_enum_options_by_name);
+    free_dyn_array(options);
+    return options_copy;
+}
+
+static const Type** copy_type_params(TypeTable* type_table, const Type** type_params, size_t* type_param_count) {
+    *type_param_count = get_dyn_array_size(type_params);
+    const Type** type_params_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * *type_param_count);
+    memcpy(type_params_copy, type_params, sizeof(Type*) * *type_param_count);
+    free_dyn_array(type_params);
+    return type_params_copy;
+}
+
+const Type* freeze_struct_type(TypeTable* type_table, Type* type) {
+    assert(type->tag == TYPE_STRUCT);
+    assert(!type->struct_type.is_frozen);
+    type->struct_type.field_count = get_dyn_array_size(type->struct_type.fields);
+    type->struct_type.fields = copy_and_sort_struct_fields(type_table, type->struct_type.fields);
+    type->struct_type.type_params =
+        copy_type_params(type_table, type->struct_type.type_params, &type->struct_type.type_param_count);
+#ifndef NDEBUG
+    type->struct_type.is_frozen = true;
+#endif
+    return type;
+}
+
+const Type* freeze_enum_type(TypeTable* type_table, Type* type) {
+    assert(type->tag == TYPE_ENUM);
+    assert(!type->enum_type.is_frozen);
+    type->enum_type.option_count = get_dyn_array_size(type->enum_type.options);
+    type->enum_type.options = copy_and_sort_enum_options(type_table, type->enum_type.options);
+    type->enum_type.type_params =
+        copy_type_params(type_table, type->enum_type.type_params, &type->enum_type.type_param_count);
+#ifndef NDEBUG
+    type->enum_type.is_frozen = true;
+#endif
+    return type;
 }
 
 const Type* make_prim_type(TypeTable* type_table, TypeTag tag) {
@@ -360,6 +424,24 @@ const Type* make_type_alias(
     });
 }
 
+#define LEXICOGRAPHICAL_COMPARE(l, r) \
+    if (l < r) return -1; \
+    if (l > r) return 1;
+
+static int compare_signature_members(const SignatureMember* left, const SignatureMember* right) {
+    int d = strcmp(left->name, right->name);
+    LEXICOGRAPHICAL_COMPARE(d, 0)
+    LEXICOGRAPHICAL_COMPARE(left->type->id, right->type->id)
+    LEXICOGRAPHICAL_COMPARE(left->is_type, right->is_type)
+    return 0;
+}
+
+#undef LEXICOGRAPHICAL_COMPARE
+
+static int compare_signature_members_wrapper(const void* left, const void* right) {
+    return compare_signature_members(left, right);
+}
+
 const Type* make_signature_type(
     TypeTable* type_table,
     const Type** type_params,
@@ -369,7 +451,7 @@ const Type* make_signature_type(
 {
     for (size_t i = 0; i < member_count; ++i)
         members[i].name = make_str(&type_table->str_pool, members[i].name);
-    qsort(members, member_count, sizeof(SignatureMember), compare_signature_members);
+    qsort(members, member_count, sizeof(SignatureMember), compare_signature_members_wrapper);
     return get_or_insert_type(type_table, &(Type) {
         .tag = TYPE_SIGNATURE,
         .signature = {
@@ -486,60 +568,4 @@ const Type* replace_types(
     const Type* replaced_type = replace_types_with_map(type_table, type, &type_map);
     free_type_map(&type_map);
     return replaced_type;
-}
-
-static StructField* copy_and_sort_struct_fields(TypeTable* type_table, StructField* fields) {
-    size_t field_count = get_dyn_array_size(fields);
-    StructField* fields_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(StructField) * field_count);
-    memcpy(fields_copy, fields, sizeof(StructField) * field_count);
-    for (size_t i = 0; i < field_count; ++i)
-        fields_copy[i].name = make_str(&type_table->str_pool, fields[i].name);
-    qsort(fields_copy, field_count, sizeof(StructField), compare_struct_fields_by_name);
-    free_dyn_array(fields);
-    return fields_copy;
-}
-
-static EnumOption* copy_and_sort_enum_options(TypeTable* type_table, EnumOption* options) {
-    size_t option_count = get_dyn_array_size(options);
-    EnumOption* options_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(EnumOption) * option_count);
-    memcpy(options_copy, options, sizeof(EnumOption) * option_count);
-    for (size_t i = 0; i < option_count; ++i)
-        options_copy[i].name = make_str(&type_table->str_pool, options[i].name);
-    qsort(options_copy, option_count, sizeof(EnumOption), compare_enum_options_by_name);
-    free_dyn_array(options);
-    return options_copy;
-}
-
-static const Type** copy_type_params(TypeTable* type_table, const Type** type_params, size_t* type_param_count) {
-    *type_param_count = get_dyn_array_size(type_params);
-    const Type** type_params_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * *type_param_count);
-    memcpy(type_params_copy, type_params, sizeof(Type*) * *type_param_count);
-    free_dyn_array(type_params);
-    return type_params_copy;
-}
-
-const Type* freeze_struct_type(TypeTable* type_table, Type* type) {
-    assert(type->tag == TYPE_STRUCT);
-    assert(!type->enum_type.is_frozen);
-    type->struct_type.field_count = get_dyn_array_size(type->struct_type.fields);
-    type->struct_type.fields = copy_and_sort_struct_fields(type_table, type->struct_type.fields);
-    type->struct_type.type_params =
-        copy_type_params(type_table, type->struct_type.type_params, &type->struct_type.type_param_count);
-#ifndef NDEBUG
-    type->struct_type.is_frozen = true;
-#endif
-    return type;
-}
-
-const Type* freeze_enum_type(TypeTable* type_table, Type* type) {
-    assert(type->tag == TYPE_ENUM);
-    assert(!type->enum_type.is_frozen);
-    type->enum_type.option_count = get_dyn_array_size(type->enum_type.options);
-    type->enum_type.options = copy_and_sort_enum_options(type_table, type->enum_type.options);
-    type->enum_type.type_params =
-        copy_type_params(type_table, type->enum_type.type_params, &type->enum_type.type_param_count);
-#ifndef NDEBUG
-    type->enum_type.is_frozen = true;
-#endif
-    return type;
 }

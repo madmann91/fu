@@ -5,12 +5,10 @@
 
 #include <string.h>
 
-#define DEFAULT_STRING_POOL_CAPACITY 1024
-
 StrPool new_str_pool(MemPool* mem_pool) {
     return (StrPool) {
         .mem_pool = mem_pool,
-        .hash_table = new_hash_table(DEFAULT_STRING_POOL_CAPACITY, sizeof(char*))
+        .hash_table = new_hash_table(sizeof(char*))
     };
 }
 

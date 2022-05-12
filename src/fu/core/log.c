@@ -5,7 +5,6 @@
 #include <string.h>
 #include <stdio.h>
 
-#define DEFAULT_FILE_CACHE_CAPACITY 8
 #define LINE_SEARCH_RANGE 64
 #define LINE_BUF_CAPACITY 64
 
@@ -22,7 +21,7 @@ typedef struct {
 
 Log new_log(FormatState* state) {
     return (Log) {
-        .file_cache = new_hash_table(DEFAULT_FILE_CACHE_CAPACITY, sizeof(FileEntry)),
+        .file_cache = new_hash_table(sizeof(FileEntry)),
         .show_diagnostics = true,
         .state = state,
         .max_errors = SIZE_MAX

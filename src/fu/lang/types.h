@@ -66,7 +66,7 @@ typedef struct StructField {
 
 typedef struct EnumOption {
     const char* name;
-    const Type* param_type;
+    const Type* param_type;  ///< Type of the enumeration value, if any (can be NULL)
 } EnumOption;
 
 struct Type {
@@ -160,11 +160,6 @@ bool is_struct_like_option(const EnumOption*);
 const Type* skip_type_app(const Type*);
 size_t get_prim_type_bitwidth(TypeTag);
 size_t get_type_param_count(const Type*);
-
-int compare_signature_members(const void*, const void*);
-int compare_signature_members_by_name(const void*, const void*);
-int compare_struct_fields_by_name(const void*, const void*);
-int compare_enum_options_by_name(const void*, const void*);
 
 const SignatureMember* find_signature_member(const Type*, const char*);
 const EnumOption* find_enum_option(const Type*, const char*);

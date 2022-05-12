@@ -14,10 +14,14 @@ typedef struct MemPool MemPool;
 TypeTable* new_type_table(MemPool*);
 void free_type_table(TypeTable*);
 
+//================================== NOMINAL TYPES =======================================
+
 Type* make_struct_type(TypeTable*, const char* name);
 Type* make_enum_type(TypeTable*, const char* name);
 const Type* freeze_struct_type(TypeTable*, Type*);
 const Type* freeze_enum_type(TypeTable*, Type*);
+
+//================================= STRUCTURAL TYPES =====================================
 
 const Type* make_prim_type(TypeTable*, TypeTag);
 const Type* make_unknown_type(TypeTable*);
@@ -51,6 +55,8 @@ const Type* make_poly_fun_type(
     size_t type_param_count,
     const Type* dom,
     const Type* codom);
+
+//================================== SUBSTITUTION ========================================
 
 const Type* replace_types_with_map(TypeTable*, const Type*, TypeMap*);
 const Type* replace_types(TypeTable*, const Type*, const Type**, const Type**, size_t);

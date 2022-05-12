@@ -46,7 +46,7 @@ Lexer new_lexer(const char* file_name, const char* file_data, size_t file_size, 
         .file_data = file_data,
         .file_size = file_size,
         .file_pos = { .row = 1, .col = 1 },
-        .keywords = new_hash_table(KEYWORD_COUNT, sizeof(Keyword))
+        .keywords = new_hash_table_with_capacity(KEYWORD_COUNT, sizeof(Keyword))
     };
     register_keywords(&lexer.keywords);
     return lexer;

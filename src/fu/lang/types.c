@@ -7,15 +7,13 @@
 #include <assert.h>
 #include <string.h>
 
-#define DEFAULT_TYPE_MAP_CAPACITY 8
-
 typedef struct TypeMapElem {
     const Type* from;
     const Type* to;
 } TypeMapElem;
 
 TypeMap new_type_map(void) {
-    return new_hash_table(DEFAULT_TYPE_MAP_CAPACITY, sizeof(TypeMapElem));
+    return new_hash_table(sizeof(TypeMapElem));
 }
 
 void free_type_map(TypeMap* type_map) {
@@ -144,31 +142,15 @@ size_t get_type_param_count(const Type* type) {
         type->tag == TYPE_ENUM ? type->enum_type.type_param_count : 0;
 }
 
-#define LEXICOGRAPHICAL_COMPARE(l, r) \
-    if (l < r) return -1; \
-    if (l > r) return 1;
-
-int compare_signature_members(const void* left, const void* right) {
-    const SignatureMember* left_member = left;
-    const SignatureMember* right_member = right;
-    int d = strcmp(left_member->name, right_member->name);
-    LEXICOGRAPHICAL_COMPARE(d, 0)
-    LEXICOGRAPHICAL_COMPARE(left_member->type->id, right_member->type->id)
-    LEXICOGRAPHICAL_COMPARE(left_member->is_type, right_member->is_type)
-    return 0;
-}
-
-#undef LEXICOGRAPHICAL_COMPARE
-
-int compare_signature_members_by_name(const void* left, const void* right) {
+static int compare_signature_members_by_name(const void* left, const void* right) {
     return strcmp(((SignatureMember*)left)->name, ((SignatureMember*)right)->name);
 }
 
-int compare_struct_fields_by_name(const void* left, const void* right) {
+static int compare_struct_fields_by_name(const void* left, const void* right) {
     return strcmp(((StructField*)left)->name, ((StructField*)right)->name);
 }
 
-int compare_enum_options_by_name(const void* left, const void* right) {
+static int compare_enum_options_by_name(const void* left, const void* right) {
     return strcmp(((EnumOption*)left)->name, ((EnumOption*)right)->name);
 }
 

@@ -157,6 +157,7 @@ bool is_int_or_float_type(TypeTag);
 bool is_subtype(const Type*, const Type*);
 bool is_non_const_ptr_type(const Type*);
 bool is_struct_like_option(const EnumOption*);
+bool is_tuple_like_struct_type(const Type*);
 
 const Type* skip_type_app(const Type*);
 const Type** get_type_params(const Type*);

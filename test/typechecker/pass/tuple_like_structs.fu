@@ -8,4 +8,5 @@ fun test() {
     const y = Bar(1);
     const z = Baz[i32](1);
     const w = Bob[i32, i8](1, 2);
+    (y.0, z.0, w.0, w.1)
 }

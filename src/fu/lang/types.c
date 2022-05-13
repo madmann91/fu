@@ -119,6 +119,10 @@ bool is_struct_like_option(const EnumOption* option) {
         option->param_type->struct_type.parent_enum;
 }
 
+bool is_tuple_like_struct_type(const Type* type) {
+    return type->tag == TYPE_STRUCT && type->struct_type.is_tuple_like;
+}
+
 const Type* skip_type_app(const Type* type) {
     return type->tag == TYPE_APP ? type->type_app.applied_type : type;
 }

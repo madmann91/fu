@@ -198,6 +198,7 @@ struct AstNode {
         struct {
             AstNode* left;
             AstNode* elem_or_index;
+            size_t index;
         } member_expr;
         struct {
             const char* name;

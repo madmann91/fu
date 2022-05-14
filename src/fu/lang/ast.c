@@ -455,7 +455,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             break;
         case AST_MEMBER_EXPR:
             print_ast(state, ast_node->member_expr.left);
-            print_ast_with_delim(state, ".", "", ast_node->member_expr.elem_or_index);
+            print_many_asts_with_delim(state, ".", ".", "", ast_node->member_expr.elems_or_index);
             break;
         case AST_FOR_LOOP:
             print_keyword(state, "for");

@@ -210,21 +210,22 @@ static const Type* check_type_args(
     return applied_type;
 }
 
-static const Type* infer_next_path_elem(TypingContext* context, AstNode* path_elem) {
-    AstNode* next_elem = path_elem->next;
-    const Type* inner_type = skip_type_app(path_elem->type);
+static const Type* infer_next_path_elem(TypingContext* context, AstNode* prev_elem) {
+    assert(prev_elem->type);
+    AstNode* next_elem = prev_elem->next;
+    const Type* inner_type = skip_type_app(prev_elem->type);
     if (inner_type->tag == TYPE_STRUCT) {
         const StructField* field = find_struct_field(inner_type, next_elem->path_elem.name);
         if (!field) goto fail;
         next_elem->path_elem.index = field - inner_type->struct_type.fields;
         next_elem->path_elem.is_type = false;
-        next_elem->type = apply_type_app(context->type_table, field->type, path_elem->type);
+        next_elem->type = apply_type_app(context->type_table, field->type, prev_elem->type);
     } else if (inner_type->tag == TYPE_ENUM) {
         const EnumOption* option = find_enum_option(inner_type, next_elem->path_elem.name);
         if (!option) goto fail;
         next_elem->path_elem.index = option - inner_type->enum_type.options;
         next_elem->path_elem.is_type = is_struct_like_option(option);
-        next_elem->type = apply_type_app(context->type_table, option->param_type, path_elem->type);
+        next_elem->type = apply_type_app(context->type_table, option->param_type, prev_elem->type);
     } else if (inner_type->tag == TYPE_SIGNATURE) {
         const SignatureMember* member = find_signature_member(inner_type, next_elem->path_elem.name);
         if (!member) goto fail;
@@ -262,6 +263,33 @@ static const Type* make_tuple_like_struct_constructor(TypeTable* type_table, con
     return type;
 }
 
+static const Type* infer_path_elems(TypingContext* context, AstNode* path_elem, bool is_type_expected) {
+    while (path_elem->next) {
+        infer_next_path_elem(context, path_elem);
+        path_elem = path_elem->next;
+    }
+
+    // A tuple-like structure like `Foo` can either be a type or a value,
+    // depending on where it appears. We deal with this ambiguity here.
+    if (!is_type_expected && path_elem->path_elem.is_type &&
+        is_tuple_like_struct_type(skip_type_app(path_elem->type)))
+    {
+        path_elem->type = make_tuple_like_struct_constructor(context->type_table, path_elem->type);
+        path_elem->path_elem.is_type = false;
+    }
+
+    // Make sure we do not use a type as a value, and vice-versa
+    if (path_elem->path_elem.is_type != is_type_expected) {
+        log_error(context->log, &path_elem->file_loc,
+            is_type_expected
+                ? "expected type, but got value named '{s}'"
+                : "expected value, but got type named '{s}'",
+            (FormatArg[]) { { .s = path_elem->path_elem.name } });
+        return make_error_type(context->type_table);
+    }
+    return path_elem->type;
+}
+
 static const Type* infer_path(TypingContext* context, AstNode* path, bool is_type_expected) {
     assert(path->path.elems);
     if (!path->path.decl_site) {
@@ -282,30 +310,7 @@ static const Type* infer_path(TypingContext* context, AstNode* path, bool is_typ
         path_elem->path_elem.type_args,
         &path_elem->file_loc);
 
-    while (path_elem->next) {
-        infer_next_path_elem(context, path_elem);
-        path_elem = path_elem->next;
-    }
-
-    // A tuple-like structure like `Foo` can either be a type or a value,
-    // depending on where it appears. We deal with this ambiguity here.
-    if (!is_type_expected && path_elem->path_elem.is_type &&
-        is_tuple_like_struct_type(skip_type_app(path_elem->type)))
-    {
-        path_elem->type = make_tuple_like_struct_constructor(context->type_table, path_elem->type);
-        path_elem->path_elem.is_type = false;
-    }
-
-    // Make sure we do not use a type as a value, and vice-versa
-    if (path_elem->path_elem.is_type != is_type_expected) {
-        log_error(context->log, &path->file_loc,
-            is_type_expected
-                ? "expected type, but got value named '{s}'"
-                : "expected value, but got type named '{s}'",
-            (FormatArg[]) { { .s = path_elem->path_elem.name } });
-        return path->type = make_error_type(context->type_table);
-    }
-    return path->type = path_elem->type;
+    return path->type = infer_path_elems(context, path_elem, is_type_expected);
 }
 
 static const Type* infer_tuple(
@@ -541,32 +546,29 @@ static const Type* check_member_expr(TypingContext* context, AstNode* member_exp
     const Type* inner_type = skip_type_app(left_type);
 
     const Type* member_type = NULL;
-    size_t member_index = 0;
-    if (member_expr->member_expr.elem_or_index->tag == AST_INT_LITERAL) {
-        member_index = member_expr->member_expr.elem_or_index->int_literal.val;
-        if (is_tuple_like_struct_type(inner_type))
-            member_type = inner_type->struct_type.fields[member_index].type;
-        else if (expect_type_with_tag(context, left_type, TYPE_TUPLE, "tuple or tuple-like structure", left_loc))
-            member_type = inner_type->tuple_type.args[member_index];
-        else
-            goto fail;
+    if (member_expr->member_expr.elems_or_index->tag == AST_INT_LITERAL) {
+        size_t index = member_expr->member_expr.elems_or_index->int_literal.val;
+        if (is_tuple_like_struct_type(inner_type)) {
+            member_type = apply_type_app(
+                context->type_table, inner_type->struct_type.fields[index].type, left_type);
+        } else if (expect_type_with_tag(context, left_type, TYPE_TUPLE, "tuple or tuple-like structure", left_loc))
+            member_type = inner_type->tuple_type.args[index];
     } else if (expect_type_with_tag(context, inner_type, TYPE_STRUCT, "structure", left_loc)) {
-        assert(member_expr->member_expr.left->tag == AST_PATH_ELEM);
-        const char* field_name = member_expr->member_expr.left->path_elem.name;
-        const StructField* field = find_struct_field(inner_type, field_name);
-        if (!field)
-            fail_member_access(context, field_name, inner_type, left_loc);
-        member_index = field - inner_type->struct_type.fields;
-        member_type = field->type;
-    } else
-        goto fail;
+        assert(member_expr->member_expr.elems_or_index->tag == AST_PATH_ELEM);
+        AstNode first_elem = {
+            .tag = AST_PATH_ELEM,
+            .type = member_expr->member_expr.left->type,
+            .next = member_expr->member_expr.elems_or_index,
+            .path_elem.is_type = false
+        };
+        member_type = infer_path_elems(context, &first_elem, false);
+    }
 
-    member_expr->member_expr.index = member_index;
-    member_type = apply_type_app(context->type_table, member_type, left_type);
-    return member_expr->type = expect_type(context, member_type, expected_type, true, &member_expr->file_loc);
+    if (!member_type)
+        return member_expr->type = make_error_type(context->type_table); // Error was already reported above
 
-fail:
-    return member_expr->type = make_error_type(context->type_table);
+    return member_expr->type = expect_type(
+        context, member_type, expected_type, true, &member_expr->file_loc);
 }
 
 const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expected_type) {

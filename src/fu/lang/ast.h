@@ -197,8 +197,7 @@ struct AstNode {
         } array_expr, array_pattern;
         struct {
             AstNode* left;
-            AstNode* elem_or_index;
-            size_t index;
+            AstNode* elems_or_index;
         } member_expr;
         struct {
             const char* name;

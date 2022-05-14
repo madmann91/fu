@@ -205,8 +205,7 @@ static inline AstNode* parse_path_elem(Parser* parser) {
     });
 }
 
-static inline AstNode* parse_path(Parser* parser) {
-    FilePos begin = parser->ahead->file_loc.begin;
+static inline AstNode* parse_path_elems(Parser* parser) {
     AstNodeList elem_list = { NULL, NULL };
     do {
         add_ast_node_to_list(&elem_list, parse_path_elem(parser));
@@ -216,7 +215,13 @@ static inline AstNode* parse_path(Parser* parser) {
             break;
         eat_token(parser, TOKEN_DOT);
     } while (true);
-    return make_ast_node(parser, &begin, &(AstNode) { .tag = AST_PATH, .path.elems = elem_list.first });
+    return elem_list.first;
+}
+
+static inline AstNode* parse_path(Parser* parser) {
+    FilePos begin = parser->ahead->file_loc.begin;
+    AstNode* elems = parse_path_elems(parser);
+    return make_ast_node(parser, &begin, &(AstNode) { .tag = AST_PATH, .path.elems = elems });
 }
 
 static inline AstNode* make_single_elem_path(Parser* parser, const char* name, const FileLoc* file_loc) {
@@ -486,14 +491,14 @@ static inline AstNode* parse_call_expr(Parser* parser, AstNode* callee) {
 }
 
 static inline AstNode* parse_member_expr(Parser* parser, AstNode* left) {
-    AstNode* elem_or_index = NULL;
+    AstNode* elems_or_index = NULL;
     if (parser->ahead->tag == TOKEN_INT_LITERAL)
-        elem_or_index = parse_int_literal(parser);
+        elems_or_index = parse_int_literal(parser);
     else
-        elem_or_index = parse_path_elem(parser);
+        elems_or_index = parse_path_elems(parser);
     return make_ast_node(parser, &left->file_loc.begin, &(AstNode) {
         .tag = AST_MEMBER_EXPR,
-        .member_expr = { .left = left, .elem_or_index = elem_or_index }
+        .member_expr = { .left = left, .elems_or_index = elems_or_index }
     });
 }
 

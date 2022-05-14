@@ -1,3 +1,5 @@
+root = meson.source_root()
+
 # General tests
 test('usage',                 fu, workdir: root, should_fail: true, args: ['-h'])
 test('missing-file',          fu, workdir: root, should_fail: true, args: [])

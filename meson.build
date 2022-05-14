@@ -27,6 +27,4 @@ fu = executable('fu',
   include_directories: 'src',
   link_with: libfu)
 
-root = meson.source_root()
-
 subdir('test')

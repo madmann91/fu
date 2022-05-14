@@ -220,42 +220,56 @@ static const Type* check_type_args(
     return applied_type;
 }
 
+static const Type* make_enum_constructor_type(TypeTable* type_table, const Type* enum_type, const Type* param_type) {
+    return param_type ? make_fun_type(type_table, param_type, enum_type) : enum_type;
+}
+
 static const Type* infer_next_path_elem(TypingContext* context, AstNode* prev_elem) {
     assert(prev_elem->type && prev_elem->next);
 
+    bool is_type_expected = false;
     AstNode* next_elem = prev_elem->next;
     const Type* inner_type = skip_type_app(prev_elem->type);
-
-    if (inner_type->tag == TYPE_STRUCT) {
-        const StructField* field = find_struct_field(inner_type, next_elem->path_elem.name);
-        if (!field) goto missing_member;
-        next_elem->path_elem.index = field - inner_type->struct_type.fields;
-        next_elem->path_elem.is_type = false;
-        next_elem->type = apply_type_app(context->type_table, field->type, prev_elem->type);
-    } else if (inner_type->tag == TYPE_ENUM) {
-        const EnumOption* option = find_enum_option(inner_type, next_elem->path_elem.name);
-        if (!option) goto missing_member;
-        next_elem->path_elem.index = option - inner_type->enum_type.options;
-        next_elem->path_elem.is_type = is_struct_like_option(option);
-        next_elem->type = apply_type_app(context->type_table, option->param_type, prev_elem->type);
-    } else if (inner_type->tag == TYPE_SIGNATURE) {
-        const SignatureMember* member = find_signature_member(inner_type, next_elem->path_elem.name);
-        if (!member) goto missing_member;
-        next_elem->path_elem.index = member - inner_type->signature.members;
-        next_elem->path_elem.is_type = member->is_type;
-        next_elem->type = member->type;
-    } else
-        goto missing_member;
+    switch(inner_type->tag) {
+        case TYPE_STRUCT: {
+            const StructField* field = find_struct_field(inner_type, next_elem->path_elem.name);
+            if (!field) goto missing_member;
+            next_elem->path_elem.index = field - inner_type->struct_type.fields;
+            next_elem->path_elem.is_type = false;
+            next_elem->type = apply_type_app(context->type_table, field->type, prev_elem->type);
+            break;
+        }
+        case TYPE_ENUM: {
+            const EnumOption* option = find_enum_option(inner_type, next_elem->path_elem.name);
+            if (!option) goto missing_member;
+            const Type* param_type = option->param_type
+                ? apply_type_app(context->type_table, option->param_type, prev_elem->type) : NULL;
+            bool is_struct_like = is_struct_like_option(option);
+            next_elem->path_elem.index = option - inner_type->enum_type.options;
+            next_elem->path_elem.is_type = is_struct_like;
+            next_elem->type = is_struct_like
+                ? param_type : make_enum_constructor_type(context->type_table, prev_elem->type, param_type);
+            is_type_expected = true;
+            break;
+        }
+        case TYPE_SIGNATURE: {
+            const SignatureMember* member = find_signature_member(inner_type, next_elem->path_elem.name);
+            if (!member) goto missing_member;
+            next_elem->path_elem.index = member - inner_type->signature.members;
+            next_elem->path_elem.is_type = member->is_type;
+            next_elem->type = member->type;
+            break;
+        }
+        default:
+            goto missing_member;
+    }
 
     // Make sure we do not perform accesses on a type. For instance, given the type
     // `struct Foo { ... }`, an expression of the form `Foo.x` should be rejected.
-    if (inner_type->tag == TYPE_ENUM) {
-        if (!prev_elem->path_elem.is_type)
-            return next_elem->type = report_type_expected(context, prev_elem->type, &prev_elem->file_loc);
-    } else {
-        assert(inner_type->tag == TYPE_STRUCT || inner_type->tag == TYPE_SIGNATURE);
-        if (prev_elem->path_elem.is_type)
-            return next_elem->type = report_value_expected(context, prev_elem->type, &prev_elem->file_loc);
+    if (is_type_expected != prev_elem->path_elem.is_type) {
+        return next_elem->type = is_type_expected
+            ? report_type_expected(context, prev_elem->type, &prev_elem->file_loc)
+            : report_value_expected(context, prev_elem->type, &prev_elem->file_loc);
     }
 
     return check_type_args(context,
@@ -848,12 +862,21 @@ static const Type* infer_option_decl(TypingContext* context, AstNode* option_dec
 
     // If the option is struct-like, we need to create an adequate structure type to represent it
     Type* struct_type = make_struct_type(context->type_table, option_decl->option_decl.name);
+    copy_dyn_array(struct_type->struct_type.type_params, enum_type->enum_type.type_params);
     struct_type->struct_type.parent_enum = enum_type;
     for (AstNode* field_decl = option_decl->option_decl.param_type; field_decl; field_decl = field_decl->next) {
         StructField field = infer_field_decl(context, field_decl);
         push_on_dyn_array(struct_type->struct_type.fields, &field);
     }
-    return option_decl->type = freeze_struct_type(context->type_table, struct_type);
+
+    // We may need to wrap the structure type into a type application if the enumeration is polymorphic
+    const Type* option_type = freeze_struct_type(context->type_table, struct_type);
+    size_t type_param_count = get_dyn_array_size(enum_type->enum_type.type_params);
+    if (type_param_count > 0) {
+        option_type = make_type_app(
+            context->type_table, option_type, enum_type->enum_type.type_params, type_param_count);
+    }
+    return option_decl->type = option_type;
 }
 
 static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {

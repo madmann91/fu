@@ -113,10 +113,10 @@ bool is_non_const_ptr_type(const Type* type) {
 }
 
 bool is_struct_like_option(const EnumOption* option) {
-    return
-        option->param_type &&
-        option->param_type->tag == TYPE_STRUCT &&
-        option->param_type->struct_type.parent_enum;
+    if (!option->param_type)
+        return false;
+    const Type* param_type = skip_type_app(option->param_type);
+    return param_type->tag == TYPE_STRUCT && param_type->struct_type.parent_enum;
 }
 
 bool is_tuple_like_struct_type(const Type* type) {

@@ -1,0 +1,13 @@
+enum Foo { A }
+enum Bar { A, B }
+enum Baz { A(i32), B(i64) }
+enum Bob { A, B(i32), C(i64) }
+enum Fob { A, B { i: i32 = 1, j: i64 }, C(i64) }
+
+fun test() {
+    const foo = Foo.A;
+    const bar = Bar.B;
+    const baz = Baz.A(1:i32);
+    const bob = Bob.C(1:i64);
+    const fob = Fob.B { j = 3:i64 };
+}

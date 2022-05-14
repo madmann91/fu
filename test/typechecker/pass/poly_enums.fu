@@ -1,0 +1,13 @@
+enum Foo[T] { A }
+enum Bar[T] { A, B(T) }
+enum Baz[T, U] { A(T), B(U) }
+enum Bob[T, U] { A, B(T), C(U) }
+enum Fob[T, U] { A, B { i: i32 = 1, j: T }, C(U) }
+
+fun test() {
+    const foo = Foo[i32].A;
+    const bar = Bar[i32].B(1);
+    const baz = Baz[i32, i8].A(1:i32);
+    const bob = Bob[i32, i64].C(1:i64);
+    const fob = Fob[i64, i8].B { j = 3:i64 };
+}

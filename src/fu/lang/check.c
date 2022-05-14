@@ -810,9 +810,21 @@ static StructField infer_field_decl(TypingContext* context, AstNode* field_decl)
 
 static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_decl) {
     Type* struct_type = make_struct_type(context->type_table, struct_decl->struct_decl.name);
+    infer_type_params(context, struct_decl->struct_decl.type_params, struct_type->struct_type.type_params);
+
     struct_type->struct_type.is_tuple_like = struct_decl->struct_decl.is_tuple_like;
 
-    infer_type_params(context, struct_decl->struct_decl.type_params, struct_type->struct_type.type_params);
+    if (struct_decl->struct_decl.super_type) {
+        const Type* super_type = infer_type(context, struct_decl->struct_decl.super_type);
+        const Type* super_struct = skip_type_app(super_type);
+        expect_type_with_tag(context, super_struct, TYPE_STRUCT, "structure",
+            &struct_decl->struct_decl.super_type->file_loc);
+        struct_type->struct_type.super_type = super_type;
+        struct_type->struct_type.base_index =
+            super_struct->struct_type.base_index +
+            super_struct->struct_type.field_count;
+    }
+
     struct_decl->type = struct_type;
     for (AstNode* field_decl = struct_decl->struct_decl.fields; field_decl; field_decl = field_decl->next) {
         StructField field;
@@ -847,6 +859,17 @@ static const Type* infer_option_decl(TypingContext* context, AstNode* option_dec
 static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
     Type* enum_type = make_enum_type(context->type_table, enum_decl->enum_decl.name);
     infer_type_params(context, enum_decl->enum_decl.type_params, enum_type->enum_type.type_params);
+
+    if (enum_decl->enum_decl.sub_type) {
+        const Type* sub_type = infer_type(context, enum_decl->enum_decl.sub_type);
+        const Type* sub_enum = skip_type_app(sub_type);
+        expect_type_with_tag(context, sub_enum, TYPE_ENUM, "enumeration",
+            &enum_decl->enum_decl.sub_type->file_loc);
+        enum_type->enum_type.sub_type = sub_type;
+        enum_type->enum_type.base_index =
+            sub_enum->enum_type.base_index +
+            sub_enum->enum_type.option_count;
+    }
 
     enum_decl->type = enum_type;
     for (AstNode* option_decl = enum_decl->enum_decl.options; option_decl; option_decl = option_decl->next) {

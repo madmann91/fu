@@ -306,11 +306,11 @@ static void bind_type_params(Env* env, AstNode* type_params) {
     bind_many(env, type_params, bind_type_param);
 }
 
-static void bind_members(Env* env, AstNode* decl, AstNode* type_params, AstNode* super, AstNode* members) {
+static void bind_members(Env* env, AstNode* decl, AstNode* type_params, AstNode* super_or_sub_type, AstNode* members) {
     push_scope(env, decl);
     bind_type_params(env, type_params);
-    if (super)
-        bind_type(env, super);
+    if (super_or_sub_type)
+        bind_type(env, super_or_sub_type);
     insert_many_decls_in_env(env, members);
     bind_many(env, members, bind_decl);
     pop_scope(env);
@@ -332,7 +332,7 @@ void bind_decl(Env* env, AstNode* decl) {
         case AST_ENUM_DECL:
             bind_members(env, decl,
                 decl->enum_decl.type_params,
-                decl->enum_decl.super,
+                decl->enum_decl.sub_type,
                 decl->enum_decl.options);
             break;
         case AST_STRUCT_DECL:
@@ -344,7 +344,7 @@ void bind_decl(Env* env, AstNode* decl) {
             } else {
                 bind_members(env, decl,
                     decl->struct_decl.type_params,
-                    decl->struct_decl.super,
+                    decl->struct_decl.super_type,
                     decl->struct_decl.fields);
             }
             break;

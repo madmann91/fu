@@ -929,9 +929,9 @@ static inline AstNode* parse_struct_decl(Parser* parser, bool is_public, bool is
     const char* name = parse_ident(parser);
     AstNode* type_params = parse_type_params(parser);
 
-    AstNode* super = NULL;
+    AstNode* super_type = NULL;
     if (accept_token(parser, TOKEN_COLON))
-        super = parse_type(parser);
+        super_type = parse_type(parser);
 
     AstNode* fields = NULL;
     bool is_tuple_like = false;
@@ -940,7 +940,7 @@ static inline AstNode* parse_struct_decl(Parser* parser, bool is_public, bool is
         expect_token(parser, TOKEN_R_BRACE);
     } else {
         is_tuple_like = true;
-        if (!super && accept_token(parser, TOKEN_L_PAREN)) {
+        if (!super_type && accept_token(parser, TOKEN_L_PAREN)) {
             fields = parse_many_at_least_one(parser, "structure fields", TOKEN_R_PAREN, TOKEN_COMMA, parse_type);
             expect_token(parser, TOKEN_R_PAREN);
         }
@@ -951,7 +951,7 @@ static inline AstNode* parse_struct_decl(Parser* parser, bool is_public, bool is
         .tag = AST_STRUCT_DECL,
         .struct_decl = {
             .name = name,
-            .super = super,
+            .super_type = super_type,
             .is_public = is_public,
             .is_opaque = is_opaque,
             .is_tuple_like = is_tuple_like,
@@ -967,9 +967,9 @@ static inline AstNode* parse_enum_decl(Parser* parser, bool is_public, bool is_o
     const char* name = parse_ident(parser);
     AstNode* type_params = parse_type_params(parser);
 
-    AstNode* super = NULL;
+    AstNode* sub_type = NULL;
     if (accept_token(parser, TOKEN_COLON))
-        super = parse_type(parser);
+        sub_type = parse_type(parser);
 
     expect_token(parser, TOKEN_L_BRACE);
     AstNode* options = parse_many_at_least_one(
@@ -980,7 +980,7 @@ static inline AstNode* parse_enum_decl(Parser* parser, bool is_public, bool is_o
         .tag = AST_ENUM_DECL,
         .enum_decl = {
             .name = name,
-            .super = super,
+            .sub_type = sub_type,
             .is_public = is_public,
             .is_opaque = is_opaque,
             .type_params = type_params,

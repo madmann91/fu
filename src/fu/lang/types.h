@@ -83,10 +83,11 @@ struct Type {
         } type_alias;
         struct {
             const char* name;
-            const Type* super;
+            const Type* sub_type;
             const Type** type_params;
             size_t type_param_count;
             EnumOption* options;
+            size_t base_index;
             size_t option_count;
 #ifndef NDEBUG
             bool is_frozen;
@@ -94,12 +95,13 @@ struct Type {
         } enum_type;
         struct {
             const char* name;
-            const Type* super;
+            const Type* super_type;
             const Type** type_params;
             size_t type_param_count;
             StructField* fields;
             size_t field_count;
             const Type* parent_enum;
+            size_t base_index;
             bool is_tuple_like;
 #ifndef NDEBUG
             bool is_frozen;

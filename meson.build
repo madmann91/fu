@@ -58,8 +58,10 @@ test('parser-fail-empty-enum',        fu, workdir: root, should_fail: true, args
 test('typechecker-pass-mono-structs',        fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/mono_structs.fu'])
 test('typechecker-pass-poly-structs',        fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/poly_structs.fu'])
 test('typechecker-pass-tuple-like-structs',  fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/tuple_like_structs.fu'])
-test('typechecker-fail-type_access_enum',    fu, workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/type_access_enum.fu'])
-test('typechecker-fail-type_access_struct',  fu, workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/type_access_struct.fu'])
-test('typechecker-fail-value_access_struct', fu, workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/value_access_struct.fu'])
+test('typechecker-fail-type-access-enum',    fu, workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/type_access_enum.fu'])
+test('typechecker-fail-type-access-struct',  fu, workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/type_access_struct.fu'])
+test('typechecker-fail-value_access-struct', fu, workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/value_access_struct.fu'])
+test('typechecker-fail-bad-super-struct',    fu, workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/bad_super_struct.fu'])
+test('typechecker-fail-bad-sub-enum',        fu, workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/bad_sub_enum.fu'])
 #test('typechecker-pass-structs-inheritance', fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/struct_inheritance.fu'])
 

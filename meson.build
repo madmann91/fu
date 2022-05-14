@@ -1,4 +1,4 @@
-project('fu', 'c', version: '0.1')
+project('fu', 'c', version: '0.1', meson_version: '>= 0.56.0')
 
 libfu = library('libfu',
   sources: [

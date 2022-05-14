@@ -1,4 +1,4 @@
-root = meson.source_root()
+root = meson.project_source_root()
 
 # General tests
 test('usage',                 fu, workdir: root, should_fail: true, args: ['-h'])

@@ -1,0 +1,4 @@
+struct Foo { i: i32 }
+fun test() {
+    const x = Foo.i;
+}

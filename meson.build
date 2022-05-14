@@ -30,11 +30,11 @@ root = meson.source_root()
 
 # General tests
 test('usage', fu, workdir: root, args: ['-h'], should_fail: true)
-test('missing-file',          fu, workdir: root, args: [], should_fail: true)
-test('invalid-option',        fu, workdir: root, args: ['--flurp'], should_fail: true)
-test('missing-option-value',  fu, workdir: root, args: ['--max-errors'], should_fail: true)
+test('missing-file',          fu, workdir: root, should_fail: true, args: [])
+test('invalid-option',        fu, workdir: root, should_fail: true, args: ['--flurp'])
+test('missing-option-value',  fu, workdir: root, should_fail: true, args: ['--max-errors'])
+test('non-existing-file',     fu, workdir: root, should_fail: true, args: ['this-file-hopefully-does-not-exist.fu'])
 test('all-options-enabled',   fu, workdir: root, args: ['--max-errors', '3', '--no-color', '--print-ast', '--no-type-check', 'test/parser/pass/empty.fu'])
-test('non-existing-file',     fu, workdir: root, args: ['this-file-hopefully-does-not-exist.fu'], should_fail: true)
 
 # Parser tests
 test('parser-pass-enums',     fu, workdir: root, args: ['--no-type-check', '--print-ast', 'test/parser/pass/enums.fu'])
@@ -58,5 +58,8 @@ test('parser-fail-empty-enum',        fu, workdir: root, should_fail: true, args
 test('typechecker-pass-mono-structs',        fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/mono_structs.fu'])
 test('typechecker-pass-poly-structs',        fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/poly_structs.fu'])
 test('typechecker-pass-tuple-like-structs',  fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/tuple_like_structs.fu'])
+test('typechecker-fail-type_access_enum',    fu, workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/type_access_enum.fu'])
+test('typechecker-fail-type_access_struct',  fu, workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/type_access_struct.fu'])
+test('typechecker-fail-value_access_struct', fu, workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/value_access_struct.fu'])
 #test('typechecker-pass-structs-inheritance', fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/struct_inheritance.fu'])
 

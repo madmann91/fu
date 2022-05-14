@@ -1,0 +1,4 @@
+enum Foo { A(i32) }
+fun test() {
+    const x : Foo.A = 3;
+}

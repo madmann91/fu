@@ -79,7 +79,7 @@ static inline bool accept_token(Parser* parser, TokenTag tag) {
     return false;
 }
 
-static void fail_expect(
+static void report_invalid_token(
     Parser* parser,
     const char* expected_msg,
     const char* found_msg,
@@ -91,7 +91,7 @@ static void fail_expect(
 
 static inline bool expect_token(Parser* parser, TokenTag tag) {
     if (!accept_token(parser, tag)) {
-        fail_expect(parser, token_tag_to_str(tag), token_tag_to_str(parser->ahead->tag), &parser->ahead->file_loc);
+        report_invalid_token(parser, token_tag_to_str(tag), token_tag_to_str(parser->ahead->tag), &parser->ahead->file_loc);
         return false;
     }
     return true;
@@ -133,7 +133,7 @@ static inline const char* parse_ident(Parser* parser) {
 
 static inline AstNode* parse_error(Parser* parser, const char* msg) {
     FilePos begin = parser->ahead->file_loc.begin;
-    fail_expect(parser, msg, token_tag_to_str(parser->ahead->tag), &parser->ahead->file_loc);
+    report_invalid_token(parser, msg, token_tag_to_str(parser->ahead->tag), &parser->ahead->file_loc);
     skip_token(parser);
     return make_ast_node(parser, &begin, &(AstNode) { .tag = AST_ERROR });
 }

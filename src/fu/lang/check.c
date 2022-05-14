@@ -135,7 +135,7 @@ static const Type* expect_assignable(TypingContext* context, AstNode* expr) {
     return expr->type;
 }
 
-static const Type* fail_expect(
+static const Type* report_type_mismatch(
     TypingContext* context,
     const char* msg,
     const Type* type,
@@ -149,14 +149,24 @@ static const Type* fail_expect(
     return make_error_type(context->type_table);
 }
 
-static const Type* fail_infer(TypingContext* context, const char* msg, const FileLoc* file_loc) {
+static const Type* report_cannot_infer(TypingContext* context, const char* msg, const FileLoc* file_loc) {
     log_error(context->log, file_loc, "cannot infer type for {s}", (FormatArg[]) { { .s = msg } });
     return make_error_type(context->type_table);
 }
 
-static const Type* fail_member_access(TypingContext* context, const char* name, const Type* type, const FileLoc* file_loc) {
+static const Type* report_missing_member(TypingContext* context, const char* name, const Type* type, const FileLoc* file_loc) {
     if (!type->contains_error)
         log_error(context->log, file_loc, "no member '{s}' in type '{t}'", (FormatArg[]) { { .s = name }, { .t = type } });
+    return make_error_type(context->type_table);
+}
+
+static const Type* report_type_expected(TypingContext* context, const Type* type, const FileLoc* file_loc) {
+    log_error(context->log, file_loc, "expected type, but got value with type '{t}'", (FormatArg[]) { { .t = type } });
+    return make_error_type(context->type_table);
+}
+
+static const Type* report_value_expected(TypingContext* context, const Type* type, const FileLoc* file_loc) {
+    log_error(context->log, file_loc, "expected value, but got type '{t}'", (FormatArg[]) { { .t = type } });
     return make_error_type(context->type_table);
 }
 
@@ -211,29 +221,41 @@ static const Type* check_type_args(
 }
 
 static const Type* infer_next_path_elem(TypingContext* context, AstNode* prev_elem) {
-    assert(prev_elem->type);
+    assert(prev_elem->type && prev_elem->next);
+
     AstNode* next_elem = prev_elem->next;
     const Type* inner_type = skip_type_app(prev_elem->type);
+
     if (inner_type->tag == TYPE_STRUCT) {
         const StructField* field = find_struct_field(inner_type, next_elem->path_elem.name);
-        if (!field) goto fail;
+        if (!field) goto missing_member;
         next_elem->path_elem.index = field - inner_type->struct_type.fields;
         next_elem->path_elem.is_type = false;
         next_elem->type = apply_type_app(context->type_table, field->type, prev_elem->type);
     } else if (inner_type->tag == TYPE_ENUM) {
         const EnumOption* option = find_enum_option(inner_type, next_elem->path_elem.name);
-        if (!option) goto fail;
+        if (!option) goto missing_member;
         next_elem->path_elem.index = option - inner_type->enum_type.options;
         next_elem->path_elem.is_type = is_struct_like_option(option);
         next_elem->type = apply_type_app(context->type_table, option->param_type, prev_elem->type);
     } else if (inner_type->tag == TYPE_SIGNATURE) {
         const SignatureMember* member = find_signature_member(inner_type, next_elem->path_elem.name);
-        if (!member) goto fail;
+        if (!member) goto missing_member;
         next_elem->path_elem.index = member - inner_type->signature.members;
         next_elem->path_elem.is_type = member->is_type;
         next_elem->type = member->type;
+    } else
+        goto missing_member;
+
+    // Make sure we do not perform accesses on a type. For instance, given the type
+    // `struct Foo { ... }`, an expression of the form `Foo.x` should be rejected.
+    if (inner_type->tag == TYPE_ENUM) {
+        if (!prev_elem->path_elem.is_type)
+            return next_elem->type = report_type_expected(context, prev_elem->type, &prev_elem->file_loc);
     } else {
-        goto fail;
+        assert(inner_type->tag == TYPE_STRUCT || inner_type->tag == TYPE_SIGNATURE);
+        if (prev_elem->path_elem.is_type)
+            return next_elem->type = report_value_expected(context, prev_elem->type, &prev_elem->file_loc);
     }
 
     return check_type_args(context,
@@ -241,9 +263,9 @@ static const Type* infer_next_path_elem(TypingContext* context, AstNode* prev_el
         next_elem->path_elem.type_args,
         &next_elem->file_loc);
 
-fail:
-    return next_elem->type = fail_member_access(
-        context, next_elem->path_elem.name, inner_type, &next_elem->file_loc);
+missing_member:
+    return next_elem->type = report_missing_member(
+        context, next_elem->path_elem.name, prev_elem->type, &prev_elem->file_loc);;
 }
 
 static const Type* make_tuple_like_struct_constructor(TypeTable* type_table, const Type* type) {
@@ -280,12 +302,9 @@ static const Type* infer_path_elems(TypingContext* context, AstNode* path_elem, 
 
     // Make sure we do not use a type as a value, and vice-versa
     if (path_elem->path_elem.is_type != is_type_expected) {
-        log_error(context->log, &path_elem->file_loc,
-            is_type_expected
-                ? "expected type, but got value named '{s}'"
-                : "expected value, but got type named '{s}'",
-            (FormatArg[]) { { .s = path_elem->path_elem.name } });
-        return make_error_type(context->type_table);
+        return is_type_expected
+            ? report_type_expected(context, path_elem->type, &path_elem->file_loc)
+            : report_value_expected(context, path_elem->type, &path_elem->file_loc);
     }
     return path_elem->type;
 }
@@ -442,7 +461,7 @@ static const Type* check_int_literal(TypingContext* context, AstNode* literal, c
     if (expected_type->tag == TYPE_UNKNOWN)
         return literal->type = make_prim_type(context->type_table, TYPE_I64);
     if (!is_int_or_float_type(expected_type->tag))
-        return literal->type = fail_expect(context, "integer literal", expected_type, &literal->file_loc);
+        return literal->type = report_type_mismatch(context, "integer literal", expected_type, &literal->file_loc);
     if (is_int_type(expected_type->tag) &&
         ilog2(literal->int_literal.val) > get_prim_type_bitwidth(expected_type->tag))
     {
@@ -458,7 +477,7 @@ static const Type* check_float_literal(TypingContext* context, AstNode* literal,
     if (expected_type->tag == TYPE_UNKNOWN)
         return literal->type = make_prim_type(context->type_table, TYPE_F64);
     if (!is_float_type(expected_type->tag))
-        return literal->type = fail_expect(context, "floating-point literal", expected_type, &literal->file_loc);
+        return literal->type = report_type_mismatch(context, "floating-point literal", expected_type, &literal->file_loc);
     return literal->type = expected_type;
 }
 
@@ -488,7 +507,7 @@ static const Type* check_struct_expr(TypingContext* context, AstNode* struct_exp
     for (AstNode* field_expr = struct_expr->struct_expr.fields; field_expr; field_expr = field_expr->next) {
         const StructField* field = find_struct_field(struct_type, field_expr->field_expr.name);
         if (!field) {
-            fail_member_access(context, field_expr->field_expr.name, struct_type, &field_expr->file_loc);
+            report_missing_member(context, field_expr->field_expr.name, struct_type, &field_expr->file_loc);
             goto fail;
         }
 
@@ -599,7 +618,7 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
                 return infer_tuple(context, expr, infer_expr);
             if (expected_type->tag == TYPE_TUPLE)
                 return check_tuple(context, expr, expected_type, check_expr);
-            return expr->type = fail_expect(context, "tuple expression", expected_type, &expr->file_loc);
+            return expr->type = report_type_mismatch(context, "tuple expression", expected_type, &expr->file_loc);
         case AST_IF_EXPR:
             return check_if_expr(context, expr, expected_type);
         case AST_CALL_EXPR:
@@ -620,7 +639,7 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
                 make_unknown_type(context->type_table),
                 make_unknown_type(context->type_table));
             if (expected_type->tag != TYPE_FUN)
-                return expr->type = fail_expect(context, "function expression", expected_type, &expr->file_loc);
+                return expr->type = report_type_mismatch(context, "function expression", expected_type, &expr->file_loc);
             return check_fun_expr(context, expr,
                 expected_type->fun_type.dom,
                 expected_type->fun_type.codom);
@@ -681,13 +700,13 @@ const Type* check_pattern(TypingContext* context, AstNode* pattern, const Type* 
                 return pattern->type = infer_tuple(context, pattern, infer_pattern);
             if (expected_type->tag == TYPE_TUPLE)
                 return check_tuple(context, pattern, expected_type, check_pattern);
-            return fail_expect(context, "tuple pattern", expected_type, &pattern->file_loc);
+            return report_type_mismatch(context, "tuple pattern", expected_type, &pattern->file_loc);
         case AST_TYPED_PATTERN:
             pattern->type = check_pattern(context, pattern->typed_pattern.left, infer_type(context, pattern->typed_pattern.type));
             return pattern->type = expect_type(context, pattern->type, expected_type, false, &pattern->file_loc);
         case AST_IDENT_PATTERN:
             if (expected_type->contains_unknown)
-                return pattern->type = fail_infer(context, "pattern", &pattern->file_loc);
+                return pattern->type = report_cannot_infer(context, "pattern", &pattern->file_loc);
             return pattern->type = expected_type;
         case AST_PATH:
             return infer_path(context, pattern, true);

@@ -170,6 +170,18 @@ static const Type* report_value_expected(TypingContext* context, const Type* typ
     return make_error_type(context->type_table);
 }
 
+static const Type* report_redeclared_inherited_member(
+    TypingContext* context,
+    const char* member,
+    const Type* parent_type,
+    const FileLoc* file_loc)
+{
+    log_error(context->log, file_loc,
+        "member '{s}' is already inherited from type '{t}'",
+        (FormatArg[]) { { .s = member }, { .t = parent_type } });
+    return make_error_type(context->type_table);
+}
+
 static const Type* infer_decl_site(TypingContext* context, AstNode* decl_site) {
     if (!decl_site->type) {
         if (!push_decl(context, decl_site)) {
@@ -828,17 +840,27 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
 
     struct_type->struct_type.is_tuple_like = struct_decl->struct_decl.is_tuple_like;
 
+    // Add inherited fields to the structure
+    const Type* super_struct = NULL;
     if (struct_decl->struct_decl.super_type) {
         const Type* super_type = infer_type(context, struct_decl->struct_decl.super_type);
-        const Type* super_struct = skip_type_app(super_type);
-        expect_type_with_tag(context, super_struct, TYPE_STRUCT, "structure",
-            &struct_decl->struct_decl.super_type->file_loc);
-        struct_type->struct_type.super_type = super_type;
-        struct_type->struct_type.base_index =
-            super_struct->struct_type.base_index +
-            super_struct->struct_type.field_count;
+        super_struct = skip_type_app(super_type);
+        if (expect_type_with_tag(
+            context, super_struct, TYPE_STRUCT, "structure", &struct_decl->struct_decl.super_type->file_loc))
+        {
+            struct_type->struct_type.super_type = super_type;
+            for (size_t i = 0; i < super_struct->struct_type.field_count; ++i) {
+                StructField field = super_struct->struct_type.fields[i];
+                field.type = apply_type_app(context->type_table, field.type, super_type);
+                field.is_inherited = true;
+                push_on_dyn_array(struct_type->struct_type.fields, &field);
+            }
+        }
+        else
+            super_struct = NULL;
     }
 
+    // Type-check fields
     struct_decl->type = struct_type;
     for (AstNode* field_decl = struct_decl->struct_decl.fields; field_decl; field_decl = field_decl->next) {
         StructField field;
@@ -847,6 +869,11 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
                 .name = "",
                 .type = infer_type(context, field_decl)
             };
+        } else if (super_struct && find_struct_field(super_struct, field_decl->field_decl.name)) {
+            report_redeclared_inherited_member(context,
+                field_decl->field_decl.name,
+                struct_type->struct_type.super_type,
+                &field_decl->file_loc);
         } else
             field = infer_field_decl(context, field_decl);
         push_on_dyn_array(struct_type->struct_type.fields, &field);
@@ -883,23 +910,41 @@ static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
     Type* enum_type = make_enum_type(context->type_table, enum_decl->enum_decl.name);
     infer_type_params(context, enum_decl->enum_decl.type_params, enum_type->enum_type.type_params);
 
+    // Add inherited options, if any
+    const Type* sub_enum = NULL;
     if (enum_decl->enum_decl.sub_type) {
         const Type* sub_type = infer_type(context, enum_decl->enum_decl.sub_type);
-        const Type* sub_enum = skip_type_app(sub_type);
-        expect_type_with_tag(context, sub_enum, TYPE_ENUM, "enumeration",
-            &enum_decl->enum_decl.sub_type->file_loc);
-        enum_type->enum_type.sub_type = sub_type;
-        enum_type->enum_type.base_index =
-            sub_enum->enum_type.base_index +
-            sub_enum->enum_type.option_count;
+        sub_enum = skip_type_app(sub_type);
+        if (expect_type_with_tag(
+            context, sub_enum, TYPE_ENUM, "enumeration", &enum_decl->enum_decl.sub_type->file_loc))
+        {
+            enum_type->enum_type.sub_type = sub_type;
+            for (size_t i = 0; i < sub_enum->enum_type.option_count; ++i) {
+                EnumOption option = sub_enum->enum_type.options[i];
+                if (option.param_type)
+                    option.param_type = apply_type_app(context->type_table, option.param_type, sub_type);
+                option.is_inherited = true;
+                push_on_dyn_array(enum_type->enum_type.options, &option);
+            }
+        }
+        else
+            sub_enum = NULL;
     }
 
+    // Type-check options
     enum_decl->type = enum_type;
     for (AstNode* option_decl = enum_decl->enum_decl.options; option_decl; option_decl = option_decl->next) {
-        push_on_dyn_array(enum_type->enum_type.options, &(EnumOption) {
-            .name = option_decl->option_decl.name,
-            .param_type = infer_option_decl(context, option_decl, enum_type)
-        });
+        if (sub_enum && find_enum_option(sub_enum, option_decl->option_decl.name)) {
+            report_redeclared_inherited_member(context,
+                option_decl->option_decl.name,
+                enum_type->enum_type.sub_type,
+                &option_decl->file_loc);
+        } else {
+            push_on_dyn_array(enum_type->enum_type.options, &(EnumOption) {
+                .name = option_decl->option_decl.name,
+                .param_type = infer_option_decl(context, option_decl, enum_type)
+            });
+        }
     }
     return freeze_enum_type(context->type_table, enum_type);
 }

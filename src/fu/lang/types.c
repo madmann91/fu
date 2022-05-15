@@ -152,6 +152,20 @@ size_t get_type_param_count(const Type* type) {
     return 0;
 }
 
+size_t get_type_inheritance_depth(const Type* type) {
+    size_t depth = 0;
+    while (true) {
+        type = skip_type_app(type);
+        if (type->tag == TYPE_STRUCT && type->struct_type.super_type)
+            type = type->struct_type.super_type, depth++;
+        else if (type->tag == TYPE_ENUM && type->enum_type.sub_type)
+            type = type->enum_type.sub_type, depth++;
+        else
+            break;
+    }
+    return depth;
+}
+
 static int compare_signature_members_by_name(const void* left, const void* right) {
     return strcmp(((SignatureMember*)left)->name, ((SignatureMember*)right)->name);
 }

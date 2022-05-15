@@ -61,12 +61,14 @@ typedef struct SignatureMember {
 typedef struct StructField {
     const char* name;
     const Type* type;
-    bool has_default;
+    bool has_default : 1;
+    bool is_inherited : 1;
 } StructField;
 
 typedef struct EnumOption {
     const char* name;
     const Type* param_type;
+    bool is_inherited;
 } EnumOption;
 
 struct Type {
@@ -87,7 +89,6 @@ struct Type {
             const Type** type_params;
             size_t type_param_count;
             EnumOption* options;
-            size_t base_index;
             size_t option_count;
 #ifndef NDEBUG
             bool is_frozen;
@@ -101,7 +102,6 @@ struct Type {
             StructField* fields;
             size_t field_count;
             const Type* parent_enum;
-            size_t base_index;
             bool is_tuple_like;
 #ifndef NDEBUG
             bool is_frozen;
@@ -165,6 +165,7 @@ const Type* skip_type_app(const Type*);
 const Type** get_type_params(const Type*);
 size_t get_prim_type_bitwidth(TypeTag);
 size_t get_type_param_count(const Type*);
+size_t get_type_inheritance_depth(const Type*);
 
 const SignatureMember* find_signature_member(const Type*, const char*);
 const EnumOption* find_enum_option(const Type*, const char*);

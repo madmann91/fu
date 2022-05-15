@@ -52,7 +52,7 @@ bool parse_options(int* argc, char** argv, Options* options, Log* log) {
         }
     }
     if (file_count == 0) {
-        log_error(log, NULL, "no input file", NULL);
+        log_error(log, NULL, "no input file, run with '--help' to display usage", NULL);
         goto error;
     }
     goto exit;

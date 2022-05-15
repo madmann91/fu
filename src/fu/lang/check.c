@@ -860,24 +860,24 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
             super_struct = NULL;
     }
 
-    // Type-check fields
     struct_decl->type = struct_type;
     for (AstNode* field_decl = struct_decl->struct_decl.fields; field_decl; field_decl = field_decl->next) {
-        StructField field;
         if (struct_decl->struct_decl.is_tuple_like) {
-            field = (StructField) {
+            push_on_dyn_array(struct_type->struct_type.fields, &(StructField) {
                 .name = "",
                 .type = infer_type(context, field_decl)
-            };
+            });
         } else if (super_struct && find_struct_field(super_struct, field_decl->field_decl.name)) {
             report_redeclared_inherited_member(context,
                 field_decl->field_decl.name,
                 struct_type->struct_type.super_type,
                 &field_decl->file_loc);
-        } else
-            field = infer_field_decl(context, field_decl);
-        push_on_dyn_array(struct_type->struct_type.fields, &field);
+        } else {
+            StructField field = infer_field_decl(context, field_decl);
+            push_on_dyn_array(struct_type->struct_type.fields, &field);
+        }
     }
+
     return freeze_struct_type(context->type_table, struct_type);
 }
 

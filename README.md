@@ -1,4 +1,4 @@
-# Fu ![build-and-test](https://github.com/madmann91/fu/actions/workflows/cmake.yml/badge.svg)
+# Fu ![build-and-test](https://github.com/madmann91/fu/actions/workflows/build_and_test.yml/badge.svg)
 
 Fu is a simple functional language, whose name is inspired by Dr. Fu Manchu in the Sax Rohmer book series of the same name.
 

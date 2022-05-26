@@ -108,17 +108,6 @@ static inline void print_decl_head(
         print_many_asts_with_delim(state, "[", ", ", "]", type_params);
 }
 
-static inline void print_kind(FormatState* state, Kind kind) {
-    const char* keyword = NULL;
-    switch (kind) {
-        case KIND_TYPE: keyword = "type"; break;
-        case KIND_NAT:  keyword = "nat";  break;
-        default:
-            return;
-    }
-    print_keyword(state, keyword);
-}
-
 void print_ast(FormatState* state, const AstNode* ast_node) {
     if (ast_node->attrs)
         print_many_asts_with_delim(state, "#[", ", ", "] ", ast_node->attrs);
@@ -165,6 +154,12 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
                 { .f64 = ast_node->float_literal.val },
                 { .style = reset_style }
             });
+            break;
+        case AST_KIND_NAT:
+            print_keyword(state, "nat");
+            break;
+        case AST_KIND_TYPE:
+            print_keyword(state, "type");
             break;
 #define f(name, ...) case AST_TYPE_##name:
         PRIM_TYPE_LIST(f)
@@ -217,9 +212,9 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             break;
         case AST_TYPE_PARAM:
             format(state, "{s}", (FormatArg[]) { { .s = ast_node->type_param.name } });
-            if (ast_node->type_param.kind != KIND_TYPE) {
+            if (ast_node->type_param.kind) {
                 format(state, ": ", NULL);
-                print_kind(state, ast_node->type_param.kind);
+                print_ast(state, ast_node->type_param.kind);
             }
             break;
         case AST_TYPE_DECL:

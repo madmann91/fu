@@ -41,13 +41,13 @@ static void pop_decl(TypingContext* context, AstNode* decl) {
     remove_from_hash_table(&context->visited_decls, ptr, sizeof(AstNode*));
 }
 
-static const Type* apply_type_app(TypeTable* type_table, const Type* type, const Type* type_app) {
-    if (type_app->tag != TYPE_APP)
+static const Type* apply_type(TypeTable* type_table, const Type* type, const Type* app_type) {
+    if (app_type->tag != TYPE_APP)
         return type;
     return replace_types(type_table, type,
-        get_type_params(skip_type_app(type_app)),
-        type_app->type_app.args,
-        type_app->type_app.arg_count);
+        get_type_params(skip_app_type(app_type)),
+        app_type->app.args,
+        app_type->app.arg_count);
 }
 
 static const Type** check_many(
@@ -161,12 +161,14 @@ static const Type* report_missing_member(TypingContext* context, const char* nam
 }
 
 static const Type* report_type_expected(TypingContext* context, const Type* type, const FileLoc* file_loc) {
-    log_error(context->log, file_loc, "expected type, but got value with type '{t}'", (FormatArg[]) { { .t = type } });
+    if (!type->contains_error)
+        log_error(context->log, file_loc, "expected type, but got value with type '{t}'", (FormatArg[]) { { .t = type } });
     return make_error_type(context->type_table);
 }
 
 static const Type* report_value_expected(TypingContext* context, const Type* type, const FileLoc* file_loc) {
-    log_error(context->log, file_loc, "expected value, but got type '{t}'", (FormatArg[]) { { .t = type } });
+    if (!type->contains_error)
+        log_error(context->log, file_loc, "expected value, but got type '{t}'", (FormatArg[]) { { .t = type } });
     return make_error_type(context->type_table);
 }
 
@@ -227,7 +229,7 @@ static const Type* check_type_args(
         push_on_dyn_array(args, &arg);
     }
 
-    const Type* applied_type = make_type_app(context->type_table, type, args, type_param_count);
+    const Type* applied_type = make_app_type(context->type_table, type, args, type_param_count);
     free_dyn_array(args);
     return applied_type;
 }
@@ -241,39 +243,40 @@ static const Type* infer_next_path_elem(TypingContext* context, AstNode* prev_el
 
     bool is_type_expected = false;
     AstNode* next_elem = prev_elem->next;
-    const Type* inner_type = skip_type_app(prev_elem->type);
+    const Type* inner_type = skip_app_type(prev_elem->type);
     switch(inner_type->tag) {
         case TYPE_STRUCT: {
             const StructField* field = find_struct_field(inner_type, next_elem->path_elem.name);
             if (!field) goto missing_member;
-            next_elem->path_elem.index = field - inner_type->struct_type.fields;
+            next_elem->path_elem.index = field - inner_type->struct_.fields;
             next_elem->path_elem.is_type = false;
-            next_elem->type = apply_type_app(context->type_table, field->type, prev_elem->type);
+            next_elem->type = apply_type(context->type_table, field->type, prev_elem->type);
             break;
         }
         case TYPE_ENUM: {
             const EnumOption* option = find_enum_option(inner_type, next_elem->path_elem.name);
             if (!option) goto missing_member;
             const Type* param_type = option->param_type
-                ? apply_type_app(context->type_table, option->param_type, prev_elem->type) : NULL;
+                ? apply_type(context->type_table, option->param_type, prev_elem->type) : NULL;
             bool is_struct_like = is_struct_like_option(option);
-            next_elem->path_elem.index = option - inner_type->enum_type.options;
+            next_elem->path_elem.index = option - inner_type->enum_.options;
             next_elem->path_elem.is_type = is_struct_like;
             next_elem->type = is_struct_like
                 ? param_type : make_enum_constructor_type(context->type_table, prev_elem->type, param_type);
             is_type_expected = true;
             break;
         }
-        case TYPE_SIGNATURE: {
-            const SignatureMember* member = find_signature_member(inner_type, next_elem->path_elem.name);
-            if (!member) goto missing_member;
-            next_elem->path_elem.index = member - inner_type->signature.members;
-            next_elem->path_elem.is_type = member->is_type;
-            next_elem->type = member->type;
+        default: {
+            if (inner_type->var.kind->tag != KIND_SIGNATURE)
+                goto missing_member;
+            const SignatureMember* member = find_signature_member(inner_type->var.kind, next_elem->path_elem.name);
+            if (!member)
+                goto missing_member;
+            next_elem->path_elem.index = member - inner_type->var.kind->signature.members;
+            next_elem->path_elem.is_type = member->kind != NULL;
+            next_elem->type = apply_type(context->type_table, member->type, prev_elem->type);
             break;
         }
-        default:
-            goto missing_member;
     }
 
     // Make sure we do not perform accesses on a type. For instance, given the type
@@ -295,16 +298,16 @@ missing_member:
 }
 
 static const Type* make_tuple_like_struct_constructor(TypeTable* type_table, const Type* type) {
-    const Type* struct_type = skip_type_app(type);
+    const Type* struct_type = skip_app_type(type);
     assert(is_tuple_like_struct_type(struct_type));
 
     // Using the tuple-like name as a value results produces a constructor that
     // types as a function (only for tuple-like structures with parameters).
-    if (struct_type->struct_type.field_count > 0) {
-        const Type** arg_types = malloc_or_die(sizeof(Type*) * struct_type->struct_type.field_count);
-        for (size_t i = 0, n = struct_type->struct_type.field_count; i < n; ++i)
-            arg_types[i] = apply_type_app(type_table, struct_type->struct_type.fields[i].type, type);
-        const Type* param_type = make_tuple_type(type_table, arg_types, struct_type->struct_type.field_count);
+    if (struct_type->struct_.field_count > 0) {
+        const Type** arg_types = malloc_or_die(sizeof(Type*) * struct_type->struct_.field_count);
+        for (size_t i = 0, n = struct_type->struct_.field_count; i < n; ++i)
+            arg_types[i] = apply_type(type_table, struct_type->struct_.fields[i].type, type);
+        const Type* param_type = make_tuple_type(type_table, arg_types, struct_type->struct_.field_count);
         free(arg_types);
         return make_fun_type(type_table, param_type, type);
     }
@@ -320,7 +323,7 @@ static const Type* infer_path_elems(TypingContext* context, AstNode* path_elem, 
     // A tuple-like structure like `Foo` can either be a type or a value,
     // depending on where it appears. We deal with this ambiguity here.
     if (!is_type_expected && path_elem->path_elem.is_type &&
-        is_tuple_like_struct_type(skip_type_app(path_elem->type)))
+        is_tuple_like_struct_type(skip_app_type(path_elem->type)))
     {
         path_elem->type = make_tuple_like_struct_constructor(context->type_table, path_elem->type);
         path_elem->path_elem.is_type = false;
@@ -379,20 +382,32 @@ static const Type* check_tuple(
     assert(expected_type->tag == TYPE_TUPLE);
 
     size_t arg_count = count_ast_nodes(tuple->tuple_expr.args);
-    if (expected_type->tuple_type.arg_count != arg_count) {
+    if (expected_type->tuple.arg_count != arg_count) {
         log_error(context->log, &tuple->file_loc,
             "expected tuple with {u} argument(s), but got {u}",
-            (FormatArg[]) { { .u = expected_type->tuple_type.arg_count }, { .u = arg_count } });
+            (FormatArg[]) { { .u = expected_type->tuple.arg_count }, { .u = arg_count } });
         return make_error_type(context->type_table);
     }
 
     const Type** arg_types = check_many(context,
         tuple->tuple_expr.args,
-        expected_type->tuple_type.args,
+        expected_type->tuple.args,
         arg_count, check_arg);
     tuple->type = make_tuple_type(context->type_table, arg_types, arg_count);
     free(arg_types);
     return tuple->type;
+}
+
+const Kind* infer_kind(TypingContext* context, AstNode* kind) {
+    switch (kind->tag) {
+        default:
+            assert(false && "invalid kind");
+            // fallthrough
+        case AST_KIND_TYPE:
+            return make_type_kind(context->type_table);
+        case AST_KIND_NAT:
+            return make_nat_kind(context->type_table);
+    }
 }
 
 static const Type* infer_type_with_noret(TypingContext* context, AstNode* type, bool accept_noret) {
@@ -473,9 +488,9 @@ static const Type* check_call(
     if (!expect_type_with_tag(context, callee_type, TYPE_FUN, "function", callee_loc))
         return make_error_type(context->type_table);
     assert(callee_type->tag == TYPE_FUN);
-    check_expr(context, arg, callee_type->fun_type.dom);
+    check_expr(context, arg, callee_type->fun.dom);
     return expect_type(context,
-        callee_type->fun_type.codom, expected_type, true, &call_or_op->file_loc);
+        callee_type->fun.codom, expected_type, true, &call_or_op->file_loc);
 }
 
 static const Type* check_call_expr(TypingContext* context, AstNode* call_expr, const Type* expected_type) {
@@ -524,12 +539,12 @@ static const Type* infer_logic_expr(TypingContext* context, AstNode* logic_expr)
 }
 
 static const Type* check_struct_expr(TypingContext* context, AstNode* struct_expr, const Type* expected_type) {
-    const Type* type_app = infer_type(context, struct_expr->struct_expr.left);
-    const Type* struct_type = skip_type_app(type_app);
+    const Type* type = infer_type(context, struct_expr->struct_expr.left);
+    const Type* struct_type = skip_app_type(type);
     if (!expect_type_with_tag(context, struct_type, TYPE_STRUCT, "structure", &struct_expr->file_loc))
         return struct_expr->type = make_error_type(context->type_table);
 
-    bool* seen = calloc_or_die(struct_type->struct_type.field_count, sizeof(bool));
+    bool* seen = calloc_or_die(struct_type->struct_.field_count, sizeof(bool));
     for (AstNode* field_expr = struct_expr->struct_expr.fields; field_expr; field_expr = field_expr->next) {
         const StructField* field = find_struct_field(struct_type, field_expr->field_expr.name);
         if (!field) {
@@ -538,7 +553,7 @@ static const Type* check_struct_expr(TypingContext* context, AstNode* struct_exp
         }
 
         // Check that this field is not initialized twice
-        size_t field_index = field - struct_type->struct_type.fields;
+        size_t field_index = field - struct_type->struct_.fields;
         if (seen[field_index]) {
             log_error(context->log, &field_expr->file_loc,
                 "field '{s}' is specified more than once",
@@ -549,31 +564,31 @@ static const Type* check_struct_expr(TypingContext* context, AstNode* struct_exp
         field_expr->field_expr.index = field_index;
 
         // Check that the value of the field matches its type
-        const Type* field_type = apply_type_app(context->type_table, field->type, type_app);
+        const Type* field_type = apply_type(context->type_table, field->type, type);
         check_expr(context, field_expr->field_expr.val, field_type);
     }
 
     // Check that all fields have an initializer
-    for (size_t i = 0; i < struct_type->struct_type.field_count; ++i) {
-        if (!seen[i] && !struct_type->struct_type.fields[i].has_default) {
+    for (size_t i = 0; i < struct_type->struct_.field_count; ++i) {
+        if (!seen[i] && !struct_type->struct_.fields[i].has_default) {
             log_error(context->log, &struct_expr->file_loc,
                 "missing initializer for field '{s}'",
-                (FormatArg[]) { { .s = struct_type->struct_type.fields[i].name } });
+                (FormatArg[]) { { .s = struct_type->struct_.fields[i].name } });
         }
     }
 
-    const Type* result_type = type_app;
-    if (struct_type->struct_type.parent_enum) {
+    const Type* result_type = type;
+    if (struct_type->struct_.parent_enum) {
         // If the struct expression constructs an enumeration type,
         // return that instead of the structure type.
-        if (type_app->tag == TYPE_APP) {
-            result_type = make_type_app(
+        if (type->tag == TYPE_APP) {
+            result_type = make_app_type(
                 context->type_table,
-                struct_type->struct_type.parent_enum,
-                type_app->type_app.args,
-                type_app->type_app.arg_count);
+                struct_type->struct_.parent_enum,
+                type->app.args,
+                type->app.arg_count);
         } else
-            result_type = struct_type->struct_type.parent_enum;
+            result_type = struct_type->struct_.parent_enum;
     }
     struct_expr->type = expect_type(context, result_type, expected_type, true, &struct_expr->file_loc);
     goto cleanup;
@@ -588,16 +603,16 @@ cleanup:
 static const Type* check_member_expr(TypingContext* context, AstNode* member_expr, const Type* expected_type) {
     const FileLoc* left_loc = &member_expr->member_expr.left->file_loc;
     const Type* left_type = infer_expr(context, member_expr->member_expr.left);
-    const Type* inner_type = skip_type_app(left_type);
+    const Type* inner_type = skip_app_type(left_type);
 
     const Type* member_type = NULL;
     if (member_expr->member_expr.elems_or_index->tag == AST_INT_LITERAL) {
         size_t index = member_expr->member_expr.elems_or_index->int_literal.val;
         if (is_tuple_like_struct_type(inner_type)) {
-            member_type = apply_type_app(
-                context->type_table, inner_type->struct_type.fields[index].type, left_type);
+            member_type = apply_type(
+                context->type_table, inner_type->struct_.fields[index].type, left_type);
         } else if (expect_type_with_tag(context, left_type, TYPE_TUPLE, "tuple or tuple-like structure", left_loc))
-            member_type = inner_type->tuple_type.args[index];
+            member_type = inner_type->tuple.args[index];
     } else if (expect_type_with_tag(context, inner_type, TYPE_STRUCT, "structure", left_loc)) {
         assert(member_expr->member_expr.elems_or_index->tag == AST_PATH_ELEM);
         AstNode first_elem = {
@@ -666,9 +681,7 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
                 make_unknown_type(context->type_table));
             if (expected_type->tag != TYPE_FUN)
                 return expr->type = report_type_mismatch(context, "function expression", expected_type, &expr->file_loc);
-            return check_fun_expr(context, expr,
-                expected_type->fun_type.dom,
-                expected_type->fun_type.codom);
+            return check_fun_expr(context, expr, expected_type->fun.dom, expected_type->fun.codom);
         }
         case AST_BREAK_EXPR:
         case AST_CONTINUE_EXPR: {
@@ -780,7 +793,7 @@ static const Type* check_pattern_and_expr(
     {
         size_t arg_count = count_ast_nodes(pattern->tuple_pattern.args);
         if (arg_count == count_ast_nodes(expr->tuple_expr.args) &&
-            (expected_type->tag != TYPE_TUPLE || expected_type->tuple_type.arg_count == arg_count))
+            (expected_type->tag != TYPE_TUPLE || expected_type->tuple.arg_count == arg_count))
         {
             AstNode* expr_arg = expr->tuple_expr.args;
             AstNode* pattern_arg = pattern->tuple_pattern.args;
@@ -789,7 +802,7 @@ static const Type* check_pattern_and_expr(
                 ++i, expr_arg = expr_arg->next, pattern_arg = pattern_arg->next)
             {
                 const Type* arg_type = expected_type->tag == TYPE_TUPLE
-                    ? expected_type->tuple_type.args[i]
+                    ? expected_type->tuple.args[i]
                     : make_unknown_type(context->type_table);
                 arg_types[i] = check_pattern_and_expr(context, pattern_arg, expr_arg, arg_type);
             }
@@ -811,9 +824,10 @@ static const Type* infer_const_or_var_decl(TypingContext* context, AstNode* decl
 }
 
 static const Type* infer_type_param(TypingContext* context, AstNode* type_param) {
-    return type_param->type = make_type_var(
-        context->type_table,
-        type_param->type_param.name, type_param->type_param.kind);
+    const Kind* kind = type_param->type_param.kind
+        ? infer_kind(context, type_param->type_param.kind)
+        : make_type_kind(context->type_table);
+    return type_param->type = make_var_type(context->type_table, type_param->type_param.name, kind);
 }
 
 static void infer_type_params(TypingContext* context, AstNode* type_params, const Type** type_vars) {
@@ -836,24 +850,24 @@ static StructField infer_field_decl(TypingContext* context, AstNode* field_decl)
 
 static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_decl) {
     Type* struct_type = make_struct_type(context->type_table, struct_decl->struct_decl.name);
-    infer_type_params(context, struct_decl->struct_decl.type_params, struct_type->struct_type.type_params);
+    infer_type_params(context, struct_decl->struct_decl.type_params, struct_type->struct_.type_params);
 
-    struct_type->struct_type.is_tuple_like = struct_decl->struct_decl.is_tuple_like;
+    struct_type->struct_.is_tuple_like = struct_decl->struct_decl.is_tuple_like;
 
     // Add inherited fields to the structure
     const Type* super_struct = NULL;
     if (struct_decl->struct_decl.super_type) {
         const Type* super_type = infer_type(context, struct_decl->struct_decl.super_type);
-        super_struct = skip_type_app(super_type);
+        super_struct = skip_app_type(super_type);
         if (expect_type_with_tag(
             context, super_struct, TYPE_STRUCT, "structure", &struct_decl->struct_decl.super_type->file_loc))
         {
-            struct_type->struct_type.super_type = super_type;
-            for (size_t i = 0; i < super_struct->struct_type.field_count; ++i) {
-                StructField field = super_struct->struct_type.fields[i];
-                field.type = apply_type_app(context->type_table, field.type, super_type);
+            struct_type->struct_.super_type = super_type;
+            for (size_t i = 0; i < super_struct->struct_.field_count; ++i) {
+                StructField field = super_struct->struct_.fields[i];
+                field.type = apply_type(context->type_table, field.type, super_type);
                 field.is_inherited = true;
-                push_on_dyn_array(struct_type->struct_type.fields, &field);
+                push_on_dyn_array(struct_type->struct_.fields, &field);
             }
         }
         else
@@ -863,18 +877,18 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
     struct_decl->type = struct_type;
     for (AstNode* field_decl = struct_decl->struct_decl.fields; field_decl; field_decl = field_decl->next) {
         if (struct_decl->struct_decl.is_tuple_like) {
-            push_on_dyn_array(struct_type->struct_type.fields, &(StructField) {
+            push_on_dyn_array(struct_type->struct_.fields, &(StructField) {
                 .name = "",
                 .type = infer_type(context, field_decl)
             });
         } else if (super_struct && find_struct_field(super_struct, field_decl->field_decl.name)) {
             report_redeclared_inherited_member(context,
                 field_decl->field_decl.name,
-                struct_type->struct_type.super_type,
+                struct_type->struct_.super_type,
                 &field_decl->file_loc);
         } else {
             StructField field = infer_field_decl(context, field_decl);
-            push_on_dyn_array(struct_type->struct_type.fields, &field);
+            push_on_dyn_array(struct_type->struct_.fields, &field);
         }
     }
 
@@ -889,42 +903,42 @@ static const Type* infer_option_decl(TypingContext* context, AstNode* option_dec
 
     // If the option is struct-like, we need to create an adequate structure type to represent it
     Type* struct_type = make_struct_type(context->type_table, option_decl->option_decl.name);
-    copy_dyn_array(struct_type->struct_type.type_params, enum_type->enum_type.type_params);
-    struct_type->struct_type.parent_enum = enum_type;
+    copy_dyn_array(struct_type->struct_.type_params, enum_type->enum_.type_params);
+    struct_type->struct_.parent_enum = enum_type;
     for (AstNode* field_decl = option_decl->option_decl.param_type; field_decl; field_decl = field_decl->next) {
         StructField field = infer_field_decl(context, field_decl);
-        push_on_dyn_array(struct_type->struct_type.fields, &field);
+        push_on_dyn_array(struct_type->struct_.fields, &field);
     }
 
     // We may need to wrap the structure type into a type application if the enumeration is polymorphic
     const Type* option_type = freeze_struct_type(context->type_table, struct_type);
-    size_t type_param_count = get_dyn_array_size(enum_type->enum_type.type_params);
+    size_t type_param_count = get_dyn_array_size(enum_type->enum_.type_params);
     if (type_param_count > 0) {
-        option_type = make_type_app(
-            context->type_table, option_type, enum_type->enum_type.type_params, type_param_count);
+        option_type = make_app_type(
+            context->type_table, option_type, enum_type->enum_.type_params, type_param_count);
     }
     return option_decl->type = option_type;
 }
 
 static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
     Type* enum_type = make_enum_type(context->type_table, enum_decl->enum_decl.name);
-    infer_type_params(context, enum_decl->enum_decl.type_params, enum_type->enum_type.type_params);
+    infer_type_params(context, enum_decl->enum_decl.type_params, enum_type->enum_.type_params);
 
     // Add inherited options, if any
     const Type* sub_enum = NULL;
     if (enum_decl->enum_decl.sub_type) {
         const Type* sub_type = infer_type(context, enum_decl->enum_decl.sub_type);
-        sub_enum = skip_type_app(sub_type);
+        sub_enum = skip_app_type(sub_type);
         if (expect_type_with_tag(
             context, sub_enum, TYPE_ENUM, "enumeration", &enum_decl->enum_decl.sub_type->file_loc))
         {
-            enum_type->enum_type.sub_type = sub_type;
-            for (size_t i = 0; i < sub_enum->enum_type.option_count; ++i) {
-                EnumOption option = sub_enum->enum_type.options[i];
+            enum_type->enum_.sub_type = sub_type;
+            for (size_t i = 0; i < sub_enum->enum_.option_count; ++i) {
+                EnumOption option = sub_enum->enum_.options[i];
                 if (option.param_type)
-                    option.param_type = apply_type_app(context->type_table, option.param_type, sub_type);
+                    option.param_type = apply_type(context->type_table, option.param_type, sub_type);
                 option.is_inherited = true;
-                push_on_dyn_array(enum_type->enum_type.options, &option);
+                push_on_dyn_array(enum_type->enum_.options, &option);
             }
         }
         else
@@ -937,10 +951,10 @@ static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
         if (sub_enum && find_enum_option(sub_enum, option_decl->option_decl.name)) {
             report_redeclared_inherited_member(context,
                 option_decl->option_decl.name,
-                enum_type->enum_type.sub_type,
+                enum_type->enum_.sub_type,
                 &option_decl->file_loc);
         } else {
-            push_on_dyn_array(enum_type->enum_type.options, &(EnumOption) {
+            push_on_dyn_array(enum_type->enum_.options, &(EnumOption) {
                 .name = option_decl->option_decl.name,
                 .param_type = infer_option_decl(context, option_decl, enum_type)
             });
@@ -953,7 +967,7 @@ static const Type* infer_type_decl(TypingContext* context, AstNode* type_decl) {
     const Type** type_params = new_dyn_array(sizeof(Type*));
     infer_type_params(context, type_decl->type_decl.type_params, type_params);
     const Type* aliased_type = infer_type(context, type_decl->type_decl.aliased_type);
-    type_decl->type = make_type_alias(
+    type_decl->type = make_alias_type(
         context->type_table,
         type_decl->type_decl.name,
         type_params, get_dyn_array_size(type_params),
@@ -991,26 +1005,29 @@ static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
     infer_type_params(context, mod_decl->mod_decl.type_params, type_params);
     for (AstNode* decl = mod_decl->mod_decl.members; decl; decl = decl->next) {
         infer_decl(context, decl);
-        if (decl->external_type) {
-            bool is_type =
-                decl->tag == AST_SIG_DECL ||
-                decl->tag == AST_STRUCT_DECL ||
-                decl->tag == AST_ENUM_DECL ||
-                decl->tag == AST_TYPE_DECL;
-            bool is_opaque = decl->tag == AST_TYPE_DECL && !decl->type_decl.aliased_type;
-            push_on_dyn_array(members, &(SignatureMember) {
-                .name = get_decl_name(decl),
-                .type = is_opaque ? NULL : decl->type,
-                .is_type = is_type,
-            });
-        }
+        if (!decl->external_type)
+            continue;
+        bool is_type =
+            decl->tag == AST_SIG_DECL ||
+            decl->tag == AST_STRUCT_DECL ||
+            decl->tag == AST_ENUM_DECL ||
+            decl->tag == AST_TYPE_DECL;
+        bool is_opaque = decl->tag == AST_TYPE_DECL && !decl->type_decl.aliased_type;
+        push_on_dyn_array(members, &(SignatureMember) {
+            .name = get_decl_name(decl),
+            .type = is_opaque ? NULL : decl->external_type,
+            .kind = is_type ? make_type_kind(context->type_table) : NULL,
+        });
     }
 
-    mod_decl->type = make_signature_type(context->type_table,
-        type_params, get_dyn_array_size(type_params),
-        members, get_dyn_array_size(members));
+    const Kind* kind = make_signature_kind(context->type_table, members, get_dyn_array_size(members));
+    size_t type_param_count = get_dyn_array_size(members);
+    if (type_param_count > 0)
+        kind = make_functor_kind(context->type_table, type_params, type_param_count, kind);
     free_dyn_array(type_params);
     free_dyn_array(members);
+
+    mod_decl->type = make_var_type(context->type_table, mod_decl->mod_decl.name, kind);
     return mod_decl->type;
 }
 

@@ -26,6 +26,7 @@ void bind_decl(Env*, AstNode*);
 void bind_const_pattern(Env*, AstNode*);
 void bind_non_const_pattern(Env*, AstNode*);
 void bind_expr(Env*, AstNode*);
+void bind_kind(Env*, AstNode*);
 void bind_type(Env*, AstNode*);
 void bind_program(Env*, AstNode*);
 

@@ -334,19 +334,19 @@ static inline AstNode* parse_block_expr(Parser* parser) {
     });
 }
 
-static Kind parse_kind(Parser* parser) {
+static AstNode* parse_kind(Parser* parser) {
+    FilePos begin = parser->ahead->file_loc.begin;
     if (accept_token(parser, TOKEN_TYPE))
-        return KIND_TYPE;
+        return make_ast_node(parser, &begin, &(AstNode) { .tag = AST_KIND_TYPE });
     if (accept_token(parser, TOKEN_NAT))
-        return KIND_NAT;
-    parse_error(parser, "kind");
-    return KIND_TYPE;
+        return make_ast_node(parser, &begin, &(AstNode) { .tag = AST_KIND_NAT });
+    return parse_path(parser);
 }
 
 static AstNode* parse_type_param(Parser* parser) {
     FilePos begin = parser->ahead->file_loc.begin;
     const char* name = parse_ident(parser);
-    Kind kind = KIND_TYPE;
+    AstNode* kind = NULL;
     if (accept_token(parser, TOKEN_COLON))
         kind = parse_kind(parser);
     return make_ast_node(parser, &begin, &(AstNode) {

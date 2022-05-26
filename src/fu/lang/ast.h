@@ -70,6 +70,9 @@ typedef enum {
     // Path
     AST_PATH_ELEM,
     AST_PATH,
+    // Kinds
+    AST_KIND_TYPE,
+    AST_KIND_NAT,
     // Types
     AST_TUPLE_TYPE,
     AST_ARRAY_TYPE,
@@ -201,7 +204,7 @@ struct AstNode {
         } member_expr;
         struct {
             const char* name;
-            Kind kind;
+            AstNode* kind;
         } type_param;
         struct {
             const char* name;

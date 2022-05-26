@@ -91,9 +91,9 @@ bool is_subtype(const Type* left, const Type* right) {
     if (left->tag != right->tag)
         return false;
 
-    if (left->tag == TYPE_TUPLE && left->tuple_type.arg_count == right->tuple_type.arg_count) {
-        for (size_t i = 0; i < left->tuple_type.arg_count; ++i) {
-            if (!is_subtype(left->tuple_type.args[i], right->tuple_type.args[i]))
+    if (left->tag == TYPE_TUPLE && left->tuple.arg_count == right->tuple.arg_count) {
+        for (size_t i = 0; i < left->tuple.arg_count; ++i) {
+            if (!is_subtype(left->tuple.args[i], right->tuple.args[i]))
                 return false;
         }
         return true;
@@ -101,35 +101,35 @@ bool is_subtype(const Type* left, const Type* right) {
 
     if (left->tag == TYPE_FUN) {
         return
-            is_subtype(right->fun_type.dom, left->fun_type.dom) &&
-            is_subtype(left->fun_type.codom, right->fun_type.codom);
+            is_subtype(right->fun.dom, left->fun.dom) &&
+            is_subtype(left->fun.codom, right->fun.codom);
     }
 
     return false;
 }
 
 bool is_non_const_ptr_type(const Type* type) {
-    return type->tag == TYPE_PTR && !type->ptr_type.is_const;
+    return type->tag == TYPE_PTR && !type->ptr.is_const;
 }
 
 bool is_struct_like_option(const EnumOption* option) {
     if (!option->param_type)
         return false;
-    const Type* param_type = skip_type_app(option->param_type);
-    return param_type->tag == TYPE_STRUCT && param_type->struct_type.parent_enum;
+    const Type* param_type = skip_app_type(option->param_type);
+    return param_type->tag == TYPE_STRUCT && param_type->struct_.parent_enum;
 }
 
 bool is_tuple_like_struct_type(const Type* type) {
-    return type->tag == TYPE_STRUCT && type->struct_type.is_tuple_like;
+    return type->tag == TYPE_STRUCT && type->struct_.is_tuple_like;
 }
 
-const Type* skip_type_app(const Type* type) {
-    return type->tag == TYPE_APP ? type->type_app.applied_type : type;
+const Type* skip_app_type(const Type* type) {
+    return type->tag == TYPE_APP ? type->app.applied_type : type;
 }
 
 const Type** get_type_params(const Type* type) {
-    if (type->tag == TYPE_STRUCT) return type->struct_type.type_params;
-    if (type->tag == TYPE_ENUM)   return type->enum_type.type_params;
+    if (type->tag == TYPE_STRUCT) return type->struct_.type_params;
+    if (type->tag == TYPE_ENUM)   return type->enum_.type_params;
     return NULL;
 }
 
@@ -147,19 +147,19 @@ size_t get_prim_type_bitwidth(TypeTag tag) {
 }
 
 size_t get_type_param_count(const Type* type) {
-    if (type->tag == TYPE_STRUCT) return type->struct_type.type_param_count;
-    if (type->tag == TYPE_ENUM)   return type->enum_type.type_param_count;
+    if (type->tag == TYPE_STRUCT) return type->struct_.type_param_count;
+    if (type->tag == TYPE_ENUM)   return type->enum_.type_param_count;
     return 0;
 }
 
 size_t get_type_inheritance_depth(const Type* type) {
     size_t depth = 0;
     while (true) {
-        type = skip_type_app(type);
-        if (type->tag == TYPE_STRUCT && type->struct_type.super_type)
-            type = type->struct_type.super_type, depth++;
-        else if (type->tag == TYPE_ENUM && type->enum_type.sub_type)
-            type = type->enum_type.sub_type, depth++;
+        type = skip_app_type(type);
+        if (type->tag == TYPE_STRUCT && type->struct_.super_type)
+            type = type->struct_.super_type, depth++;
+        else if (type->tag == TYPE_ENUM && type->enum_.sub_type)
+            type = type->enum_.sub_type, depth++;
         else
             break;
     }
@@ -204,9 +204,9 @@ static inline void* safe_bsearch(
     return bsearch(key, elems, elem_count, elem_size, compare_elems);
 }
 
-const SignatureMember* find_signature_member(const Type* signature, const char* name) {
-    assert(signature->tag == TYPE_SIGNATURE);
-    return safe_bsearch(&(StructField) { .name = name },
+const SignatureMember* find_signature_member(const Kind* signature, const char* name) {
+    assert(signature->tag == KIND_SIGNATURE);
+    return safe_bsearch(&(SignatureMember) { .name = name },
         signature->signature.members,
         signature->signature.member_count,
         sizeof(SignatureMember),
@@ -216,8 +216,8 @@ const SignatureMember* find_signature_member(const Type* signature, const char* 
 const StructField* find_struct_field(const Type* struct_type, const char* name) {
     assert(struct_type->tag == TYPE_STRUCT);
     return safe_bsearch(&(StructField) { .name = name },
-        struct_type->struct_type.fields,
-        struct_type->struct_type.field_count,
+        struct_type->struct_.fields,
+        struct_type->struct_.field_count,
         sizeof(StructField),
         compare_struct_fields_by_name);
 }
@@ -225,8 +225,8 @@ const StructField* find_struct_field(const Type* struct_type, const char* name) 
 const EnumOption* find_enum_option(const Type* enum_type, const char* name) {
     assert(enum_type->tag == TYPE_ENUM);
     return safe_bsearch(&(EnumOption) { .name = name },
-        enum_type->enum_type.options,
-        enum_type->enum_type.option_count,
+        enum_type->enum_.options,
+        enum_type->enum_.option_count,
         sizeof(EnumOption),
         compare_enum_options_by_name);
 }
@@ -247,17 +247,6 @@ static void print_type_params(FormatState* state, const Type** type_params, size
     format(state, "]", NULL);
 }
 
-static void print_signature_member(FormatState* state, const SignatureMember* member) {
-    format(state, "\n", NULL);
-    print_keyword(state, member->is_type ? "type" : "const");
-    format(state, " {s}", (FormatArg[]) { { .s = member->name } });
-    if (member->type) {
-        format(state, member->is_type ? " = " : ": ", NULL);
-        print_type(state, member->type);
-    }
-    format(state, ";", NULL);
-}
-
 void print_type(FormatState* state, const Type* type) {
     switch (type->tag) {
 #define f(name, str) case TYPE_##name: print_keyword(state, str); break;
@@ -273,61 +262,51 @@ void print_type(FormatState* state, const Type* type) {
             break;
         case TYPE_TUPLE:
             format(state, "(", NULL);
-            print_many_types(state, ", ", type->tuple_type.args, type->tuple_type.arg_count);
+            print_many_types(state, ", ", type->tuple.args, type->tuple.arg_count);
             format(state, ")", NULL);
             break;
         case TYPE_APP:
-            print_type(state, type->type_app.applied_type);
+            print_type(state, type->app.applied_type);
             format(state, "[", NULL);
-            print_many_types(state, ", ", type->type_app.args, type->type_app.arg_count);
+            print_many_types(state, ", ", type->app.args, type->app.arg_count);
             format(state, "]", NULL);
             break;
         case TYPE_ARRAY:
             format(state, "[", NULL);
-            print_type(state, type->array_type.elem_type);
+            print_type(state, type->array.elem_type);
             format(state, "]", NULL);
             break;
         case TYPE_VAR:
-            format(state, "{s}", (FormatArg[]) { { .s = type->type_var.name } });
+            format(state, "{s}", (FormatArg[]) { { .s = type->var.name } });
             break;
         case TYPE_FUN:
             print_keyword(state, "fun");
-            print_type_params(state, type->fun_type.type_params, type->fun_type.type_param_count);
-            if (type->fun_type.dom->tag == TYPE_TUPLE)
-                print_type(state, type->fun_type.dom);
+            print_type_params(state, type->fun.type_params, type->fun.type_param_count);
+            if (type->fun.dom->tag == TYPE_TUPLE)
+                print_type(state, type->fun.dom);
             else {
                 format(state, "(", NULL);
-                print_type(state, type->fun_type.dom);
+                print_type(state, type->fun.dom);
                 format(state, ")", NULL);
             }
             format(state, " -> ", NULL);
-            print_type(state, type->fun_type.codom);
+            print_type(state, type->fun.codom);
             break;
         case TYPE_ENUM:
             print_keyword(state, "enum");
-            format(state, " {s}", (FormatArg[]) { { .s = type->enum_type.name } });
+            format(state, " {s}", (FormatArg[]) { { .s = type->enum_.name } });
             break;
         case TYPE_STRUCT:
             print_keyword(state, "struct");
-            format(state, " {s}", (FormatArg[]) { { .s = type->struct_type.name } });
-            break;
-        case TYPE_SIGNATURE:
-            print_keyword(state, "sig");
-            format(state, " {{ ", NULL);
-            for (size_t i = 0, n = type->signature.member_count; i < n; ++i) {
-                print_signature_member(state, type->signature.members + i);
-                if (i != n - 1)
-                    format(state, ", ", NULL);
-            }
-            format(state, " }", NULL);
+            format(state, " {s}", (FormatArg[]) { { .s = type->struct_.name } });
             break;
         case TYPE_PTR:
             format(state, "&", NULL);
-            if (type->ptr_type.is_const) {
+            if (type->ptr.is_const) {
                 print_keyword(state, "const");
                 format(state, " ", NULL);
             }
-            print_type(state, type->ptr_type.pointee);
+            print_type(state, type->ptr.pointee);
             break;
         default:
             assert(false && "invalid type");

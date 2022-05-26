@@ -299,6 +299,8 @@ void bind_non_const_pattern(Env* env, AstNode* pattern) {
 }
 
 static void bind_type_param(Env* env, AstNode* type_param) {
+    if (type_param->type_param.kind)
+        bind_kind(env, type_param->type_param.kind);
     insert_symbol(env, type_param->type_param.name, type_param);
 }
 
@@ -487,6 +489,20 @@ void bind_expr(Env* env, AstNode* expr) {
             break;
         default:
             assert(false && "invalid expression");
+            break;
+    }
+}
+
+void bind_kind(Env* env, AstNode* kind) {
+    switch (kind->tag) {
+        case AST_KIND_TYPE:
+        case AST_KIND_NAT:
+            break;
+        case AST_PATH:
+            bind_path(env, kind);
+            break;
+        default:
+            assert(false && "invalid kind");
             break;
     }
 }

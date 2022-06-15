@@ -65,6 +65,7 @@ static HashCode hash_type(HashCode hash, const Type* type) {
             hash = hash_uint64(hash, type->app.applied_type->id);
             hash = hash_types(hash, type->app.args, type->app.arg_count);
             break;
+        case KIND_ARROW:
         case TYPE_PI:
             hash = hash_types(hash, type->pi.type_params, type->pi.type_param_count);
             hash = hash_uint64(hash, type->pi.body->id);
@@ -136,6 +137,7 @@ static bool compare_types(const Type* left, const Type* right) {
                 !memcmp(left->app.args, right->app.args,
                     sizeof(Type*) * left->app.arg_count);
         }
+        case KIND_ARROW:
         case TYPE_PI: {
             return
                 left->pi.type_param_count == right->pi.type_param_count &&
@@ -227,6 +229,7 @@ static const Type* get_or_insert_type(TypeTable* type_table, const Type* type) {
             new_type->contains_unknown |= type->fun.dom->contains_unknown;
             new_type->contains_unknown |= type->fun.codom->contains_unknown;
             break;
+        case KIND_ARROW:
         case TYPE_PI:
             new_type->pi.type_params =
                 copy_types(type_table, type->pi.type_params, type->pi.type_param_count);
@@ -272,7 +275,14 @@ const Type* make_arrow_kind(
     size_t type_param_count,
     const Type* body)
 {
-    return make_fun_type(type_table, make_tuple_type(type_table, type_params, type_param_count), body);
+    return get_or_insert_type(type_table, &(Type) {
+        .tag = KIND_ARROW,
+        .arrow = {
+            .type_params = type_params,
+            .type_param_count = type_param_count,
+            .body = body
+        }
+    });
 }
 
 #define LEXICOGRAPHICAL_COMPARE(l, r) \

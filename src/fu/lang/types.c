@@ -217,20 +217,7 @@ bool is_sub_enum_type(TypeTable* type_table, const Type* left, const Type* right
 }
 
 bool is_kind_level_type(const Type* type) {
-    if (type->tag == KIND_STAR)
-        return true;
-    else if (type->tag == TYPE_TUPLE) {
-        for (size_t i = 0; i < type->tuple.arg_count; ++i) {
-            if (is_kind_level_type(type->tuple.args[i]))
-                return true;
-        }
-    }
-    else if (type->tag == TYPE_FUN) {
-        return
-            is_kind_level_type(type->fun.dom) ||
-            is_kind_level_type(type->fun.codom);
-    }
-    return false;
+    return type->tag == KIND_STAR || type->tag == KIND_ARROW;
 }
 
 const Type* skip_app_type(const Type* type) {
@@ -349,18 +336,37 @@ static void print_many_types(FormatState* state, const char* sep, const Type** t
     }
 }
 
+static void print_many_types_with_delim(
+    FormatState* state,
+    const char* open,
+    const char* sep,
+    const char* close,
+    const Type** types,
+    size_t count)
+{
+    format(state, open, NULL);
+    print_many_types(state, sep, types, count);
+    format(state, close, NULL);
+}
+
 static void print_type_params(FormatState* state, const Type** type_params, size_t type_param_count) {
-    if (type_param_count == 0)
-        return;
-    format(state, "[", NULL);
-    print_many_types(state, ", ", type_params, type_param_count);
-    format(state, "]", NULL);
+    if (type_param_count != 0)
+        print_many_types_with_delim(state, "[", ", ", "]", type_params, type_param_count);
 }
 
 void print_type(FormatState* state, const Type* type) {
     switch (type->tag) {
 #define f(name, str) case TYPE_##name: print_keyword(state, str); break;
         PRIM_TYPE_LIST(f);
+        case KIND_ARROW:
+            if (type->arrow.type_param_count == 1 && type->arrow.type_params[0]->tag == KIND_STAR)
+                print_type(state, type->arrow.type_params[0]);
+            else {
+                print_many_types_with_delim(state, "(", ", ", ") => ",
+                    type->arrow.type_params, type->arrow.type_param_count);
+            }
+            print_type(state, type->arrow.body);
+            break;
         case TYPE_UNKNOWN:
             format(state, "?", NULL);
             break;

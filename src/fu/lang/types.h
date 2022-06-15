@@ -36,10 +36,11 @@ typedef enum TypeVariance {
 } TypeVariance;
 
 typedef enum {
-    KIND_STAR,
 #define f(name, ...) TYPE_##name,
     PRIM_TYPE_LIST(f)
 #undef f
+    KIND_STAR,
+    KIND_ARROW,
     TYPE_UNKNOWN,
     TYPE_SIGNATURE,
     TYPE_STRUCT,
@@ -86,7 +87,7 @@ struct Type {
             const Type** type_params;
             size_t type_param_count;
             const Type* body;
-        } arrow;
+        } pi, arrow;
         struct {
             const char* name;
             const Type** type_params;
@@ -134,11 +135,6 @@ struct Type {
             const Type** args;
             size_t arg_count;
         } app;
-        struct {
-            const Type** type_params;
-            size_t type_param_count;
-            const Type* body;
-        } pi;
         struct {
             const Type* dom;
             const Type* codom;

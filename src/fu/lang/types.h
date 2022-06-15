@@ -8,8 +8,8 @@
 #include <stdbool.h>
 
 /*
- * Front-end types, including a simple module system and HM-style polymorphism.
- * Types should always be created via a `TypeTable` object.
+ * Front-end types, including a simple module system based on M. Lillibridge's translucent
+ * sums, and HM-style polymorphism. Types should always be created via a `TypeTable` object.
  */
 
 #define PRIM_TYPE_LIST(f) \
@@ -26,21 +26,22 @@
     f(F64,  "f64")
 
 typedef struct Type Type;
-typedef struct Kind Kind;
 typedef struct TypeTable TypeTable;
 
-typedef enum {
-    KIND_TYPE,
-    KIND_NAT,
-    KIND_FUNCTOR,
-    KIND_SIGNATURE,
-} KindTag;
+typedef enum TypeVariance {
+    TYPE_CONSTANT = 0x00,
+    TYPE_COVARIANT = 0x01,
+    TYPE_CONTRAVARIANT = 0x02,
+    TYPE_INVARIANT = TYPE_COVARIANT | TYPE_CONTRAVARIANT
+} TypeVariance;
 
 typedef enum {
+    KIND_STAR,
 #define f(name, ...) TYPE_##name,
     PRIM_TYPE_LIST(f)
 #undef f
     TYPE_UNKNOWN,
+    TYPE_SIGNATURE,
     TYPE_STRUCT,
     TYPE_ENUM,
     TYPE_ALIAS,
@@ -50,6 +51,7 @@ typedef enum {
     TYPE_NORET,
     TYPE_ERROR,
     TYPE_ARRAY,
+    TYPE_PI,
     TYPE_FUN,
     TYPE_TUPLE,
     TYPE_APP
@@ -57,8 +59,8 @@ typedef enum {
 
 typedef struct SignatureMember {
     const char* name;
-    const Kind* kind;
     const Type* type;
+    const Type* value;
 } SignatureMember;
 
 typedef struct StructField {
@@ -81,11 +83,20 @@ struct Type {
     size_t id;
     union {
         struct {
+            const Type** type_params;
+            size_t type_param_count;
+            const Type* body;
+        } arrow;
+        struct {
             const char* name;
             const Type** type_params;
             size_t type_param_count;
             const Type* aliased_type;
         } alias;
+        struct {
+            SignatureMember* members;
+            size_t member_count;
+        } signature;
         struct {
             const char* name;
             const Type* sub_type;
@@ -126,36 +137,25 @@ struct Type {
         struct {
             const Type** type_params;
             size_t type_param_count;
+            const Type* body;
+        } pi;
+        struct {
             const Type* dom;
             const Type* codom;
         } fun;
         struct {
             const Type* elem_type;
+            const Type* size;
         } array;
         struct {
             bool is_const;
             const Type* pointee;
         } ptr;
         struct {
-            const Kind* kind;
+            const Type* type;
             const char* name;
+            TypeVariance variance;
         } var;
-    };
-};
-
-struct Kind {
-    KindTag tag;
-    size_t id;
-    union {
-        struct {
-            const Type** type_params;
-            size_t type_param_count;
-            const Kind* body;
-        } functor;
-        struct {
-            SignatureMember* members;
-            size_t member_count;
-        } signature;
     };
 };
 
@@ -163,8 +163,8 @@ typedef HashTable TypeMap;
 
 TypeMap new_type_map(void);
 void free_type_map(TypeMap*);
-bool insert_type_in_map(TypeMap*, const Type*, const Type*);
-const Type* find_type_in_map(const TypeMap*, const Type*);
+bool insert_in_type_map(TypeMap*, const Type*, void*);
+void* find_in_type_map(const TypeMap*, const Type*);
 
 bool is_prim_type(TypeTag);
 bool is_nominal_type(TypeTag);
@@ -173,18 +173,22 @@ bool is_unsigned_int_type(TypeTag);
 bool is_signed_int_type(TypeTag);
 bool is_int_type(TypeTag);
 bool is_int_or_float_type(TypeTag);
-bool is_subtype(const Type*, const Type*);
+bool is_kind_level_type(const Type*);
 bool is_non_const_ptr_type(const Type*);
 bool is_struct_like_option(const EnumOption*);
 bool is_tuple_like_struct_type(const Type*);
 
+bool is_sub_type(TypeTable*, const Type*, const Type*);
+bool is_sub_struct_type(TypeTable*, const Type*, const Type*);
+bool is_sub_enum_type(TypeTable*, const Type*, const Type*);
+
 const Type* skip_app_type(const Type*);
 const Type** get_type_params(const Type*);
-size_t get_prim_type_bitwidth(TypeTag);
 size_t get_type_param_count(const Type*);
+size_t get_prim_type_bitwidth(TypeTag);
 size_t get_type_inheritance_depth(const Type*);
 
-const SignatureMember* find_signature_member(const Kind*, const char*);
+const SignatureMember* find_signature_member(const Type*, const char*);
 const EnumOption* find_enum_option(const Type*, const char*);
 const StructField* find_struct_field(const Type*, const char*);
 

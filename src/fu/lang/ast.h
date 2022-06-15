@@ -71,8 +71,8 @@ typedef enum {
     AST_PATH_ELEM,
     AST_PATH,
     // Kinds
-    AST_KIND_TYPE,
-    AST_KIND_NAT,
+    AST_KIND_STAR,
+    AST_KIND_ARROW,
     // Types
     AST_TUPLE_TYPE,
     AST_ARRAY_TYPE,
@@ -145,7 +145,6 @@ typedef struct AstNode AstNode;
 struct AstNode {
     AstNodeTag tag;
     FileLoc file_loc;
-    const Type* external_type;
     const Type* type;
     AstNode* next;
     AstNode* attrs;
@@ -173,6 +172,10 @@ struct AstNode {
             const char* name;
             AstNode* val;
         } attr;
+        struct {
+            AstNode* dom_kinds;
+            AstNode* codom_kind;
+        } arrow_kind;
         struct {
             AstNode* args;
         } tuple_type, tuple_expr, tuple_pattern;

@@ -9,7 +9,7 @@
 
 typedef struct TypeMapElem {
     const Type* from;
-    const Type* to;
+    void* to;
 } TypeMapElem;
 
 TypeMap new_type_map(void) {
@@ -24,7 +24,8 @@ static bool compare_type_map_elems(const void* left, const void* right) {
     return ((TypeMapElem*)left)->from == ((TypeMapElem*)right)->from;
 }
 
-bool insert_type_in_map(TypeMap* type_map, const Type* from, const Type* to) {
+bool insert_in_type_map(TypeMap* type_map, const Type* from, void* to) {
+    assert(to != NULL);
     return insert_in_hash_table(type_map,
         &(TypeMapElem) { .from = from, .to = to },
         hash_uint64(hash_init(), from->id),
@@ -32,7 +33,7 @@ bool insert_type_in_map(TypeMap* type_map, const Type* from, const Type* to) {
         compare_type_map_elems);
 }
 
-const Type* find_type_in_map(const TypeMap* type_map, const Type* from) {
+void* find_in_type_map(const TypeMap* type_map, const Type* from) {
     const TypeMapElem* elem = find_in_hash_table(type_map,
         &(TypeMapElem) { .from = from },
         hash_uint64(hash_init(), from->id),
@@ -76,38 +77,6 @@ bool is_int_or_float_type(TypeTag tag) {
     return is_int_type(tag) || is_float_type(tag);
 }
 
-bool is_subtype(const Type* left, const Type* right) {
-    if (left == right ||
-        left->tag == TYPE_NORET ||
-        left->tag == TYPE_UNKNOWN ||
-        right->tag == TYPE_UNKNOWN)
-        return true;
-
-    if ((is_signed_int_type(left->tag) && is_signed_int_type(right->tag)) ||
-        (is_unsigned_int_type(left->tag) && is_unsigned_int_type(right->tag)) ||
-        (is_float_type(left->tag) && is_float_type(right->tag)))
-        return get_prim_type_bitwidth(left->tag) <= get_prim_type_bitwidth(right->tag);
-
-    if (left->tag != right->tag)
-        return false;
-
-    if (left->tag == TYPE_TUPLE && left->tuple.arg_count == right->tuple.arg_count) {
-        for (size_t i = 0; i < left->tuple.arg_count; ++i) {
-            if (!is_subtype(left->tuple.args[i], right->tuple.args[i]))
-                return false;
-        }
-        return true;
-    }
-
-    if (left->tag == TYPE_FUN) {
-        return
-            is_subtype(right->fun.dom, left->fun.dom) &&
-            is_subtype(left->fun.codom, right->fun.codom);
-    }
-
-    return false;
-}
-
 bool is_non_const_ptr_type(const Type* type) {
     return type->tag == TYPE_PTR && !type->ptr.is_const;
 }
@@ -123,6 +92,147 @@ bool is_tuple_like_struct_type(const Type* type) {
     return type->tag == TYPE_STRUCT && type->struct_.is_tuple_like;
 }
 
+bool is_sub_type(TypeTable* type_table, const Type* left, const Type* right) {
+    if (left == right ||
+        left->tag == TYPE_NORET ||
+        left->tag == TYPE_UNKNOWN ||
+        right->tag == TYPE_UNKNOWN)
+        return true;
+
+    if ((is_signed_int_type(left->tag) && is_signed_int_type(right->tag)) ||
+        (is_unsigned_int_type(left->tag) && is_unsigned_int_type(right->tag)) ||
+        (is_float_type(left->tag) && is_float_type(right->tag)))
+        return get_prim_type_bitwidth(left->tag) <= get_prim_type_bitwidth(right->tag);
+
+    if (is_sub_struct_type(type_table, left, right))
+        return true;
+
+    if (is_sub_enum_type(type_table, left, right))
+        return true;
+
+    if (left->tag != right->tag)
+        return false;
+
+    if (left->tag == TYPE_TUPLE && left->tuple.arg_count == right->tuple.arg_count) {
+        for (size_t i = 0; i < left->tuple.arg_count; ++i) {
+            if (!is_sub_type(type_table, left->tuple.args[i], right->tuple.args[i]))
+                return false;
+        }
+        return true;
+    }
+
+    if (left->tag == TYPE_FUN) {
+        return
+            is_sub_type(type_table, right->fun.dom, left->fun.dom) &&
+            is_sub_type(type_table, left->fun.codom, right->fun.codom);
+    }
+
+    return false;
+}
+
+static bool is_sub_type_arg(
+    TypeTable* type_table,
+    TypeVariance variance,
+    const Type* left,
+    const Type* right)
+{
+    switch (variance) {
+        case TYPE_CONSTANT:
+            return true;
+        case TYPE_INVARIANT:
+            return left == right;
+        case TYPE_COVARIANT:
+            return is_sub_type(type_table, left, right);
+        case TYPE_CONTRAVARIANT:
+            return is_sub_type(type_table, right, left);
+        default:
+            assert(false && "invalid type variance");
+            return false;
+    }
+}
+
+static void swap_types(const Type** left, const Type** right) {
+    const Type* tmp = *left;
+    *left = *right;
+    *right = tmp;
+}
+
+static bool is_sub_struct_or_super_enum_type(
+    TypeTable* type_table,
+    TypeTag type_tag,
+    const Type* left,
+    const Type* right)
+{
+    assert(type_tag == TYPE_STRUCT || type_tag == TYPE_ENUM);
+
+    const Type* left_struct_or_enum  = skip_app_type(left);
+    const Type* right_struct_or_enum = skip_app_type(right);
+    if (left_struct_or_enum->tag != type_tag || right_struct_or_enum->tag != type_tag)
+        return false;
+
+    size_t left_depth  = get_type_inheritance_depth(left_struct_or_enum);
+    size_t right_depth = get_type_inheritance_depth(right_struct_or_enum);
+    if (left_depth < right_depth)
+        return false;
+
+    while (left_depth > right_depth) {
+        left = apply_type(type_table,
+            type_tag == TYPE_STRUCT
+                ? left_struct_or_enum->struct_.super_type
+                : left_struct_or_enum->enum_.sub_type,
+            left);
+        left_struct_or_enum = skip_app_type(left);
+        assert(left_struct_or_enum->tag == type_tag);
+        left_depth--;
+    }
+
+    if (left_struct_or_enum != right_struct_or_enum)
+        return false;
+    if (left == right)
+        return true;
+    if (left->tag == TYPE_APP) {
+        const Type** type_params = get_type_params(left_struct_or_enum);
+        assert(right->tag == TYPE_APP && skip_app_type(right) == right_struct_or_enum);
+        assert(left->app.arg_count == get_type_param_count(left_struct_or_enum));
+        for (size_t i = 0; i < left->app.arg_count; ++i) {
+            const Type* left_arg  = left ->app.args[i];
+            const Type* right_arg = right->app.args[i];
+            if (type_tag != TYPE_STRUCT)
+                swap_types(&left_arg, &right_arg);
+            if (!is_sub_type_arg(type_table, type_params[i]->var.variance, left_arg, right_arg))
+                return false;
+        }
+        return true;
+    }
+    assert(right->tag != TYPE_APP);
+    return false;
+}
+
+bool is_sub_struct_type(TypeTable* type_table, const Type* left, const Type* right) {
+    return is_sub_struct_or_super_enum_type(type_table, TYPE_STRUCT, left, right);
+}
+
+bool is_sub_enum_type(TypeTable* type_table, const Type* left, const Type* right) {
+    return is_sub_struct_or_super_enum_type(type_table, TYPE_ENUM, right, left);
+}
+
+bool is_kind_level_type(const Type* type) {
+    if (type->tag == KIND_STAR)
+        return true;
+    else if (type->tag == TYPE_TUPLE) {
+        for (size_t i = 0; i < type->tuple.arg_count; ++i) {
+            if (is_kind_level_type(type->tuple.args[i]))
+                return true;
+        }
+    }
+    else if (type->tag == TYPE_FUN) {
+        return
+            is_kind_level_type(type->fun.dom) ||
+            is_kind_level_type(type->fun.codom);
+    }
+    return false;
+}
+
 const Type* skip_app_type(const Type* type) {
     return type->tag == TYPE_APP ? type->app.applied_type : type;
 }
@@ -131,6 +241,12 @@ const Type** get_type_params(const Type* type) {
     if (type->tag == TYPE_STRUCT) return type->struct_.type_params;
     if (type->tag == TYPE_ENUM)   return type->enum_.type_params;
     return NULL;
+}
+
+size_t get_type_param_count(const Type* type) {
+    if (type->tag == TYPE_STRUCT) return type->struct_.type_param_count;
+    if (type->tag == TYPE_ENUM)   return type->enum_.type_param_count;
+    return 0;
 }
 
 size_t get_prim_type_bitwidth(TypeTag tag) {
@@ -144,12 +260,6 @@ size_t get_prim_type_bitwidth(TypeTag tag) {
             assert(false && "invalid primitive type");
             return 0;
     }
-}
-
-size_t get_type_param_count(const Type* type) {
-    if (type->tag == TYPE_STRUCT) return type->struct_.type_param_count;
-    if (type->tag == TYPE_ENUM)   return type->enum_.type_param_count;
-    return 0;
 }
 
 size_t get_type_inheritance_depth(const Type* type) {
@@ -204,8 +314,8 @@ static inline void* safe_bsearch(
     return bsearch(key, elems, elem_count, elem_size, compare_elems);
 }
 
-const SignatureMember* find_signature_member(const Kind* signature, const char* name) {
-    assert(signature->tag == KIND_SIGNATURE);
+const SignatureMember* find_signature_member(const Type* signature, const char* name) {
+    assert(signature->tag == TYPE_SIGNATURE);
     return safe_bsearch(&(SignatureMember) { .name = name },
         signature->signature.members,
         signature->signature.member_count,
@@ -279,9 +389,14 @@ void print_type(FormatState* state, const Type* type) {
         case TYPE_VAR:
             format(state, "{s}", (FormatArg[]) { { .s = type->var.name } });
             break;
+        case TYPE_PI:
+            print_keyword(state, "forall");
+            print_type_params(state, type->pi.type_params, type->pi.type_param_count);
+            format(state, " . ", NULL);
+            print_type(state, type->pi.body);
+            break;
         case TYPE_FUN:
             print_keyword(state, "fun");
-            print_type_params(state, type->fun.type_params, type->fun.type_param_count);
             if (type->fun.dom->tag == TYPE_TUPLE)
                 print_type(state, type->fun.dom);
             else {

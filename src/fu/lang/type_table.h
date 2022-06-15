@@ -16,21 +16,15 @@ void free_type_table(TypeTable*);
 
 //====================================== KINDS ===========================================
 
-const Kind* make_nat_kind(TypeTable*);
-const Kind* make_type_kind(TypeTable*);
-
-const Kind* make_functor_kind(TypeTable*,
+const Type* make_star_kind(TypeTable*);
+const Type* make_arrow_kind(TypeTable*,
     const Type** type_params,
     size_t type_param_count,
-    const Kind* body);
-
-const Kind* make_signature_kind(
-    TypeTable*,
-    SignatureMember* members,
-    size_t member_count);
+    const Type* body);
 
 //================================== NOMINAL TYPES =======================================
 
+Type* make_var_type(TypeTable*, const char* name, const Type* type);
 Type* make_struct_type(TypeTable*, const char* name);
 Type* make_enum_type(TypeTable*, const char* name);
 const Type* freeze_struct_type(TypeTable*, Type*);
@@ -42,15 +36,18 @@ const Type* make_prim_type(TypeTable*, TypeTag);
 const Type* make_unknown_type(TypeTable*);
 const Type* make_error_type(TypeTable*);
 const Type* make_noret_type(TypeTable*);
-const Type* make_var_type(TypeTable*, const char* name, const Kind* kind);
 const Type* make_tuple_type(TypeTable*, const Type** args, size_t arg_count);
 const Type* make_unit_type(TypeTable*);
 const Type* make_app_type(TypeTable*, const Type* applied_type, const Type** args, size_t arg_count);
 const Type* make_array_type(TypeTable*, const Type* elem_type);
 const Type* make_ptr_type(TypeTable*, bool is_const, const Type* pointee_type);
 const Type* make_fun_type(TypeTable*, const Type* dom, const Type* codom);
-const Type* make_module_type(TypeTable*, const char* name, const Type* signature);
 const Type* make_proj_type(TypeTable*, const Type* projected_type, size_t index);
+
+const Type* make_signature_type(
+    TypeTable*,
+    SignatureMember* members,
+    size_t member_count);
 
 const Type* make_alias_type(
     TypeTable*,
@@ -58,6 +55,12 @@ const Type* make_alias_type(
     const Type** type_params,
     size_t type_param_count,
     const Type* aliased_type);
+
+const Type* make_pi_type(
+    TypeTable*,
+    const Type** type_params,
+    size_t type_param_count,
+    const Type* body);
 
 const Type* make_poly_fun_type(
     TypeTable*,
@@ -69,6 +72,7 @@ const Type* make_poly_fun_type(
 //================================== SUBSTITUTION ========================================
 
 const Type* replace_types_with_map(TypeTable*, const Type*, TypeMap*);
-const Type* replace_types(TypeTable*, const Type*, const Type**, const Type**, size_t);
+const Type* replace_types(TypeTable*, const Type*, const Type** from, const Type** to, size_t);
+const Type* apply_type(TypeTable*, const Type* type, const Type* app_type);
 
 #endif

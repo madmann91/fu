@@ -41,15 +41,6 @@ static void pop_decl(TypingContext* context, AstNode* decl) {
     remove_from_hash_table(&context->visited_decls, ptr, sizeof(AstNode*));
 }
 
-static const Type* apply_type(TypeTable* type_table, const Type* type, const Type* app_type) {
-    if (app_type->tag != TYPE_APP)
-        return type;
-    return replace_types(type_table, type,
-        get_type_params(skip_app_type(app_type)),
-        app_type->app.args,
-        app_type->app.arg_count);
-}
-
 static const Type** check_many(
     TypingContext* context,
     AstNode* elems,
@@ -81,7 +72,9 @@ static const Type* expect_type(
     bool is_upper_bound,
     const FileLoc* file_loc)
 {
-    bool matches_type = is_upper_bound ? is_subtype(type, expected_type) : is_subtype(expected_type, type);
+    bool matches_type = is_sub_type(context->type_table,
+        is_upper_bound ? type : expected_type,
+        is_upper_bound ? expected_type : type);
     if (!matches_type) {
         if (!expected_type->contains_error && !type->contains_error) {
             log_error(context->log, file_loc, "expected {s} type '{t}', but got type '{t}'",
@@ -266,17 +259,17 @@ static const Type* infer_next_path_elem(TypingContext* context, AstNode* prev_el
             is_type_expected = true;
             break;
         }
-        default: {
-            if (inner_type->var.kind->tag != KIND_SIGNATURE)
-                goto missing_member;
-            const SignatureMember* member = find_signature_member(inner_type->var.kind, next_elem->path_elem.name);
+        case TYPE_SIGNATURE: {
+            const SignatureMember* member = find_signature_member(inner_type, next_elem->path_elem.name);
             if (!member)
                 goto missing_member;
-            next_elem->path_elem.index = member - inner_type->var.kind->signature.members;
-            next_elem->path_elem.is_type = member->kind != NULL;
+            next_elem->path_elem.index = member - inner_type->signature.members;
+            next_elem->path_elem.is_type = is_kind_level_type(member->type);
             next_elem->type = apply_type(context->type_table, member->type, prev_elem->type);
             break;
         }
+        default:
+            goto missing_member;
     }
 
     // Make sure we do not perform accesses on a type. For instance, given the type
@@ -398,15 +391,21 @@ static const Type* check_tuple(
     return tuple->type;
 }
 
-const Kind* infer_kind(TypingContext* context, AstNode* kind) {
+const Type* infer_kind(TypingContext* context, AstNode* kind) {
     switch (kind->tag) {
         default:
             assert(false && "invalid kind");
             // fallthrough
-        case AST_KIND_TYPE:
-            return make_type_kind(context->type_table);
-        case AST_KIND_NAT:
-            return make_nat_kind(context->type_table);
+        case AST_KIND_STAR:
+            return make_star_kind(context->type_table);
+        case AST_KIND_ARROW: {
+            size_t type_param_count = count_ast_nodes(kind->arrow_kind.dom_kinds);
+            const Type** type_params = infer_many(context, kind->arrow_kind.dom_kinds, type_param_count, infer_kind);
+            const Type* body = infer_kind(context, kind->arrow_kind.codom_kind);
+            const Type* arrow = make_arrow_kind(context->type_table, type_params, type_param_count, body);
+            free(type_params);
+            return arrow;
+        }
     }
 }
 
@@ -450,7 +449,7 @@ static const Type* check_if_expr(TypingContext* context, AstNode* if_expr, const
     const Type* then_type = check_expr(context, if_expr->if_expr.then_expr, expected_type);
     if (if_expr->if_expr.else_expr) {
         const Type* else_type = check_expr(context, if_expr->if_expr.else_expr, expected_type);
-        if (is_subtype(then_type, else_type))
+        if (is_sub_type(context->type_table, then_type, else_type))
             return if_expr->type = else_type;
         return if_expr->type = expect_type(
             context, else_type, then_type, true, &if_expr->if_expr.else_expr->file_loc);
@@ -824,9 +823,9 @@ static const Type* infer_const_or_var_decl(TypingContext* context, AstNode* decl
 }
 
 static const Type* infer_type_param(TypingContext* context, AstNode* type_param) {
-    const Kind* kind = type_param->type_param.kind
+    const Type* kind = type_param->type_param.kind
         ? infer_kind(context, type_param->type_param.kind)
-        : make_type_kind(context->type_table);
+        : make_star_kind(context->type_table);
     return type_param->type = make_var_type(context->type_table, type_param->type_param.name, kind);
 }
 
@@ -960,6 +959,7 @@ static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
             });
         }
     }
+
     return freeze_enum_type(context->type_table, enum_type);
 }
 
@@ -1005,7 +1005,7 @@ static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
     infer_type_params(context, mod_decl->mod_decl.type_params, type_params);
     for (AstNode* decl = mod_decl->mod_decl.members; decl; decl = decl->next) {
         infer_decl(context, decl);
-        if (!decl->external_type)
+        /*if (!decl->external_type)
             continue;
         bool is_type =
             decl->tag == AST_SIG_DECL ||
@@ -1017,17 +1017,18 @@ static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
             .name = get_decl_name(decl),
             .type = is_opaque ? NULL : decl->external_type,
             .kind = is_type ? make_type_kind(context->type_table) : NULL,
-        });
+        });*/
     }
 
-    const Kind* kind = make_signature_kind(context->type_table, members, get_dyn_array_size(members));
-    size_t type_param_count = get_dyn_array_size(members);
+    const Type* type = make_signature_type(context->type_table, members, get_dyn_array_size(members));
+    size_t type_param_count = get_dyn_array_size(type_params);
     if (type_param_count > 0)
-        kind = make_functor_kind(context->type_table, type_params, type_param_count, kind);
+        type = make_pi_type(context->type_table, type_params, type_param_count, type);
+
     free_dyn_array(type_params);
     free_dyn_array(members);
 
-    mod_decl->type = make_var_type(context->type_table, mod_decl->mod_decl.name, kind);
+    mod_decl->type = make_var_type(context->type_table, mod_decl->mod_decl.name, type);
     return mod_decl->type;
 }
 

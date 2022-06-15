@@ -495,8 +495,11 @@ void bind_expr(Env* env, AstNode* expr) {
 
 void bind_kind(Env* env, AstNode* kind) {
     switch (kind->tag) {
-        case AST_KIND_TYPE:
-        case AST_KIND_NAT:
+        case AST_KIND_STAR:
+            break;
+        case AST_KIND_ARROW:
+            bind_many(env, kind->arrow_kind.dom_kinds, bind_kind);
+            bind_kind(env, kind->arrow_kind.codom_kind);
             break;
         case AST_PATH:
             bind_path(env, kind);

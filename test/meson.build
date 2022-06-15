@@ -38,5 +38,6 @@ test('typechecker-fail-type-access-struct',  fu, workdir: root, should_fail: tru
 test('typechecker-fail-value_access-struct', fu, workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/value_access_struct.fu'])
 test('typechecker-fail-bad-super-struct',    fu, workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/bad_super_struct.fu'])
 test('typechecker-fail-bad-sub-enum',        fu, workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/bad_sub_enum.fu'])
-test('typechecker-pass-structs-inheritance', fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/struct_inheritance.fu'])
+test('typechecker-pass-struct-inheritance',  fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/struct_inheritance.fu'])
+test('typechecker-pass-enum-inheritance',    fu, workdir: root, args: ['--print-ast', 'test/typechecker/pass/enum_inheritance.fu'])
 

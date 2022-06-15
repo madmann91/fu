@@ -1,0 +1,10 @@
+enum Foo { A(i32) }
+enum Bar : Foo { B(i32) }
+enum Baz[T] : Foo { B(T) }
+enum Bob[T] : Baz[T] { C(T) }
+
+fun test() {
+    const a : Bar = Foo.A(3);
+    const b : Baz[i32] = Foo.A(3);
+    const c : Bob[i32] = Baz[i32].B(4);
+}

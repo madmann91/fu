@@ -24,8 +24,7 @@ struct TypeTable {
     MemPool* mem_pool;
     StrPool str_pool;
     size_t type_count, kind_count;
-    const Kind* nat_kind;
-    const Kind* type_kind;
+    const Type* star_kind;
     const Type* prim_types[PRIM_TYPE_COUNT];
     const Type* unknown_type;
     const Type* noret_type;
@@ -45,6 +44,7 @@ static HashCode hash_type(HashCode hash, const Type* type) {
 #define f(name, ...) case TYPE_##name:
     PRIM_TYPE_LIST(f)
 #undef f
+        case KIND_STAR:
         case TYPE_UNKNOWN:
         case TYPE_NORET:
         case TYPE_ERROR:
@@ -59,18 +59,27 @@ static HashCode hash_type(HashCode hash, const Type* type) {
             hash = hash_uint64(hash, (uint64_t)type->proj.index);
             break;
         case TYPE_TUPLE:
-            for (size_t i = 0; i < type->tuple.arg_count; ++i)
-                hash = hash_uint64(hash, type->tuple.args[i]->id);
+            hash = hash_types(hash, type->tuple.args, type->tuple.arg_count);
             break;
         case TYPE_APP:
             hash = hash_uint64(hash, type->app.applied_type->id);
-            for (size_t i = 0; i < type->app.arg_count; ++i)
-                hash = hash_uint64(hash, type->app.args[i]->id);
+            hash = hash_types(hash, type->app.args, type->app.arg_count);
+            break;
+        case TYPE_PI:
+            hash = hash_types(hash, type->pi.type_params, type->pi.type_param_count);
+            hash = hash_uint64(hash, type->pi.body->id);
             break;
         case TYPE_FUN:
-            hash = hash_types(hash, type->fun.type_params, type->fun.type_param_count);
             hash = hash_uint64(hash, type->fun.dom->id);
             hash = hash_uint64(hash, type->fun.codom->id);
+            break;
+        case TYPE_SIGNATURE:
+            for (size_t i = 0; i < type->signature.member_count; ++i) {
+                hash = hash_str(hash, type->signature.members[i].name);
+                hash = hash_uint64(hash, type->signature.members[i].type->id);
+                if (type->signature.members[i].value)
+                    hash = hash_uint64(hash, type->signature.members[i].value->id);
+            }
             break;
         case TYPE_ARRAY:
             hash = hash_uint64(hash, type->array.elem_type->id);
@@ -96,6 +105,10 @@ static bool compare_types(const Type* left, const Type* right) {
 #define f(name, ...) case TYPE_##name:
     PRIM_TYPE_LIST(f)
 #undef f
+        case KIND_STAR:
+        case TYPE_UNKNOWN:
+        case TYPE_NORET:
+        case TYPE_ERROR:
             break;
         case TYPE_TUPLE: {
             return
@@ -106,9 +119,9 @@ static bool compare_types(const Type* left, const Type* right) {
         case TYPE_ALIAS: {
             return
                 left->alias.aliased_type == right->alias.aliased_type &&
-                left->alias.type_param_count == right->alias.type_param_count &&
                 left->alias.name == right->alias.name &&
-                !memcmp(left->alias.type_params, right->alias.type_params,
+                left->alias.type_param_count == right->alias.type_param_count &&
+                !memcpy(left->alias.type_params, right->alias.type_params,
                     sizeof(Type*) * left->alias.type_param_count);
         }
         case TYPE_PROJ: {
@@ -123,13 +136,22 @@ static bool compare_types(const Type* left, const Type* right) {
                 !memcmp(left->app.args, right->app.args,
                     sizeof(Type*) * left->app.arg_count);
         }
+        case TYPE_PI: {
+            return
+                left->pi.type_param_count == right->pi.type_param_count &&
+                !memcpy(left->pi.type_params, right->pi.type_params,
+                    sizeof(Type*) * left->pi.type_param_count);
+        }
         case TYPE_FUN: {
             return
-                left->fun.type_param_count == right->fun.type_param_count &&
                 left->fun.dom == right->fun.dom &&
-                left->fun.codom == right->fun.codom &&
-                !memcmp(left->fun.type_params, right->fun.type_params,
-                    sizeof(Type*) * left->fun.type_param_count);
+                left->fun.codom == right->fun.codom;
+        }
+        case TYPE_SIGNATURE: {
+            return
+                left->signature.member_count == right->signature.member_count &&
+                !memcpy(left->signature.members, right->signature.members,
+                    sizeof(SignatureMember) * left->signature.member_count);
         }
         case TYPE_ARRAY:
             return left->array.elem_type == right->array.elem_type;
@@ -200,12 +222,14 @@ static const Type* get_or_insert_type(TypeTable* type_table, const Type* type) {
             new_type->contains_unknown |= type->array.elem_type->contains_unknown;
             break;
         case TYPE_FUN:
-            new_type->fun.type_params =
-                copy_types(type_table, type->fun.type_params, type->fun.type_param_count);
             new_type->contains_error |= type->fun.dom->contains_error;
             new_type->contains_error |= type->fun.codom->contains_error;
             new_type->contains_unknown |= type->fun.dom->contains_unknown;
             new_type->contains_unknown |= type->fun.codom->contains_unknown;
+            break;
+        case TYPE_PI:
+            new_type->pi.type_params =
+                copy_types(type_table, type->pi.type_params, type->pi.type_param_count);
             break;
         default:
             break;
@@ -215,92 +239,14 @@ static const Type* get_or_insert_type(TypeTable* type_table, const Type* type) {
     return new_type;
 }
 
-static HashCode hash_kind(HashCode hash, const Kind* kind) {
-    hash = hash_uint32(hash, kind->tag);
-    switch (kind->tag) {
-        case KIND_NAT:
-        case KIND_TYPE:
-            break;
-        case KIND_FUNCTOR:
-            hash = hash_types(hash, kind->functor.type_params, kind->functor.type_param_count);
-            hash = hash_uint64(hash, kind->functor.body->id);
-            break;
-        case KIND_SIGNATURE:
-            for (size_t i = 0; i < kind->signature.member_count; ++i) {
-                hash = hash_str(hash, kind->signature.members[i].name);
-                hash = hash_uint64(hash, kind->signature.members[i].type->id);
-                hash = hash_uint8(hash, kind->signature.members[i].kind->id);
-            }
-            break;
-        default:
-            assert(false && "invalid kind");
-            break;
-    }
-    return hash;
-}
-
-static bool compare_kinds(const Kind* left, const Kind* right) {
-    if (left->tag != right->tag)
-        return false;
-    switch (left->tag) {
-        case KIND_NAT:
-        case KIND_TYPE:
-            break;
-        case KIND_FUNCTOR:
-            return
-                left->functor.body == right->functor.body &&
-                left->functor.type_param_count == right->functor.type_param_count &&
-                !memcmp(left->functor.type_params, right->functor.type_params,
-                    sizeof(Type*) * left->functor.type_param_count);
-        case KIND_SIGNATURE:
-            return
-                left->signature.member_count == right->signature.member_count &&
-                !memcmp(left->signature.members, right->signature.members,
-                    sizeof(SignatureMember) * left->signature.member_count);
-        default:
-            assert(false && "invalid kind");
-            break;
-    }
-    return true;
-}
-
-static bool compare_kinds_wrapper(const void* left, const void* right) {
-    return compare_kinds(*(const Kind**)left, *(const Kind**)right);
-}
-
-static const Kind* get_or_insert_kind(TypeTable* type_table, const Kind* kind) {
-    uint32_t hash = hash_kind(hash_init(), kind);
-    const Kind** kind_ptr = find_in_hash_table(&type_table->kinds, &kind, hash, sizeof(Kind*), compare_kinds_wrapper);
-    if (kind_ptr)
-        return *kind_ptr;
-
-    Kind* new_kind = alloc_from_mem_pool(type_table->mem_pool, sizeof(Kind));
-    memcpy(new_kind, kind, sizeof(Kind));
-    new_kind->id = type_table->kind_count++;
-    if (kind->tag == KIND_FUNCTOR) {
-        new_kind->functor.type_params =
-            copy_types(type_table, kind->functor.type_params, kind->functor.type_param_count);
-    } else if (kind->tag == KIND_SIGNATURE) {
-        new_kind->signature.members =
-            alloc_from_mem_pool(type_table->mem_pool, sizeof(SignatureMember) * kind->signature.member_count);
-        for (size_t i = 0; i < kind->signature.member_count; ++i)
-            new_kind->signature.members[i] = kind->signature.members[i];
-    }
-
-    must_succeed(insert_in_hash_table(&type_table->kinds, &new_kind, hash, sizeof(Kind*), compare_kinds_wrapper));
-    return new_kind;
-}
-
 TypeTable* new_type_table(MemPool* mem_pool) {
     TypeTable* type_table = malloc_or_die(sizeof(TypeTable));
     type_table->types = new_hash_table(sizeof(Type*));
-    type_table->kinds = new_hash_table(sizeof(Kind*));
     type_table->str_pool = new_str_pool(mem_pool);
     type_table->mem_pool = mem_pool;
     type_table->type_count = 0;
 
-    type_table->nat_kind = get_or_insert_kind(type_table, &(Kind) { .tag = KIND_NAT });
-    type_table->type_kind = get_or_insert_kind(type_table, &(Kind) { .tag = KIND_TYPE });
+    type_table->star_kind = get_or_insert_type(type_table, &(Type) { .tag = KIND_STAR });
     for (size_t i = 0; i < PRIM_TYPE_COUNT; ++i)
         type_table->prim_types[i] = get_or_insert_type(type_table, &(Type) { .tag = i });
     type_table->unknown_type = get_or_insert_type(type_table, &(Type) { .tag = TYPE_UNKNOWN });
@@ -312,28 +258,21 @@ TypeTable* new_type_table(MemPool* mem_pool) {
 
 void free_type_table(TypeTable* type_table) {
     free_hash_table(&type_table->types);
-    free_hash_table(&type_table->kinds);
     free_str_pool(&type_table->str_pool); 
     free(type_table);
 }
 
-const Kind* make_nat_kind(TypeTable* type_table) { return type_table->nat_kind; }
-const Kind* make_type_kind(TypeTable* type_table) { return type_table->type_kind; }
+const Type* make_star_kind(TypeTable* type_table) {
+    return type_table->star_kind;
+}
 
-const Kind* make_functor_kind(
+const Type* make_arrow_kind(
     TypeTable* type_table,
     const Type** type_params,
     size_t type_param_count,
-    const Kind* body)
+    const Type* body)
 {
-    return get_or_insert_kind(type_table, &(Kind) {
-        .tag = KIND_FUNCTOR,
-        .functor = {
-            .type_params = type_params,
-            .type_param_count = type_param_count,
-            .body = body
-        }
-    });
+    return make_fun_type(type_table, make_tuple_type(type_table, type_params, type_param_count), body);
 }
 
 #define LEXICOGRAPHICAL_COMPARE(l, r) \
@@ -344,7 +283,11 @@ static int compare_signature_members(const SignatureMember* left, const Signatur
     int d = strcmp(left->name, right->name);
     LEXICOGRAPHICAL_COMPARE(d, 0)
     LEXICOGRAPHICAL_COMPARE(left->type->id, right->type->id)
-    LEXICOGRAPHICAL_COMPARE(left->kind->id, right->kind->id)
+    if (left->value == right->value)
+        return 0;
+    if (!left->value)  return -1;
+    if (!right->value) return 1;
+    LEXICOGRAPHICAL_COMPARE(left->value->id, right->value->id)
     return 0;
 }
 
@@ -354,7 +297,7 @@ static int compare_signature_members_wrapper(const void* left, const void* right
     return compare_signature_members(left, right);
 }
 
-const Kind* make_signature_kind(
+const Type* make_signature_type(
     TypeTable* type_table,
     SignatureMember* members,
     size_t member_count)
@@ -362,8 +305,8 @@ const Kind* make_signature_kind(
     for (size_t i = 0; i < member_count; ++i)
         members[i].name = make_str(&type_table->str_pool, members[i].name);
     qsort(members, member_count, sizeof(SignatureMember), compare_signature_members_wrapper);
-    return get_or_insert_kind(type_table, &(Kind) {
-        .tag = KIND_SIGNATURE,
+    return get_or_insert_type(type_table, &(Type) {
+        .tag = TYPE_SIGNATURE,
         .signature = {
             .members = members,
             .member_count = member_count
@@ -377,6 +320,13 @@ static Type* alloc_type_with_tag(TypeTable* type_table, TypeTag tag) {
     type->id = type_table->type_count++;
     type->tag = tag;
     return type;
+}
+
+Type* make_var_type(TypeTable* type_table, const char* name, const Type* type) {
+    Type* var = alloc_type_with_tag(type_table, TYPE_VAR);
+    var->var.name = make_str(&type_table->str_pool, name);
+    var->var.type = type;
+    return var;
 }
 
 Type* make_struct_type(TypeTable* type_table, const char* name) {
@@ -476,13 +426,6 @@ const Type* make_noret_type(TypeTable* type_table) {
     return type_table->noret_type;
 }
 
-const Type* make_var_type(TypeTable* type_table, const char* name, const Kind* kind) {
-    Type* type = alloc_type_with_tag(type_table, TYPE_VAR);
-    type->var.name = make_str(&type_table->str_pool, name);
-    type->var.kind = kind;
-    return type;
-}
-
 const Type* make_tuple_type(TypeTable* type_table, const Type** args, size_t arg_count) {
     if (arg_count == 0)
         return type_table->unit_type;
@@ -521,7 +464,13 @@ const Type* make_ptr_type(TypeTable* type_table, bool is_const, const Type* poin
 }
 
 const Type* make_fun_type(TypeTable* type_table, const Type* dom, const Type* codom) {
-    return make_poly_fun_type(type_table, NULL, 0, dom, codom);
+    return get_or_insert_type(type_table, &(Type) {
+        .tag = TYPE_FUN,
+        .fun = {
+            .dom = dom,
+            .codom = codom
+        }
+    });
 }
 
 const Type* make_proj_type(TypeTable* type_table, const Type* projected_type, size_t index) {
@@ -549,6 +498,22 @@ const Type* make_alias_type(
     });
 }
 
+const Type* make_pi_type(
+    TypeTable* type_table,
+    const Type** type_params,
+    size_t type_param_count,
+    const Type* body)
+{
+    return get_or_insert_type(type_table, &(Type) {
+        .tag = TYPE_PI,
+        .pi = {
+            .type_params = type_params,
+            .type_param_count = type_param_count,
+            .body = body
+        }
+    });
+}
+
 const Type* make_poly_fun_type(
     TypeTable* type_table,
     const Type** type_params,
@@ -556,15 +521,10 @@ const Type* make_poly_fun_type(
     const Type* dom,
     const Type* codom)
 {
-    return get_or_insert_type(type_table, &(Type) {
-        .tag = TYPE_FUN,
-        .fun = {
-            .dom = dom,
-            .codom = codom,
-            .type_params = type_params,
-            .type_param_count = type_param_count
-        }
-    });
+    const Type* type = make_fun_type(type_table, dom, codom);
+    if (type_param_count > 0)
+        type = make_pi_type(type_table, type_params, type_param_count, type);
+    return type;
 }
 
 const Type* replace_types_with_map(TypeTable* type_table, const Type* type, TypeMap* type_map) {
@@ -606,10 +566,14 @@ const Type* replace_types_with_map(TypeTable* type_table, const Type* type, Type
             free(args);
             return type;
         }
+        case TYPE_PI: {
+            return make_pi_type(type_table,
+                type->pi.type_params,
+                type->pi.type_param_count,
+                replace_types_with_map(type_table, type->pi.body, type_map));
+        }
         case TYPE_FUN: {
-            return make_poly_fun_type(type_table,
-                type->fun.type_params,
-                type->fun.type_param_count,
+            return make_fun_type(type_table,
                 replace_types_with_map(type_table, type->fun.dom, type_map),
                 replace_types_with_map(type_table, type->fun.codom, type_map));
         }
@@ -618,7 +582,7 @@ const Type* replace_types_with_map(TypeTable* type_table, const Type* type, Type
                 replace_types_with_map(type_table, type->array.elem_type, type_map));
         }
         case TYPE_VAR: {
-            const Type* mapped_type = find_type_in_map(type_map, type);
+            const Type* mapped_type = find_in_type_map(type_map, type);
             return mapped_type ? mapped_type : type;
         }
         case TYPE_PTR: {
@@ -635,14 +599,23 @@ const Type* replace_types_with_map(TypeTable* type_table, const Type* type, Type
 const Type* replace_types(
     TypeTable* type_table,
     const Type* type,
-    const Type** src_types,
-    const Type** dst_types,
+    const Type** from,
+    const Type** to,
     size_t type_count)
 {
     TypeMap type_map = new_type_map();
     for (size_t i = 0; i < type_count; ++i)
-        insert_type_in_map(&type_map, src_types[i], dst_types[i]);
+        insert_in_type_map(&type_map, from[i], (void*)to[i]);
     const Type* replaced_type = replace_types_with_map(type_table, type, &type_map);
     free_type_map(&type_map);
     return replaced_type;
+}
+
+const Type* apply_type(TypeTable* type_table, const Type* type, const Type* app_type) {
+    if (app_type->tag != TYPE_APP)
+        return type;
+    return replace_types(type_table, type,
+        get_type_params(skip_app_type(app_type)),
+        app_type->app.args,
+        app_type->app.arg_count);
 }

@@ -155,11 +155,12 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
                 { .style = reset_style }
             });
             break;
-        case AST_KIND_NAT:
-            print_keyword(state, "nat");
+        case AST_KIND_ARROW:
+            print_many_asts_with_delim(state, "(", ", ", ")", ast_node->arrow_kind.dom_kinds);
+            print_ast_with_delim(state, " => ", "", ast_node->arrow_kind.codom_kind);
             break;
-        case AST_KIND_TYPE:
-            print_keyword(state, "type");
+        case AST_KIND_STAR:
+            format(state, "*", NULL);
             break;
 #define f(name, ...) case AST_TYPE_##name:
         PRIM_TYPE_LIST(f)

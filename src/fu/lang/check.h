@@ -22,7 +22,7 @@ typedef struct TypingContext {
 TypingContext new_typing_context(TypeTable*, MemPool* mem_pool, Log*);
 void free_typing_context(TypingContext*);
 
-const Kind* infer_kind(TypingContext*, AstNode*);
+const Type* infer_kind(TypingContext*, AstNode*);
 const Type* infer_type(TypingContext*, AstNode*);
 const Type* infer_pattern(TypingContext*, AstNode*);
 const Type* check_pattern(TypingContext*, AstNode*, const Type*);

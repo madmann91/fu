@@ -334,13 +334,33 @@ static inline AstNode* parse_block_expr(Parser* parser) {
     });
 }
 
+static AstNode* parse_primary_kind(Parser* parser) {
+    FilePos begin = parser->ahead->file_loc.begin;
+    if (accept_token(parser, TOKEN_STAR))
+        return make_ast_node(parser, &begin, &(AstNode) { .tag = AST_KIND_STAR });
+    return parse_path(parser);
+}
+
 static AstNode* parse_kind(Parser* parser) {
     FilePos begin = parser->ahead->file_loc.begin;
-    if (accept_token(parser, TOKEN_TYPE))
-        return make_ast_node(parser, &begin, &(AstNode) { .tag = AST_KIND_TYPE });
-    if (accept_token(parser, TOKEN_NAT))
-        return make_ast_node(parser, &begin, &(AstNode) { .tag = AST_KIND_NAT });
-    return parse_path(parser);
+    if (accept_token(parser, TOKEN_L_PAREN)) {
+        AstNode* dom_kinds = parse_many_at_least_one(
+            parser, "domain kinds", TOKEN_R_PAREN, TOKEN_COMMA, parse_primary_kind);
+        if (accept_token(parser, TOKEN_FAT_ARROW)) {
+            AstNode* codom_kind = parse_kind(parser);
+            return make_ast_node(parser, &begin, &(AstNode) {
+                .tag = AST_KIND_ARROW,
+                .arrow_kind = {
+                    .dom_kinds = dom_kinds,
+                    .codom_kind = codom_kind
+                }
+            });
+        } else if (!dom_kinds->next) // Allow placing kinds in parentheses
+            return dom_kinds;
+        else
+            return parse_error(parser, "kind");
+    } else
+        return parse_primary_kind(parser);
 }
 
 static AstNode* parse_type_param(Parser* parser) {
@@ -1021,7 +1041,7 @@ static inline AstNode* parse_mod_decl(Parser* parser) {
     AstNode* type_params = parse_type_params(parser);
     AstNode* signature = NULL;
     if (accept_token(parser, TOKEN_COLON))
-        signature = parse_type(parser);
+        signature = parse_path(parser);
     AstNode* aliased_mod = NULL;
     AstNode* members = NULL;
     if (accept_token(parser, TOKEN_L_BRACE)) {

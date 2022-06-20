@@ -225,14 +225,22 @@ const Type* skip_app_type(const Type* type) {
 }
 
 const Type** get_type_params(const Type* type) {
-    if (type->tag == TYPE_STRUCT) return type->struct_.type_params;
-    if (type->tag == TYPE_ENUM)   return type->enum_.type_params;
+    if (type->tag == KIND_ARROW)     return type->arrow.type_params;
+    if (type->tag == TYPE_ALIAS)     return type->alias.type_params;
+    if (type->tag == TYPE_SIGNATURE) return type->signature.type_params;
+    if (type->tag == TYPE_STRUCT)    return type->struct_.type_params;
+    if (type->tag == TYPE_ENUM)      return type->enum_.type_params;
+    if (type->tag == TYPE_FUN)       return type->fun.type_params;
     return NULL;
 }
 
 size_t get_type_param_count(const Type* type) {
-    if (type->tag == TYPE_STRUCT) return type->struct_.type_param_count;
-    if (type->tag == TYPE_ENUM)   return type->enum_.type_param_count;
+    if (type->tag == KIND_ARROW)     return type->arrow.type_param_count;
+    if (type->tag == TYPE_ALIAS)     return type->alias.type_param_count;
+    if (type->tag == TYPE_SIGNATURE) return type->signature.type_param_count;
+    if (type->tag == TYPE_STRUCT)    return type->struct_.type_param_count;
+    if (type->tag == TYPE_ENUM)      return type->enum_.type_param_count;
+    if (type->tag == TYPE_FUN)       return type->fun.type_param_count;
     return 0;
 }
 
@@ -263,15 +271,15 @@ size_t get_type_inheritance_depth(const Type* type) {
     return depth;
 }
 
-static int compare_signature_members_by_name(const void* left, const void* right) {
-    return strcmp(((SignatureMember*)left)->name, ((SignatureMember*)right)->name);
+int compare_signature_members_by_name(const void* left, const void* right) {
+    return strcmp(((SignatureMember*)left)->var->var.name, ((SignatureMember*)right)->var->var.name);
 }
 
-static int compare_struct_fields_by_name(const void* left, const void* right) {
+int compare_struct_fields_by_name(const void* left, const void* right) {
     return strcmp(((StructField*)left)->name, ((StructField*)right)->name);
 }
 
-static int compare_enum_options_by_name(const void* left, const void* right) {
+int compare_enum_options_by_name(const void* left, const void* right) {
     return strcmp(((EnumOption*)left)->name, ((EnumOption*)right)->name);
 }
 
@@ -303,7 +311,8 @@ static inline void* safe_bsearch(
 
 const SignatureMember* find_signature_member(const Type* signature, const char* name) {
     assert(signature->tag == TYPE_SIGNATURE);
-    return safe_bsearch(&(SignatureMember) { .name = name },
+    const Type var = { .var.name = name };
+    return safe_bsearch(&(SignatureMember) { .var = &var },
         signature->signature.members,
         signature->signature.member_count,
         sizeof(SignatureMember),
@@ -395,14 +404,9 @@ void print_type(FormatState* state, const Type* type) {
         case TYPE_VAR:
             format(state, "{s}", (FormatArg[]) { { .s = type->var.name } });
             break;
-        case TYPE_PI:
-            print_keyword(state, "forall");
-            print_type_params(state, type->pi.type_params, type->pi.type_param_count);
-            format(state, " . ", NULL);
-            print_type(state, type->pi.body);
-            break;
         case TYPE_FUN:
             print_keyword(state, "fun");
+            print_type_params(state, type->fun.type_params, type->fun.type_param_count);
             if (type->fun.dom->tag == TYPE_TUPLE)
                 print_type(state, type->fun.dom);
             else {
@@ -412,6 +416,11 @@ void print_type(FormatState* state, const Type* type) {
             }
             format(state, " -> ", NULL);
             print_type(state, type->fun.codom);
+            break;
+        case TYPE_SIGNATURE:
+            print_keyword(state, "sig");
+            print_type_params(state, type->fun.type_params, type->fun.type_param_count);
+            format(state, " {{ ... }", NULL);
             break;
         case TYPE_ENUM:
             print_keyword(state, "enum");

@@ -264,8 +264,8 @@ static const Type* infer_next_path_elem(TypingContext* context, AstNode* prev_el
             if (!member)
                 goto missing_member;
             next_elem->path_elem.index = member - inner_type->signature.members;
-            next_elem->path_elem.is_type = is_kind_level_type(member->type);
-            next_elem->type = apply_type(context->type_table, member->type, prev_elem->type);
+            next_elem->path_elem.is_type = is_kind_level_type(member->var->var.type);
+            next_elem->type = apply_type(context->type_table, member->value, prev_elem->type);
             break;
         }
         default:
@@ -1020,10 +1020,9 @@ static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
         });*/
     }
 
-    const Type* type = make_signature_type(context->type_table, members, get_dyn_array_size(members));
-    size_t type_param_count = get_dyn_array_size(type_params);
-    if (type_param_count > 0)
-        type = make_pi_type(context->type_table, type_params, type_param_count, type);
+    const Type* type = make_signature_type(context->type_table,
+        type_params, get_dyn_array_size(type_params),
+        members, get_dyn_array_size(members));
 
     free_dyn_array(type_params);
     free_dyn_array(members);

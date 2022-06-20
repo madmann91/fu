@@ -59,8 +59,7 @@ typedef enum {
 } TypeTag;
 
 typedef struct SignatureMember {
-    const char* name;
-    const Type* type;
+    const Type* var;
     const Type* value;
 } SignatureMember;
 
@@ -87,7 +86,7 @@ struct Type {
             const Type** type_params;
             size_t type_param_count;
             const Type* body;
-        } pi, arrow;
+        } arrow;
         struct {
             const char* name;
             const Type** type_params;
@@ -95,6 +94,8 @@ struct Type {
             const Type* aliased_type;
         } alias;
         struct {
+            const Type** type_params;
+            size_t type_param_count;
             SignatureMember* members;
             size_t member_count;
         } signature;
@@ -136,6 +137,8 @@ struct Type {
             size_t arg_count;
         } app;
         struct {
+            const Type** type_params;
+            size_t type_param_count;
             const Type* dom;
             const Type* codom;
         } fun;
@@ -183,6 +186,10 @@ const Type** get_type_params(const Type*);
 size_t get_type_param_count(const Type*);
 size_t get_prim_type_bitwidth(TypeTag);
 size_t get_type_inheritance_depth(const Type*);
+
+int compare_signature_members_by_name(const void* left, const void* right);
+int compare_struct_fields_by_name(const void* left, const void* right);
+int compare_enum_options_by_name(const void* left, const void* right);
 
 const SignatureMember* find_signature_member(const Type*, const char*);
 const EnumOption* find_enum_option(const Type*, const char*);

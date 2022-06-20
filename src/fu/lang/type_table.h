@@ -46,6 +46,8 @@ const Type* make_proj_type(TypeTable*, const Type* projected_type, size_t index)
 
 const Type* make_signature_type(
     TypeTable*,
+    const Type** type_params,
+    size_t type_param_count,
     SignatureMember* members,
     size_t member_count);
 
@@ -55,12 +57,6 @@ const Type* make_alias_type(
     const Type** type_params,
     size_t type_param_count,
     const Type* aliased_type);
-
-const Type* make_pi_type(
-    TypeTable*,
-    const Type** type_params,
-    size_t type_param_count,
-    const Type* body);
 
 const Type* make_poly_fun_type(
     TypeTable*,

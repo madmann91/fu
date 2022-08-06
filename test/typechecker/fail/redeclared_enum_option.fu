@@ -1,0 +1,2 @@
+enum Foo[T] { A(T), B }
+enum Bar : Foo[i64] { A(i64) }

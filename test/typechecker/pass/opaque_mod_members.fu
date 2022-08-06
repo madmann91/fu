@@ -1,0 +1,4 @@
+mod Foo {
+    pub opaque type T = i32;
+}
+fun f(x: Foo.T) -> Foo.T = x;

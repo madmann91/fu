@@ -1,0 +1,4 @@
+mod Foo {
+    type T = i32;
+}
+fun f(x: Foo.T) -> Foo.T = x;

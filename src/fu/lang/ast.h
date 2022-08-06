@@ -369,6 +369,8 @@ bool is_tuple(AstNodeTag);
 bool is_binary_expr(AstNodeTag);
 bool is_assign_expr(AstNodeTag);
 bool is_assignable_expr(const AstNode*);
+bool is_public_decl(const AstNode*);
+bool is_opaque_decl(const AstNode*);
 bool is_top_level_mod_decl(const AstNode*);
 
 size_t count_ast_nodes(const AstNode*);

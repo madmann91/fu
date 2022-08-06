@@ -16,15 +16,21 @@ void free_type_table(TypeTable*);
 
 //====================================== KINDS ===========================================
 
-const Type* make_star_kind(TypeTable*);
-const Type* make_arrow_kind(TypeTable*,
+const Kind* make_star_kind(TypeTable*);
+const Kind* make_arrow_kind(TypeTable*,
+    const Kind** kind_params,
+    size_t kind_param_count,
+    const Kind* body);
+
+const Kind* make_type_ctor_kind(TypeTable*,
     const Type** type_params,
     size_t type_param_count,
-    const Type* body);
+    const Kind* body);
 
 //================================== NOMINAL TYPES =======================================
 
-Type* make_var_type(TypeTable*, const char* name, const Type* type);
+Type* make_var_type(TypeTable*, const char* name, const Kind*);
+Type* make_var_type_with_value(TypeTable*, const char* name, const Type*);
 Type* make_struct_type(TypeTable*, const char* name);
 Type* make_enum_type(TypeTable*, const char* name);
 const Type* freeze_struct_type(TypeTable*, Type*);
@@ -48,8 +54,8 @@ const Type* make_signature_type(
     TypeTable*,
     const Type** type_params,
     size_t type_param_count,
-    SignatureMember* members,
-    size_t member_count);
+    const Type** vars,
+    size_t var_count);
 
 const Type* make_alias_type(
     TypeTable*,
@@ -69,6 +75,5 @@ const Type* make_poly_fun_type(
 
 const Type* replace_types_with_map(TypeTable*, const Type*, TypeMap*);
 const Type* replace_types(TypeTable*, const Type*, const Type** from, const Type** to, size_t);
-const Type* apply_type(TypeTable*, const Type* type, const Type* app_type);
 
 #endif

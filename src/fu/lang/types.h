@@ -26,6 +26,7 @@
     f(F64,  "f64")
 
 typedef struct Type Type;
+typedef struct Type Kind; // For documentation purposes only
 typedef struct TypeTable TypeTable;
 
 typedef enum TypeVariance {
@@ -58,11 +59,6 @@ typedef enum {
     TYPE_APP
 } TypeTag;
 
-typedef struct SignatureMember {
-    const Type* var;
-    const Type* value;
-} SignatureMember;
-
 typedef struct StructField {
     const char* name;
     const Type* type;
@@ -81,11 +77,12 @@ struct Type {
     bool contains_error : 1;
     bool contains_unknown : 1;
     size_t id;
+    const Kind* kind;
     union {
         struct {
-            const Type** type_params;
-            size_t type_param_count;
-            const Type* body;
+            const Kind** kind_params;
+            size_t kind_param_count;
+            const Kind* body;
         } arrow;
         struct {
             const char* name;
@@ -96,8 +93,8 @@ struct Type {
         struct {
             const Type** type_params;
             size_t type_param_count;
-            SignatureMember* members;
-            size_t member_count;
+            const Type** vars;
+            size_t var_count;
         } signature;
         struct {
             const char* name;
@@ -151,8 +148,8 @@ struct Type {
             const Type* pointee;
         } ptr;
         struct {
-            const Type* type;
             const char* name;
+            const Type* value;
             TypeVariance variance;
         } var;
     };
@@ -172,6 +169,7 @@ bool is_unsigned_int_type(TypeTag);
 bool is_signed_int_type(TypeTag);
 bool is_int_type(TypeTag);
 bool is_int_or_float_type(TypeTag);
+bool is_unit_type(const Type*);
 bool is_kind_level_type(const Type*);
 bool is_non_const_ptr_type(const Type*);
 bool is_struct_like_option(const EnumOption*);
@@ -180,18 +178,22 @@ bool is_tuple_like_struct_type(const Type*);
 bool is_sub_type(TypeTable*, const Type*, const Type*);
 bool is_sub_struct_type(TypeTable*, const Type*, const Type*);
 bool is_sub_enum_type(TypeTable*, const Type*, const Type*);
+const Type* apply_type(TypeTable*, const Type*, const Type*);
 
+const Type* skip_var_and_alias_types(const Type*);
 const Type* skip_app_type(const Type*);
+const Type* get_inner_type(const Type*);
 const Type** get_type_params(const Type*);
 size_t get_type_param_count(const Type*);
 size_t get_prim_type_bitwidth(TypeTag);
 size_t get_type_inheritance_depth(const Type*);
+const Kind* get_type_kind(const Type*);
 
 int compare_signature_members_by_name(const void* left, const void* right);
 int compare_struct_fields_by_name(const void* left, const void* right);
 int compare_enum_options_by_name(const void* left, const void* right);
 
-const SignatureMember* find_signature_member(const Type*, const char*);
+const Type** find_signature_var(const Type*, const char*);
 const EnumOption* find_enum_option(const Type*, const char*);
 const StructField* find_struct_field(const Type*, const char*);
 

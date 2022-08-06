@@ -1,0 +1,2 @@
+struct Foo[T] { i: T }
+struct Bar : Foo[i64] { i: i32 }

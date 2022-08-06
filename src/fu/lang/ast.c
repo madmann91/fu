@@ -547,6 +547,25 @@ bool is_assignable_expr(const AstNode* expr) {
     return false;
 }
 
+bool is_public_decl(const AstNode* decl) {
+    if (decl->tag == AST_FUN_DECL)    return decl->fun_decl.is_public;
+    if (decl->tag == AST_CONST_DECL)  return decl->const_decl.is_public;
+    if (decl->tag == AST_VAR_DECL)    return decl->var_decl.is_public;
+    if (decl->tag == AST_STRUCT_DECL) return decl->struct_decl.is_public;
+    if (decl->tag == AST_ENUM_DECL)   return decl->enum_decl.is_public;
+    if (decl->tag == AST_TYPE_DECL)   return decl->type_decl.is_public;
+    if (decl->tag == AST_SIG_DECL)    return decl->sig_decl.is_public;
+    if (decl->tag == AST_MOD_DECL)    return decl->mod_decl.is_public;
+    return false;
+}
+
+bool is_opaque_decl(const AstNode* decl) {
+    if (decl->tag == AST_STRUCT_DECL) return decl->struct_decl.is_opaque;
+    if (decl->tag == AST_ENUM_DECL)   return decl->enum_decl.is_opaque;
+    if (decl->tag == AST_TYPE_DECL)   return decl->type_decl.is_opaque;
+    return false;
+}
+
 size_t count_ast_nodes(const AstNode* node) {
     size_t len = 0;
     while (node)

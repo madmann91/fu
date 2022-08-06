@@ -77,6 +77,10 @@ bool is_int_or_float_type(TypeTag tag) {
     return is_int_type(tag) || is_float_type(tag);
 }
 
+bool is_unit_type(const Type* type) {
+    return type->tag == TYPE_TUPLE && type->tuple.arg_count == 0;
+}
+
 bool is_non_const_ptr_type(const Type* type) {
     return type->tag == TYPE_PTR && !type->ptr.is_const;
 }
@@ -84,7 +88,7 @@ bool is_non_const_ptr_type(const Type* type) {
 bool is_struct_like_option(const EnumOption* option) {
     if (!option->param_type)
         return false;
-    const Type* param_type = skip_app_type(option->param_type);
+    const Type* param_type = get_inner_type(option->param_type);
     return param_type->tag == TYPE_STRUCT && param_type->struct_.parent_enum;
 }
 
@@ -93,6 +97,9 @@ bool is_tuple_like_struct_type(const Type* type) {
 }
 
 bool is_sub_type(TypeTable* type_table, const Type* left, const Type* right) {
+    left = skip_var_and_alias_types(left);
+    right = skip_var_and_alias_types(right);
+
     if (left == right ||
         left->tag == TYPE_NORET ||
         left->tag == TYPE_UNKNOWN ||
@@ -165,8 +172,8 @@ static bool is_sub_struct_or_super_enum_type(
 {
     assert(type_tag == TYPE_STRUCT || type_tag == TYPE_ENUM);
 
-    const Type* left_struct_or_enum  = skip_app_type(left);
-    const Type* right_struct_or_enum = skip_app_type(right);
+    const Type* left_struct_or_enum  = get_inner_type(left);
+    const Type* right_struct_or_enum = get_inner_type(right);
     if (left_struct_or_enum->tag != type_tag || right_struct_or_enum->tag != type_tag)
         return false;
 
@@ -181,7 +188,7 @@ static bool is_sub_struct_or_super_enum_type(
                 ? left_struct_or_enum->struct_.super_type
                 : left_struct_or_enum->enum_.sub_type,
             left);
-        left_struct_or_enum = skip_app_type(left);
+        left_struct_or_enum = get_inner_type(left);
         assert(left_struct_or_enum->tag == type_tag);
         left_depth--;
     }
@@ -192,7 +199,7 @@ static bool is_sub_struct_or_super_enum_type(
         return true;
     if (left->tag == TYPE_APP) {
         const Type** type_params = get_type_params(left_struct_or_enum);
-        assert(right->tag == TYPE_APP && skip_app_type(right) == right_struct_or_enum);
+        assert(right->tag == TYPE_APP && get_inner_type(right) == right_struct_or_enum);
         assert(left->app.arg_count == get_type_param_count(left_struct_or_enum));
         for (size_t i = 0; i < left->app.arg_count; ++i) {
             const Type* left_arg  = left ->app.args[i];
@@ -216,16 +223,41 @@ bool is_sub_enum_type(TypeTable* type_table, const Type* left, const Type* right
     return is_sub_struct_or_super_enum_type(type_table, TYPE_ENUM, right, left);
 }
 
+const Type* apply_type(TypeTable* type_table, const Type* type, const Type* type_app) {
+    type = skip_var_and_alias_types(type);
+    if (type_app->tag != TYPE_APP)
+        return type;
+    return replace_types(type_table, type,
+        get_type_params(skip_var_and_alias_types(type_app->app.applied_type)),
+        type_app->app.args,
+        type_app->app.arg_count);
+}
+
 bool is_kind_level_type(const Type* type) {
     return type->tag == KIND_STAR || type->tag == KIND_ARROW;
+}
+
+const Type* skip_var_and_alias_types(const Type* type) {
+    while (true) {
+        if (type->tag == TYPE_VAR && type->var.value)
+            type = type->var.value;
+        else if (type->tag == TYPE_ALIAS && type->alias.type_param_count == 0)
+            type = type->alias.aliased_type;
+        else
+            break;
+    }
+    return type;
 }
 
 const Type* skip_app_type(const Type* type) {
     return type->tag == TYPE_APP ? type->app.applied_type : type;
 }
 
+const Type* get_inner_type(const Type* type) {
+    return skip_var_and_alias_types(skip_app_type(type));
+}
+
 const Type** get_type_params(const Type* type) {
-    if (type->tag == KIND_ARROW)     return type->arrow.type_params;
     if (type->tag == TYPE_ALIAS)     return type->alias.type_params;
     if (type->tag == TYPE_SIGNATURE) return type->signature.type_params;
     if (type->tag == TYPE_STRUCT)    return type->struct_.type_params;
@@ -235,7 +267,6 @@ const Type** get_type_params(const Type* type) {
 }
 
 size_t get_type_param_count(const Type* type) {
-    if (type->tag == KIND_ARROW)     return type->arrow.type_param_count;
     if (type->tag == TYPE_ALIAS)     return type->alias.type_param_count;
     if (type->tag == TYPE_SIGNATURE) return type->signature.type_param_count;
     if (type->tag == TYPE_STRUCT)    return type->struct_.type_param_count;
@@ -260,7 +291,7 @@ size_t get_prim_type_bitwidth(TypeTag tag) {
 size_t get_type_inheritance_depth(const Type* type) {
     size_t depth = 0;
     while (true) {
-        type = skip_app_type(type);
+        type = get_inner_type(type);
         if (type->tag == TYPE_STRUCT && type->struct_.super_type)
             type = type->struct_.super_type, depth++;
         else if (type->tag == TYPE_ENUM && type->enum_.sub_type)
@@ -272,7 +303,7 @@ size_t get_type_inheritance_depth(const Type* type) {
 }
 
 int compare_signature_members_by_name(const void* left, const void* right) {
-    return strcmp(((SignatureMember*)left)->var->var.name, ((SignatureMember*)right)->var->var.name);
+    return strcmp((*(const Type**)left)->var.name, (*(const Type**)right)->var.name);
 }
 
 int compare_struct_fields_by_name(const void* left, const void* right) {
@@ -309,13 +340,13 @@ static inline void* safe_bsearch(
     return bsearch(key, elems, elem_count, elem_size, compare_elems);
 }
 
-const SignatureMember* find_signature_member(const Type* signature, const char* name) {
+const Type** find_signature_var(const Type* signature, const char* name) {
     assert(signature->tag == TYPE_SIGNATURE);
-    const Type var = { .var.name = name };
-    return safe_bsearch(&(SignatureMember) { .var = &var },
-        signature->signature.members,
-        signature->signature.member_count,
-        sizeof(SignatureMember),
+    const Type* key = &(Type) { .var.name = name };
+    return safe_bsearch(&key,
+        signature->signature.vars,
+        signature->signature.var_count,
+        sizeof(Type*),
         compare_signature_members_by_name);
 }
 
@@ -367,12 +398,17 @@ void print_type(FormatState* state, const Type* type) {
     switch (type->tag) {
 #define f(name, str) case TYPE_##name: print_keyword(state, str); break;
         PRIM_TYPE_LIST(f);
+#undef f
+        case KIND_STAR:
+            format(state, "*", NULL);
+            break;
         case KIND_ARROW:
-            if (type->arrow.type_param_count == 1 && type->arrow.type_params[0]->tag == KIND_STAR)
-                print_type(state, type->arrow.type_params[0]);
-            else {
+            if (type->arrow.kind_param_count == 1 && type->arrow.kind_params[0]->tag == KIND_STAR) {
+                print_type(state, type->arrow.kind_params[0]);
+                format(state, " => ", NULL);
+            } else {
                 print_many_types_with_delim(state, "(", ", ", ") => ",
-                    type->arrow.type_params, type->arrow.type_param_count);
+                    type->arrow.kind_params, type->arrow.kind_param_count);
             }
             print_type(state, type->arrow.body);
             break;
@@ -430,6 +466,9 @@ void print_type(FormatState* state, const Type* type) {
             print_keyword(state, "struct");
             format(state, " {s}", (FormatArg[]) { { .s = type->struct_.name } });
             break;
+        case TYPE_ALIAS:
+            format(state, "{s}", (FormatArg[]) { { .s = type->alias.name } });
+            break;
         case TYPE_PTR:
             format(state, "&", NULL);
             if (type->ptr.is_const) {
@@ -438,6 +477,15 @@ void print_type(FormatState* state, const Type* type) {
             }
             print_type(state, type->ptr.pointee);
             break;
+        case TYPE_PROJ: {
+            assert(type->proj.projected_type->tag == TYPE_VAR);
+            assert(type->proj.projected_type->kind->tag == TYPE_SIGNATURE);
+            const Type* signature = type->proj.projected_type->kind;
+            const char* field_name = signature->signature.vars[type->proj.index]->var.name;
+            print_type(state, type->proj.projected_type);
+            format(state, ".{s}", (FormatArg[]) { { .s = field_name } });
+            break;
+        }
         default:
             assert(false && "invalid type");
             break;

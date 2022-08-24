@@ -565,7 +565,12 @@ const Type* make_poly_fun_type(
     });
 }
 
-const Type* replace_types_with_map(TypeTable* type_table, const Type* type, TypeMap* type_map, bool is_shallow) {
+const Type* replace_types_with_map(
+    TypeTable* type_table,
+    const Type* type,
+    TypeMap* type_map,
+    bool is_shallow)
+{
     switch (type->tag) {
 #define f(name, ...) case TYPE_##name:
     PRIM_TYPE_LIST(f)
@@ -651,11 +656,11 @@ const Type* replace_types(
     const Type* type,
     const Type** from,
     const Type** to,
-    size_t type_count,
+    size_t mapped_type_count,
     bool is_shallow)
 {
     TypeMap type_map = new_type_map();
-    for (size_t i = 0; i < type_count; ++i)
+    for (size_t i = 0; i < mapped_type_count; ++i)
         insert_in_type_map(&type_map, from[i], (void*)to[i]);
     const Type* replaced_type = replace_types_with_map(type_table, type, &type_map, is_shallow);
     free_type_map(&type_map);

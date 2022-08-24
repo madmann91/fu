@@ -69,7 +69,14 @@ const Type* make_poly_fun_type(
 
 //================================== SUBSTITUTION ========================================
 
-const Type* replace_types_with_map(TypeTable*, const Type*, TypeMap*, bool);
-const Type* replace_types(TypeTable*, const Type*, const Type** from, const Type** to, size_t, bool);
+const Type* replace_types_with_map(TypeTable*, const Type*, TypeMap*, bool is_shallow);
+
+const Type* replace_types(
+    TypeTable*,
+    const Type* type,
+    const Type** from,
+    const Type** to,
+    size_t mapped_types_count,
+    bool is_shallow);
 
 #endif

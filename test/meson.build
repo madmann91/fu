@@ -25,6 +25,7 @@ test('pass-attrs',     fu, suite: 'parser', workdir: root, args: ['--no-type-che
 
 test('fail-empty-type-params', fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_enum.fu'])
 test('fail-empty-enum',        fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_type_params.fu'])
+test('fail-empty-enum-option', fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_enum_option.fu'])
 
 # Typechecker tests
 test('pass-mono-structs',        fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/mono_structs.fu'])

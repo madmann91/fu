@@ -89,6 +89,12 @@ static void report_invalid_token(
         (FormatArg[]) { { .s = expected_msg }, { .s = found_msg } });
 }
 
+static void report_empty(Parser* parser, const char* msg, const FileLoc* file_loc)
+{
+    log_error(parser->lexer->log, file_loc,
+        "empty {s} are not allowed", (FormatArg[]) { { .s = msg } });
+}
+
 static inline bool expect_token(Parser* parser, TokenTag tag) {
     if (!accept_token(parser, tag)) {
         report_invalid_token(parser, token_tag_to_str(tag), token_tag_to_str(parser->ahead->tag), &parser->ahead->file_loc);
@@ -116,10 +122,8 @@ static AstNode* parse_many_at_least_one(
     AstNode* (*parse_one)(Parser*))
 {
     AstNode* ast_nodes = parse_many(parser, end, sep, parse_one);
-    if (!ast_nodes) {
-        log_error(parser->lexer->log, &parser->ahead->file_loc,
-            "empty {s} are not allowed", (FormatArg[]) { { .s = msg } });
-    }
+    if (!ast_nodes)
+        report_empty(parser, msg, &parser->ahead->file_loc);
     return ast_nodes;
 }
 
@@ -925,9 +929,11 @@ static AstNode* parse_option_decl(Parser* parser) {
     const char* name = parse_ident(parser);
     bool is_struct_like = false;
     AstNode* param_type = NULL;
-    if (parser->ahead->tag == TOKEN_L_PAREN)
+    if (parser->ahead->tag == TOKEN_L_PAREN) {
         param_type = parse_tuple_type(parser);
-    else if (accept_token(parser, TOKEN_L_BRACE)) {
+        if (param_type->tag == AST_TUPLE_TYPE && !param_type->tuple_type.args)
+            report_empty(parser, "option parameter lists", &param_type->file_loc);
+    } else if (accept_token(parser, TOKEN_L_BRACE)) {
         is_struct_like = true;
         param_type = parse_many(parser, TOKEN_R_BRACE, TOKEN_COMMA, parse_field_decl);
         expect_token(parser, TOKEN_R_BRACE);

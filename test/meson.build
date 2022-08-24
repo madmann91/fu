@@ -43,6 +43,7 @@ test('fail-value_access-struct', fu, suite: 'typechecker', workdir: root, should
 test('fail-bad-super-struct',    fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/bad_super_struct.fu'])
 test('fail-bad-sub-enum',        fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/bad_sub_enum.fu'])
 test('fail-hidden-mod-members',  fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/hidden_mod_members.fu'])
+test('fail-opaque-mod-members',  fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/opaque_mod_members.fu'])
 
 test('fail-redeclared-struct-field', fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/redeclared_struct_field.fu'])
 test('fail-redeclared-enum-option',  fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/redeclared_enum_option.fu'])

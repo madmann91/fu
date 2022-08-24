@@ -91,12 +91,6 @@ struct Type {
             const Type* aliased_type;
         } alias;
         struct {
-            const Type** type_params;
-            size_t type_param_count;
-            const Type** vars;
-            size_t var_count;
-        } signature;
-        struct {
             const char* name;
             const Type* sub_type;
             const Type** type_params;
@@ -104,7 +98,7 @@ struct Type {
             EnumOption* options;
             size_t option_count;
 #ifndef NDEBUG
-            bool is_frozen;
+            bool is_sealed;
 #endif
         } enum_;
         struct {
@@ -117,9 +111,18 @@ struct Type {
             const Type* parent_enum;
             bool is_tuple_like;
 #ifndef NDEBUG
-            bool is_frozen;
+            bool is_sealed;
 #endif
         } struct_;
+        struct {
+            const Type** type_params;
+            size_t type_param_count;
+            const Type** vars;
+            size_t var_count;
+#ifndef NDEBUG
+            bool is_sealed;
+#endif
+        } signature;
         struct {
             const Type** args;
             size_t arg_count;
@@ -180,7 +183,7 @@ bool is_sub_struct_type(TypeTable*, const Type*, const Type*);
 bool is_sub_enum_type(TypeTable*, const Type*, const Type*);
 const Type* apply_type(TypeTable*, const Type*, const Type*);
 
-const Type* skip_var_and_alias_types(const Type*);
+const Type* resolve_type(const Type*);
 const Type* skip_app_type(const Type*);
 const Type* get_inner_type(const Type*);
 const Type** get_type_params(const Type*);
@@ -189,7 +192,7 @@ size_t get_prim_type_bitwidth(TypeTag);
 size_t get_type_inheritance_depth(const Type*);
 const Kind* get_type_kind(const Type*);
 
-int compare_signature_members_by_name(const void* left, const void* right);
+int compare_signature_vars_by_name(const void* left, const void* right);
 int compare_struct_fields_by_name(const void* left, const void* right);
 int compare_enum_options_by_name(const void* left, const void* right);
 

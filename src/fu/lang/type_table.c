@@ -78,10 +78,6 @@ static HashCode hash_type(HashCode hash, const Type* type) {
             hash = hash_uint64(hash, type->fun.dom->id);
             hash = hash_uint64(hash, type->fun.codom->id);
             break;
-        case TYPE_SIGNATURE:
-            hash = hash_type_params(hash, type);
-            hash = hash_types(hash, type->signature.vars, type->signature.var_count);
-            break;
         case TYPE_ARRAY:
             hash = hash_uint64(hash, type->array.elem_type->id);
             break;
@@ -155,13 +151,6 @@ static bool compare_types(const Type* left, const Type* right) {
                 left->fun.codom == right->fun.codom &&
                 compare_type_params(left, right);
         }
-        case TYPE_SIGNATURE: {
-            return
-                compare_type_params(left, right) &&
-                left->signature.var_count == right->signature.var_count &&
-                !memcpy(left->signature.vars, right->signature.vars,
-                    sizeof(Type*) * left->signature.var_count);
-        }
         case TYPE_ARRAY:
             return left->array.elem_type == right->array.elem_type;
         case TYPE_VAR:
@@ -229,12 +218,6 @@ static const Type* get_or_insert_type(TypeTable* type_table, const Type* type) {
         case TYPE_ARRAY:
             new_type->contains_error   |= type->array.elem_type->contains_error;
             new_type->contains_unknown |= type->array.elem_type->contains_unknown;
-            break;
-        case TYPE_SIGNATURE:
-            new_type->signature.type_params =
-                copy_types(type_table, type->signature.type_params, type->signature.type_param_count);
-            new_type->signature.vars =
-                copy_types(type_table, type->signature.vars, type->signature.var_count);
             break;
         case TYPE_FUN:
             new_type->fun.type_params =
@@ -322,26 +305,6 @@ const Type* make_type_ctor_kind(
     return arrow_kind;
 }
 
-const Type* make_signature_type(
-    TypeTable* type_table,
-    const Type** type_params,
-    size_t type_param_count,
-    const Type** vars,
-    size_t var_count)
-{
-    qsort(vars, var_count, sizeof(const Type*), compare_signature_members_by_name);
-    return get_or_insert_type(type_table, &(Type) {
-        .tag = TYPE_SIGNATURE,
-        .kind = make_star_kind(type_table),
-        .signature = {
-            .type_params = type_params,
-            .type_param_count = type_param_count,
-            .vars = vars,
-            .var_count = var_count
-        }
-    });
-}
-
 static Type* alloc_type_with_tag(TypeTable* type_table, TypeTag tag) {
     Type* type = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type));
     memset(type, 0, sizeof(Type));
@@ -350,16 +313,21 @@ static Type* alloc_type_with_tag(TypeTable* type_table, TypeTag tag) {
     return type;
 }
 
-Type* make_var_type(TypeTable* type_table, const char* name, const Kind* kind) {
+Type* make_var_type(TypeTable* type_table, const char* name) {
     Type* var = alloc_type_with_tag(type_table, TYPE_VAR);
     var->var.name = make_str(&type_table->str_pool, name);
+    return var;
+}
+
+Type* make_var_type_with_kind(TypeTable* type_table, const char* name, const Kind* kind) {
+    Type* var = make_var_type(type_table, name);
     var->kind = kind;
     return var;
 }
 
 Type* make_var_type_with_value(TypeTable* type_table, const char* name, const Type* value) {
     assert(value->kind);
-    Type* var = make_var_type(type_table, name, value->kind);
+    Type* var = make_var_type_with_kind(type_table, name, value->kind);
     var->var.value = value;
     return var;
 }
@@ -380,29 +348,33 @@ Type* make_enum_type(TypeTable* type_table, const char* name) {
     return enum_type;
 }
 
-static StructField* copy_and_sort_struct_fields(TypeTable* type_table, StructField* fields) {
-    size_t field_count = get_dyn_array_size(fields);
-    StructField* fields_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(StructField) * field_count);
-    memcpy(fields_copy, fields, sizeof(StructField) * field_count);
-    for (size_t i = 0; i < field_count; ++i)
+Type* make_signature_type(TypeTable* type_table) {
+    Type* signature = alloc_type_with_tag(type_table, TYPE_SIGNATURE);
+    signature->signature.vars = new_dyn_array(sizeof(Type*));
+    signature->signature.type_params = new_dyn_array(sizeof(Type*));
+    return signature;
+}
+
+static StructField* copy_and_sort_struct_fields(
+    TypeTable* type_table,
+    StructField* fields,
+    size_t* field_count)
+{
+    *field_count = get_dyn_array_size(fields);
+    StructField* fields_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(StructField) * *field_count);
+    memcpy(fields_copy, fields, sizeof(StructField) * *field_count);
+    for (size_t i = 0; i < *field_count; ++i)
         fields_copy[i].name = make_str(&type_table->str_pool, fields[i].name);
-    qsort(fields_copy, field_count, sizeof(StructField), compare_struct_fields_by_name);
+    qsort(fields_copy, *field_count, sizeof(StructField), compare_struct_fields_by_name);
     free_dyn_array(fields);
     return fields_copy;
 }
 
-static EnumOption* copy_and_sort_enum_options(TypeTable* type_table, EnumOption* options) {
-    size_t option_count = get_dyn_array_size(options);
-    EnumOption* options_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(EnumOption) * option_count);
-    memcpy(options_copy, options, sizeof(EnumOption) * option_count);
-    for (size_t i = 0; i < option_count; ++i)
-        options_copy[i].name = make_str(&type_table->str_pool, options[i].name);
-    qsort(options_copy, option_count, sizeof(EnumOption), compare_enum_options_by_name);
-    free_dyn_array(options);
-    return options_copy;
-}
-
-static const Type** copy_type_params(TypeTable* type_table, const Type** type_params, size_t* type_param_count) {
+static const Type** copy_type_params(
+    TypeTable* type_table,
+    const Type** type_params,
+    size_t* type_param_count)
+{
     *type_param_count = get_dyn_array_size(type_params);
     const Type** type_params_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * *type_param_count);
     memcpy(type_params_copy, type_params, sizeof(Type*) * *type_param_count);
@@ -410,30 +382,72 @@ static const Type** copy_type_params(TypeTable* type_table, const Type** type_pa
     return type_params_copy;
 }
 
-const Type* freeze_struct_type(TypeTable* type_table, Type* type) {
+const Type* seal_struct_type(TypeTable* type_table, Type* type) {
     assert(type->tag == TYPE_STRUCT);
-    assert(!type->struct_.is_frozen);
+    assert(!type->struct_.is_sealed);
     assert(type->kind);
-    type->struct_.field_count = get_dyn_array_size(type->struct_.fields);
-    type->struct_.fields = copy_and_sort_struct_fields(type_table, type->struct_.fields);
+    type->struct_.fields =
+        copy_and_sort_struct_fields(type_table, type->struct_.fields, &type->struct_.field_count);
     type->struct_.type_params =
         copy_type_params(type_table, type->struct_.type_params, &type->struct_.type_param_count);
 #ifndef NDEBUG
-    type->struct_.is_frozen = true;
+    type->struct_.is_sealed = true;
 #endif
     return type;
 }
 
-const Type* freeze_enum_type(TypeTable* type_table, Type* type) {
+static EnumOption* copy_and_sort_enum_options(
+    TypeTable* type_table,
+    EnumOption* options,
+    size_t* option_count)
+{
+    *option_count = get_dyn_array_size(options);
+    EnumOption* options_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(EnumOption) * *option_count);
+    memcpy(options_copy, options, sizeof(EnumOption) * *option_count);
+    for (size_t i = 0; i < *option_count; ++i)
+        options_copy[i].name = make_str(&type_table->str_pool, options[i].name);
+    qsort(options_copy, *option_count, sizeof(EnumOption), compare_enum_options_by_name);
+    free_dyn_array(options);
+    return options_copy;
+}
+
+const Type* seal_enum_type(TypeTable* type_table, Type* type) {
     assert(type->tag == TYPE_ENUM);
-    assert(!type->enum_.is_frozen);
+    assert(!type->enum_.is_sealed);
     assert(type->kind);
-    type->enum_.option_count = get_dyn_array_size(type->enum_.options);
-    type->enum_.options = copy_and_sort_enum_options(type_table, type->enum_.options);
+    type->enum_.options =
+        copy_and_sort_enum_options(type_table, type->enum_.options, &type->enum_.option_count);
     type->enum_.type_params =
         copy_type_params(type_table, type->enum_.type_params, &type->enum_.type_param_count);
 #ifndef NDEBUG
-    type->enum_.is_frozen = true;
+    type->enum_.is_sealed = true;
+#endif
+    return type;
+}
+
+static const Type** copy_and_sort_signature_vars(
+    TypeTable* type_table,
+    const Type** vars,
+    size_t* var_count)
+{
+    *var_count = get_dyn_array_size(vars);
+    const Type** vars_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * *var_count);
+    memcpy(vars_copy, vars, sizeof(Type*) * *var_count);
+    qsort(vars_copy, *var_count, sizeof(Type*), compare_signature_vars_by_name);
+    free_dyn_array(vars);
+    return vars_copy;
+}
+
+const Type* seal_signature_type(TypeTable* type_table, Type* type) {
+    assert(type->tag == TYPE_SIGNATURE);
+    assert(!type->signature.is_sealed);
+    assert(type->kind);
+    type->signature.vars =
+        copy_and_sort_signature_vars(type_table, type->signature.vars, &type->signature.var_count);
+    type->signature.type_params =
+        copy_type_params(type_table, type->signature.type_params, &type->signature.type_param_count);
+#ifndef NDEBUG
+    type->signature.is_sealed = true;
 #endif
     return type;
 }
@@ -502,12 +516,12 @@ const Type* make_fun_type(TypeTable* type_table, const Type* dom, const Type* co
 }
 
 const Type* make_proj_type(TypeTable* type_table, const Type* projected_type, size_t index) {
-    assert(projected_type->tag == TYPE_SIGNATURE);
-    assert(index < projected_type->signature.var_count);
-    const Kind* kind = projected_type->signature.vars[index]->kind;
+    assert(projected_type->tag == TYPE_VAR);
+    assert(projected_type->kind->tag == TYPE_SIGNATURE);
+    assert(index < projected_type->kind->signature.var_count);
     return get_or_insert_type(type_table, &(Type) {
         .tag = TYPE_PROJ,
-        .kind = kind,
+        .kind = projected_type->kind->signature.vars[index]->kind,
         .proj = { .projected_type = projected_type, .index = index }
     });
 }

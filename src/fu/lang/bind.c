@@ -16,7 +16,7 @@ typedef struct {
 
 struct Scope {
     HashTable symbols;
-    AstNode* decl_site;
+    AstNode* ast_node;
     struct Scope* prev, *next;
 };
 
@@ -136,8 +136,8 @@ static inline AstNode* find_enclosing_scope(
     const FileLoc* file_loc)
 {
     for (Scope* scope = env->cur_scope; scope; scope = scope->prev) {
-        if (scope->decl_site->tag == fst_tag || scope->decl_site->tag == snd_tag)
-            return scope->decl_site;
+        if (scope->ast_node->tag == fst_tag || scope->ast_node->tag == snd_tag)
+            return scope->ast_node;
     }
     log_error(env->log, file_loc, "use of '{$}{s}{$}' outside of a {s}", (FormatArg[]) {
         { .style = keyword_style },
@@ -156,14 +156,14 @@ static inline AstNode* find_enclosing_fun(Env* env, const FileLoc* file_loc) {
     return find_enclosing_scope(env, "return", "function", AST_FUN_EXPR, AST_FUN_DECL, file_loc);
 }
 
-static inline void push_scope(Env* env, AstNode* decl_site) {
+static inline void push_scope(Env* env, AstNode* ast_node) {
     if (!env->cur_scope)
         env->cur_scope = env->first_scope;
     else if (env->cur_scope->next)
         env->cur_scope = env->cur_scope->next;
     else
         env->cur_scope = new_scope(env->cur_scope);
-    env->cur_scope->decl_site = decl_site;
+    env->cur_scope->ast_node = ast_node;
     clear_hash_table(&env->cur_scope->symbols);
 }
 
@@ -214,6 +214,7 @@ static void bind_for_loop(Env* env, AstNode* for_loop) {
 }
 
 void bind_stmt(Env* env, AstNode* stmt) {
+    stmt->parent_scope = env->cur_scope->ast_node;
     switch (stmt->tag) {
         case AST_FUN_DECL:
         case AST_VAR_DECL:
@@ -250,6 +251,7 @@ static void bind_path(Env* env, AstNode* path) {
 
 static void bind_pattern(Env* env, AstNode* pattern, bool is_const) {
     void (*bind_sub_pattern)(Env*, AstNode*) = is_const ? bind_const_pattern : bind_non_const_pattern;
+    pattern->parent_scope = env->cur_scope->ast_node;
     switch (pattern->tag) {
         case AST_PATH:
             bind_path(env, pattern);
@@ -319,6 +321,8 @@ static void bind_members(Env* env, AstNode* decl, AstNode* type_params, AstNode*
 }
 
 void bind_decl(Env* env, AstNode* decl) {
+    // Note: The current scope might be NULL upon entering the top-level module.
+    decl->parent_scope = env->cur_scope ? env->cur_scope->ast_node : NULL;
     switch (decl->tag) {
         case AST_FIELD_DECL:
             bind_type(env, decl->field_decl.type);
@@ -404,6 +408,7 @@ static void bind_match_case(Env* env, AstNode* match_case) {
 }
 
 void bind_expr(Env* env, AstNode* expr) {
+    expr->parent_scope = env->cur_scope->ast_node;
     switch (expr->tag) {
         case AST_PATH:
             bind_path(env, expr);
@@ -494,6 +499,7 @@ void bind_expr(Env* env, AstNode* expr) {
 }
 
 void bind_kind(Env* env, AstNode* kind) {
+    kind->parent_scope = env->cur_scope->ast_node;
     switch (kind->tag) {
         case AST_KIND_STAR:
             break;
@@ -515,6 +521,7 @@ static void bind_where_clause(Env* env, AstNode* where_clause) {
 }
 
 void bind_type(Env* env, AstNode* type) {
+    type->parent_scope = env->cur_scope->ast_node;
     switch (type->tag) {
         case AST_NORET_TYPE:
 #define f(name, ...) case AST_TYPE_##name:

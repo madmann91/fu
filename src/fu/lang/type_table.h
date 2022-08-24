@@ -29,12 +29,15 @@ const Kind* make_type_ctor_kind(TypeTable*,
 
 //================================== NOMINAL TYPES =======================================
 
-Type* make_var_type(TypeTable*, const char* name, const Kind*);
+Type* make_var_type(TypeTable*, const char* name);
+Type* make_var_type_with_kind(TypeTable*, const char* name, const Kind*);
 Type* make_var_type_with_value(TypeTable*, const char* name, const Type*);
 Type* make_struct_type(TypeTable*, const char* name);
 Type* make_enum_type(TypeTable*, const char* name);
-const Type* freeze_struct_type(TypeTable*, Type*);
-const Type* freeze_enum_type(TypeTable*, Type*);
+Type* make_signature_type(TypeTable*); 
+const Type* seal_struct_type(TypeTable*, Type*);
+const Type* seal_enum_type(TypeTable*, Type*);
+const Type* seal_signature_type(TypeTable*, Type*);
 
 //================================= STRUCTURAL TYPES =====================================
 
@@ -49,13 +52,6 @@ const Type* make_array_type(TypeTable*, const Type* elem_type);
 const Type* make_ptr_type(TypeTable*, bool is_const, const Type* pointee_type);
 const Type* make_fun_type(TypeTable*, const Type* dom, const Type* codom);
 const Type* make_proj_type(TypeTable*, const Type* projected_type, size_t index);
-
-const Type* make_signature_type(
-    TypeTable*,
-    const Type** type_params,
-    size_t type_param_count,
-    const Type** vars,
-    size_t var_count);
 
 const Type* make_alias_type(
     TypeTable*,

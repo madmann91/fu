@@ -533,6 +533,18 @@ bool is_assign_expr(AstNodeTag tag) {
     }
 }
 
+bool is_value_decl(AstNodeTag tag) {
+    switch (tag) {
+        case AST_FUN_DECL:
+        case AST_CONST_DECL:
+        case AST_VAR_DECL:
+        case AST_MOD_DECL:
+            return true;
+        default:
+            return false;
+    }
+}
+
 bool is_assignable_expr(const AstNode* expr) {
     assert(expr->type && "expression must have been type-checked first");
     if (expr->tag == AST_DEREF_EXPR)
@@ -577,6 +589,17 @@ const AstNode* get_last_ast_node(const AstNode* node) {
     const AstNode* prev = node;
     for (; node; prev = node, node = node->next);
     return prev;
+}
+
+const AstNode* get_parent_scope_with_tag(const AstNode* ast_node, AstNodeTag tag) {
+    AstNode* parent_scope = ast_node->parent_scope;
+    while (parent_scope && parent_scope->tag != tag)
+        parent_scope = parent_scope->parent_scope;
+    return parent_scope;
+}
+
+const AstNode* get_parent_mod_decl(const AstNode* ast_node) {
+    return get_parent_scope_with_tag(ast_node, AST_MOD_DECL);
 }
 
 AstNodeTag assign_expr_to_binary_expr(AstNodeTag tag) {

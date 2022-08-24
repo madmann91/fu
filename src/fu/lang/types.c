@@ -97,8 +97,8 @@ bool is_tuple_like_struct_type(const Type* type) {
 }
 
 bool is_sub_type(TypeTable* type_table, const Type* left, const Type* right) {
-    left = skip_var_and_alias_types(left);
-    right = skip_var_and_alias_types(right);
+    left = resolve_type(left);
+    right = resolve_type(right);
 
     if (left == right ||
         left->tag == TYPE_NORET ||
@@ -224,11 +224,11 @@ bool is_sub_enum_type(TypeTable* type_table, const Type* left, const Type* right
 }
 
 const Type* apply_type(TypeTable* type_table, const Type* type, const Type* type_app) {
-    type = skip_var_and_alias_types(type);
+    type = resolve_type(type);
     if (type_app->tag != TYPE_APP)
         return type;
     return replace_types(type_table, type,
-        get_type_params(skip_var_and_alias_types(type_app->app.applied_type)),
+        get_type_params(resolve_type(type_app->app.applied_type)),
         type_app->app.args,
         type_app->app.arg_count);
 }
@@ -237,13 +237,20 @@ bool is_kind_level_type(const Type* type) {
     return type->tag == KIND_STAR || type->tag == KIND_ARROW;
 }
 
-const Type* skip_var_and_alias_types(const Type* type) {
+const Type* resolve_type(const Type* type) {
     while (true) {
         if (type->tag == TYPE_VAR && type->var.value)
             type = type->var.value;
         else if (type->tag == TYPE_ALIAS && type->alias.type_param_count == 0)
             type = type->alias.aliased_type;
-        else
+        else if (type->tag == TYPE_PROJ) {
+            const Type* signature = type->proj.projected_type->kind;
+            assert(signature && signature->tag == TYPE_SIGNATURE);
+            const Type* var = signature->signature.vars[type->proj.index];
+            if (!var->var.value)
+                break;
+            type = var->var.value;
+        } else
             break;
     }
     return type;
@@ -254,7 +261,7 @@ const Type* skip_app_type(const Type* type) {
 }
 
 const Type* get_inner_type(const Type* type) {
-    return skip_var_and_alias_types(skip_app_type(type));
+    return resolve_type(skip_app_type(type));
 }
 
 const Type** get_type_params(const Type* type) {
@@ -302,7 +309,7 @@ size_t get_type_inheritance_depth(const Type* type) {
     return depth;
 }
 
-int compare_signature_members_by_name(const void* left, const void* right) {
+int compare_signature_vars_by_name(const void* left, const void* right) {
     return strcmp((*(const Type**)left)->var.name, (*(const Type**)right)->var.name);
 }
 
@@ -347,7 +354,7 @@ const Type** find_signature_var(const Type* signature, const char* name) {
         signature->signature.vars,
         signature->signature.var_count,
         sizeof(Type*),
-        compare_signature_members_by_name);
+        compare_signature_vars_by_name);
 }
 
 const StructField* find_struct_field(const Type* struct_type, const char* name) {

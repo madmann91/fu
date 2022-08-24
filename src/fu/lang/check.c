@@ -10,6 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define DEFAULT_INT_TYPE_TAG   TYPE_I32
+#define DEFAULT_FLOAT_TYPE_TAG TYPE_F32
+
 TypingContext new_typing_context(TypeTable* type_table, MemPool* mem_pool, Log* log) {
     return (TypingContext) {
         .log = log,
@@ -39,6 +42,31 @@ static void pop_decl(TypingContext* context, AstNode* decl) {
         &decl, hash_ptr(hash_init(), decl), sizeof(AstNode*), compare_decls);
     assert(ptr && "trying to pop an unvisited declaration");
     remove_from_hash_table(&context->visited_decls, ptr, sizeof(AstNode*));
+}
+
+static const Type* add_to_parent_mod(
+    TypeTable* type_table,
+    AstNode* ast_node,
+    const char* name,
+    const Type* type)
+{
+    assert(ast_node->parent_scope->tag == AST_MOD_DECL);
+    assert(ast_node->parent_scope->mod_decl.signature_type);
+    assert(ast_node->parent_scope->mod_decl.signature_type->tag == TYPE_SIGNATURE);
+    assert(!ast_node->parent_scope->mod_decl.signature_type->signature.is_sealed);
+    const Type* var = is_value_decl(ast_node->tag)
+        ? make_var_type_with_kind(type_table, get_decl_name(ast_node), type)
+        : make_var_type_with_value(type_table, get_decl_name(ast_node), type);
+    push_on_dyn_array(ast_node->parent_scope->mod_decl.signature_type->signature.vars, &var);
+    return var;
+}
+
+static inline const Type* add_decl_to_parent_mod(
+    TypeTable* type_table,
+    AstNode* ast_node,
+    const Type* type)
+{
+    return add_to_parent_mod(type_table, ast_node, get_decl_name(ast_node), type);
 }
 
 static const Type** check_many(
@@ -265,10 +293,15 @@ static const Type* infer_next_path_elem(TypingContext* context, AstNode* prev_el
             if (!var)
                 goto missing_member;
             next_elem->path_elem.index = var - inner_type->kind->signature.vars;
-            next_elem->path_elem.is_type = is_kind_level_type((*var)->kind);
-            next_elem->type = ((*var)->var.value)
-                ? apply_type(context->type_table, (*var)->var.value, prev_elem->type)
-                : make_proj_type(context->type_table, inner_type->kind, next_elem->path_elem.index);
+            if (is_kind_level_type((*var)->kind)) {
+                next_elem->path_elem.is_type = true;
+                next_elem->type = apply_type(context->type_table,
+                    make_proj_type(context->type_table, inner_type, next_elem->path_elem.index),
+                    prev_elem->type);
+            } else {
+                next_elem->path_elem.is_type = false;
+                next_elem->type = (*var)->kind;
+            }
             break;
         }
         default:
@@ -502,7 +535,7 @@ static const Type* check_call_expr(TypingContext* context, AstNode* call_expr, c
 
 static const Type* check_int_literal(TypingContext* context, AstNode* literal, const Type* expected_type) {
     if (expected_type->tag == TYPE_UNKNOWN)
-        return literal->type = make_prim_type(context->type_table, TYPE_I64);
+        return literal->type = make_prim_type(context->type_table, DEFAULT_INT_TYPE_TAG);
     if (!is_int_or_float_type(expected_type->tag))
         return literal->type = report_type_mismatch(context, "integer literal", expected_type, &literal->file_loc);
     if (is_int_type(expected_type->tag) &&
@@ -518,7 +551,7 @@ static const Type* check_int_literal(TypingContext* context, AstNode* literal, c
 
 static const Type* check_float_literal(TypingContext* context, AstNode* literal, const Type* expected_type) {
     if (expected_type->tag == TYPE_UNKNOWN)
-        return literal->type = make_prim_type(context->type_table, TYPE_F64);
+        return literal->type = make_prim_type(context->type_table, DEFAULT_FLOAT_TYPE_TAG);
     if (!is_float_type(expected_type->tag))
         return literal->type = report_type_mismatch(context, "floating-point literal", expected_type, &literal->file_loc);
     return literal->type = expected_type;
@@ -829,7 +862,8 @@ static const Type* infer_type_param(TypingContext* context, AstNode* type_param)
     const Type* kind = type_param->type_param.kind
         ? infer_kind(context, type_param->type_param.kind)
         : make_star_kind(context->type_table);
-    return type_param->type = make_var_type(context->type_table, type_param->type_param.name, kind);
+    return type_param->type = make_var_type_with_kind(
+        context->type_table, type_param->type_param.name, kind);
 }
 
 static const Kind* infer_type_params(
@@ -867,8 +901,6 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
         struct_type->struct_.type_params,
         make_star_kind(context->type_table));
 
-    Type* struct_var = make_var_type_with_value(context->type_table, struct_decl->struct_decl.name, struct_type);
-
     // Add inherited fields to the structure
     const Type* super_struct = NULL;
     if (struct_decl->struct_decl.super_type) {
@@ -889,7 +921,10 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
             super_struct = NULL;
     }
 
-    struct_decl->type = struct_var;
+    struct_decl->type = struct_decl->struct_decl.is_public
+        ? add_decl_to_parent_mod(context->type_table, struct_decl, struct_type)
+        : struct_type;
+
     for (AstNode* field_decl = struct_decl->struct_decl.fields; field_decl; field_decl = field_decl->next) {
         if (struct_decl->struct_decl.is_tuple_like) {
             push_on_dyn_array(struct_type->struct_.fields, &(StructField) {
@@ -906,9 +941,8 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
             push_on_dyn_array(struct_type->struct_.fields, &field);
         }
     }
-
-    freeze_struct_type(context->type_table, struct_type);
-    return struct_var;
+    seal_struct_type(context->type_table, struct_type);
+    return struct_decl->type;
 }
 
 static const Type* infer_option_decl(TypingContext* context, AstNode* option_decl, Type* enum_type) {
@@ -933,7 +967,7 @@ static const Type* infer_option_decl(TypingContext* context, AstNode* option_dec
     }
 
     // We may need to wrap the structure type into a type application if the enumeration is polymorphic
-    const Type* option_type = freeze_struct_type(context->type_table, struct_type);
+    const Type* option_type = seal_struct_type(context->type_table, struct_type);
     size_t type_param_count = get_dyn_array_size(enum_type->enum_.type_params);
     if (type_param_count > 0) {
         option_type = make_app_type(
@@ -949,9 +983,7 @@ static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
         enum_type->enum_.type_params,
         make_star_kind(context->type_table));
 
-    Type* enum_var = make_var_type_with_value(context->type_table, enum_decl->enum_decl.name, enum_type);
-
-    // Add inherited options, if any
+    // Add inherited options to the enumeration
     const Type* sub_enum = NULL;
     if (enum_decl->enum_decl.sub_type) {
         const Type* sub_type = infer_type(context, enum_decl->enum_decl.sub_type);
@@ -971,8 +1003,10 @@ static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
             sub_enum = NULL;
     }
 
-    // Type-check options
-    enum_decl->type = enum_var;
+    enum_decl->type = enum_decl->enum_decl.is_public
+        ? add_decl_to_parent_mod(context->type_table, enum_decl, enum_type)
+        : enum_type;
+
     for (AstNode* option_decl = enum_decl->enum_decl.options; option_decl; option_decl = option_decl->next) {
         if (sub_enum && find_enum_option(sub_enum, option_decl->option_decl.name)) {
             report_redeclared_inherited_member(context,
@@ -986,9 +1020,8 @@ static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
             });
         }
     }
-
-    freeze_enum_type(context->type_table, enum_type);
-    return enum_var;
+    seal_enum_type(context->type_table, enum_type);
+    return enum_decl->type;
 }
 
 static const Type* infer_type_decl(TypingContext* context, AstNode* type_decl) {
@@ -1003,8 +1036,9 @@ static const Type* infer_type_decl(TypingContext* context, AstNode* type_decl) {
         aliased_type);
     free_dyn_array(type_params);
 
-    return type_decl->type =
-        make_var_type_with_value(context->type_table, type_decl->type_decl.name, alias_type);
+    return type_decl->type = type_decl->type_decl.is_public
+        ? add_decl_to_parent_mod(context->type_table, type_decl, alias_type)
+        : alias_type;
 }
 
 static const Type* infer_fun_decl(TypingContext* context, AstNode* fun_decl) {
@@ -1026,33 +1060,32 @@ static const Type* infer_fun_decl(TypingContext* context, AstNode* fun_decl) {
             dom_type, codom_type);
     }
     free_dyn_array(type_params);
+    if (fun_decl->fun_decl.is_public)
+        add_decl_to_parent_mod(context->type_table, fun_decl, fun_decl->type);
     return fun_decl->type;
 }
 
 static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
-    const Type** vars = new_dyn_array(sizeof(Type*));
-    const Type** type_params = new_dyn_array(sizeof(Type*));
+    Type* signature = mod_decl->mod_decl.signature_type = make_signature_type(context->type_table);
+    signature->kind = infer_type_params(context,
+        mod_decl->mod_decl.type_params,
+        signature->signature.type_params,
+        make_star_kind(context->type_table));
 
-    infer_type_params(context, mod_decl->mod_decl.type_params, type_params, NULL);
-    for (AstNode* decl = mod_decl->mod_decl.members; decl; decl = decl->next) {
+    for (AstNode* decl = mod_decl->mod_decl.members; decl; decl = decl->next)
         infer_decl(context, decl);
-        if (!is_public_decl(decl))
-            continue;
-        if (decl->type->tag == TYPE_VAR) {
-            if (is_opaque_decl(decl))
-                ((Type*)decl->type)->var.value = NULL;
-            push_on_dyn_array(vars, &decl->type);
+
+    for (AstNode* decl = mod_decl->mod_decl.members; decl; decl = decl->next) {
+        if (is_public_decl(decl) && is_opaque_decl(decl)) {
+            assert(decl->type->tag == TYPE_VAR);
+            ((Type*)decl->type)->var.value = NULL;
         }
     }
 
-    const Type* type = make_signature_type(context->type_table,
-        type_params, get_dyn_array_size(type_params),
-        vars, get_dyn_array_size(vars));
+    mod_decl->type = make_var_type_with_kind(
+        context->type_table, mod_decl->mod_decl.name, signature);
 
-    free_dyn_array(type_params);
-    free_dyn_array(vars);
-
-    mod_decl->type = make_var_type(context->type_table, mod_decl->mod_decl.name, type);
+    seal_signature_type(context->type_table, signature);
     return mod_decl->type;
 }
 

@@ -9,16 +9,12 @@ typedef struct Log Log;
 
 typedef struct Options {
     bool print_ast;
-    bool no_color;
     bool no_type_check;
-    size_t max_errors;
 } Options;
 
 static const Options default_options = {
     .print_ast     = false,
-    .no_color      = false,
-    .no_type_check = false,
-    .max_errors    = SIZE_MAX
+    .no_type_check = false
 };
 
 /// Parse command-line options, and remove those parsed options from the

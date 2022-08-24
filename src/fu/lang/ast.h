@@ -146,6 +146,7 @@ struct AstNode {
     AstNodeTag tag;
     FileLoc file_loc;
     const Type* type;
+    AstNode* parent_scope;
     AstNode* next;
     AstNode* attrs;
     union {
@@ -270,6 +271,7 @@ struct AstNode {
         struct {
             const char* name;
             bool is_public;
+            Type* signature_type;
             AstNode* type_params;
             AstNode* signature;
             AstNode* aliased_mod;
@@ -368,13 +370,15 @@ bool needs_semicolon(AstNodeTag);
 bool is_tuple(AstNodeTag);
 bool is_binary_expr(AstNodeTag);
 bool is_assign_expr(AstNodeTag);
+bool is_value_decl(AstNodeTag);
 bool is_assignable_expr(const AstNode*);
 bool is_public_decl(const AstNode*);
 bool is_opaque_decl(const AstNode*);
-bool is_top_level_mod_decl(const AstNode*);
 
 size_t count_ast_nodes(const AstNode*);
 const AstNode* get_last_ast_node(const AstNode*);
+const AstNode* get_parent_scope_with_tag(const AstNode*, AstNodeTag);
+const AstNode* get_parent_mod_decl(const AstNode*);
 
 AstNodeTag assign_expr_to_binary_expr(AstNodeTag);
 const char* get_prim_type_name(AstNodeTag);

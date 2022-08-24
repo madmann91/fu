@@ -7,14 +7,15 @@
 
 static void usage() {
     printf(
-        "Fu -- a FUnctional language\n"
+        "Fu -- a FUnctional language (ver. %s)\n"
         "usage: fu [options] files...\n"
         "options:\n"
         "  -h    --help           Shows this message\n"
         "        --print-ast      Prints the AST on the standard output\n"
         "        --no-type-check  Disables type checking\n"
         "        --no-color       Disables colored output\n"
-        "        --max-errors     Sets the maximum number of errors\n");
+        "        --max-errors     Sets the maximum number of errors\n",
+        FU_VERSION);
 }
 
 static inline bool check_option_arg(int i, int argc, char** argv, Log* log) {
@@ -37,7 +38,7 @@ bool parse_options(int* argc, char** argv, Options* options, Log* log) {
             usage();
             goto error;
         } else if (!strcmp(argv[i], "--no-color"))
-            options->no_color = true;
+            log->state->ignore_style = true;
         else if (!strcmp(argv[i], "--no-type-check"))
             options->no_type_check = true;
         else if (!strcmp(argv[i], "--print-ast"))
@@ -45,7 +46,7 @@ bool parse_options(int* argc, char** argv, Options* options, Log* log) {
         else if (!strcmp(argv[i], "--max-errors")) {
             if (!check_option_arg(i, n, argv, log))
                 goto error;
-            options->max_errors = strtoull(argv[++i], NULL, 10);
+            log->max_errors = strtoull(argv[++i], NULL, 10);
         } else {
             log_error(log, NULL, "invalid option '{s}'", (FormatArg[]) { { .s = argv[i] } });
             goto error;

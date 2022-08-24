@@ -1,5 +1,8 @@
 project('fu', 'c', version: '0.1', meson_version: '>= 0.56.0')
 
+cc = meson.get_compiler('c')
+math_lib = cc.find_library('m', required : false)
+
 libfu = library('libfu',
   sources: [
     'src/fu/core/format.c',
@@ -20,6 +23,8 @@ libfu = library('libfu',
     'src/fu/driver/driver.c',
     'src/fu/driver/options.c'],
   include_directories: 'src',
+  dependencies: math_lib,
+  c_args: '-DFU_VERSION="@0@"'.format(meson.project_version()),
   name_prefix: '')
 
 fu = executable('fu',

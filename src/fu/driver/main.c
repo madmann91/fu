@@ -17,9 +17,6 @@ int main(int argc, char** argv) {
         goto exit;
     }
 
-    state.ignore_style = options.no_color;
-    log.max_errors = options.max_errors;
-
     for (int i = 1; i < argc && status; ++i)
         status &= compile_file(argv[i], &options, &log);
 

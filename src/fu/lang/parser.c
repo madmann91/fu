@@ -867,9 +867,8 @@ static inline AstNode* parse_fun_params(Parser* parser) {
     return parse_tuple(parser, AST_TUPLE_PATTERN, parse_fun_param);
 }
 
-static inline AstNode* parse_fun_decl(Parser* parser) {
+static inline AstNode* parse_fun_decl(Parser* parser, bool is_public) {
     FilePos begin = parser->ahead->file_loc.begin;
-    bool is_public = accept_token(parser, TOKEN_PUB);
     eat_token(parser, TOKEN_FUN);
 
     const char* name = parse_ident(parser);
@@ -1085,9 +1084,13 @@ static inline AstNode* parse_type_decl(Parser* parser, bool is_public, bool is_o
     });
 }
 
-static inline AstNode* parse_const_or_var_decl(Parser* parser, TokenTag token_tag, AstNodeTag ast_node_tag) {
+static inline AstNode* parse_const_or_var_decl(
+    Parser* parser,
+    TokenTag token_tag,
+    AstNodeTag ast_node_tag,
+    bool is_public)
+{
     FilePos begin = parser->ahead->file_loc.begin;
-    bool is_public = accept_token(parser, TOKEN_PUB);
     eat_token(parser, token_tag);
     AstNode* pattern = parse_pattern(parser);
     AstNode* init = NULL;
@@ -1104,12 +1107,12 @@ static inline AstNode* parse_const_or_var_decl(Parser* parser, TokenTag token_ta
     });
 }
 
-static inline AstNode* parse_const_decl(Parser* parser) {
-    return parse_const_or_var_decl(parser, TOKEN_CONST, AST_CONST_DECL);
+static inline AstNode* parse_const_decl(Parser* parser, bool is_public) {
+    return parse_const_or_var_decl(parser, TOKEN_CONST, AST_CONST_DECL, is_public);
 }
 
-static inline AstNode* parse_var_decl(Parser* parser) {
-    return parse_const_or_var_decl(parser, TOKEN_VAR, AST_VAR_DECL);
+static inline AstNode* parse_var_decl(Parser* parser, bool is_public) {
+    return parse_const_or_var_decl(parser, TOKEN_VAR, AST_VAR_DECL, is_public);
 }
 
 static inline AstNode* parse_using_decl(Parser* parser) {
@@ -1132,14 +1135,14 @@ AstNode* parse_stmt(Parser* parser) {
         case TOKEN_STRUCT: return parse_struct_decl(parser, false, false);
         case TOKEN_USING:  return parse_using_decl(parser);
         case TOKEN_ENUM:   return parse_enum_decl(parser, false, false);
-        case TOKEN_VAR:    return parse_var_decl(parser);
-        case TOKEN_CONST:  return parse_const_decl(parser);
+        case TOKEN_VAR:    return parse_var_decl(parser, false);
+        case TOKEN_CONST:  return parse_const_decl(parser, false);
         case TOKEN_FUN:
             // This test here prevents an ambiguity with anonymous function expressions.
             // Those also start with `fun`, just like function declarations,
             // but do not have an identifier after that.
             if (parser->ahead[1].tag == TOKEN_IDENT)
-                return parse_fun_decl(parser);
+                return parse_fun_decl(parser, false);
             // fallthrough
         default:
             return parse_expr(parser);
@@ -1154,9 +1157,9 @@ static inline AstNode* parse_decl_without_attr_list(Parser* parser, bool is_publ
         case TOKEN_SIG:    return parse_sig_decl(parser);
         case TOKEN_USING:  return parse_using_decl(parser);
         case TOKEN_TYPE:   return parse_type_decl(parser, is_public, is_opaque);
-        case TOKEN_CONST:  return parse_const_decl(parser);
-        case TOKEN_VAR:    return parse_var_decl(parser);
-        case TOKEN_FUN:    return parse_fun_decl(parser);
+        case TOKEN_CONST:  return parse_const_decl(parser, is_public);
+        case TOKEN_VAR:    return parse_var_decl(parser, is_public);
+        case TOKEN_FUN:    return parse_fun_decl(parser, is_public);
         default:
             return parse_error(parser, "declaration");
     }
@@ -1167,8 +1170,13 @@ AstNode* parse_decl(Parser* parser) {
     if (parser->ahead->tag == TOKEN_HASH)
         attrs = parse_attr_list(parser);
     bool is_public = accept_token(parser, TOKEN_PUB);
-    bool is_opaque = accept_token(parser, TOKEN_OPAQUE);
+    FileLoc opaque_loc = parser->ahead->file_loc;
+    bool is_opaque = is_public && accept_token(parser, TOKEN_OPAQUE);
     AstNode* decl = parse_decl_without_attr_list(parser, is_public, is_opaque);
+    if (is_opaque && is_value_decl(decl->tag)) {
+        log_error(parser->lexer->log, &opaque_loc, "cannot use '{$}opaque{$}' here",
+            (FormatArg[]) { { .style = keyword_style }, { .style = reset_style } });
+    }
     decl->attrs = attrs;
     return decl;
 }

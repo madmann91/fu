@@ -49,7 +49,8 @@ bool compile_file(const char* file_name, const Options* options, Log* log) {
 
     // Print the AST
     if (options->print_ast) {
-        FormatState state = new_format_state("    ", options->no_color || !is_color_supported(stdout));
+        FormatState state = new_format_state("    ",
+            log->state->ignore_style || !is_color_supported(stdout));
         print_ast(&state, program);
         write_format_state(&state, stdout);
         free_format_state(&state);

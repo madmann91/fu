@@ -523,7 +523,7 @@ bool is_binary_expr(AstNodeTag tag) {
 
 bool is_assign_expr(AstNodeTag tag) {
     switch (tag) {
-#define f(name, ...) case AST_##name##_EXPR:
+#define f(name, ...) case AST_##name##_ASSIGN_EXPR:
     AST_ASSIGN_EXPR_LIST(f)
 #undef f
         case AST_ASSIGN_EXPR:

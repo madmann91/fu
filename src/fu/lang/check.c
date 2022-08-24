@@ -51,12 +51,13 @@ static void pop_decl(TypingContext* context, AstNode* decl) {
 static const Type* add_to_parent_mod(
     TypeTable* type_table,
     AstNode* ast_node,
+    const Type* type,
     const char* name,
-    const Type* type)
+    bool is_value)
 {
     assert(ast_node->parent_scope->tag == AST_MOD_DECL);
     assert(ast_node->parent_scope->mod_decl.data);
-    const Type* var = is_value_decl(ast_node->tag)
+    const Type* var = is_value
         ? make_var_type_with_kind(type_table, name, type)
         : make_var_type_with_value(type_table, name, type);
     push_on_dyn_array(&ast_node->parent_scope->mod_decl.data->vars, &var);
@@ -68,7 +69,42 @@ static inline const Type* add_decl_to_parent_mod(
     AstNode* ast_node,
     const Type* type)
 {
-    return add_to_parent_mod(type_table, ast_node, get_decl_name(ast_node), type);
+    return add_to_parent_mod(
+        type_table, ast_node, type,
+        get_decl_name(ast_node),
+        is_value_decl(ast_node->tag));
+}
+
+static inline void add_idents_to_parent_mod(TypeTable* type_table, AstNode* pattern) {
+    switch (pattern->tag) {
+        case AST_IDENT_PATTERN:
+            add_to_parent_mod(type_table, pattern, pattern->type, pattern->ident_pattern.name, true);
+            break;
+        case AST_FIELD_PATTERN:
+            add_idents_to_parent_mod(type_table, pattern->field_pattern.val);
+            break;
+        case AST_STRUCT_PATTERN:
+            for (AstNode* field = pattern->struct_pattern.fields; field; field = field->next)
+                add_idents_to_parent_mod(type_table, field);
+            break;
+        case AST_CTOR_PATTERN:
+            add_idents_to_parent_mod(type_table, pattern->ctor_pattern.arg);
+            break;
+        case AST_TUPLE_PATTERN:
+            for (AstNode* arg = pattern->tuple_pattern.args; arg; arg = arg->next)
+                add_idents_to_parent_mod(type_table, arg);
+            break;
+        case AST_TYPED_PATTERN:
+            add_idents_to_parent_mod(type_table, pattern->typed_pattern.left);
+            break;
+        case AST_ARRAY_PATTERN:
+            for (AstNode* elem = pattern->array_pattern.elems; elem; elem = elem->next)
+                add_idents_to_parent_mod(type_table, elem);
+            break;
+        default:
+            assert(false && "invalid pattern");
+            break;
+    }
 }
 
 static const Type** check_many(
@@ -858,10 +894,13 @@ static const Type* check_pattern_and_expr(
 }
 
 static const Type* infer_const_or_var_decl(TypingContext* context, AstNode* decl) {
-    return check_pattern_and_expr(context,
+    const Type* type =  check_pattern_and_expr(context,
         decl->var_decl.pattern,
         decl->var_decl.init,
         make_unknown_type(context->type_table));
+    if (decl->var_decl.is_public)
+        add_idents_to_parent_mod(context->type_table, decl->var_decl.pattern);
+    return type;
 }
 
 static const Type* infer_type_param(TypingContext* context, AstNode* type_param) {

@@ -1039,7 +1039,7 @@ static inline AstNode* parse_sig_decl(Parser* parser) {
     });
 }
 
-static inline AstNode* parse_mod_decl(Parser* parser) {
+static inline AstNode* parse_mod_decl(Parser* parser, bool is_public) {
     FilePos begin = parser->ahead->file_loc.begin;
     eat_token(parser, TOKEN_MOD);
     const char* name = parse_ident(parser);
@@ -1061,6 +1061,7 @@ static inline AstNode* parse_mod_decl(Parser* parser) {
         .tag = AST_MOD_DECL,
         .mod_decl = {
             .name = name,
+            .is_public = is_public,
             .type_params = type_params,
             .members = members,
             .aliased_mod = aliased_mod,
@@ -1159,7 +1160,7 @@ static inline AstNode* parse_decl_without_attr_list(Parser* parser, bool is_publ
     switch (parser->ahead->tag) {
         case TOKEN_STRUCT: return parse_struct_decl(parser, is_public, is_opaque);
         case TOKEN_ENUM:   return parse_enum_decl(parser, is_public, is_opaque);
-        case TOKEN_MOD:    return parse_mod_decl(parser);
+        case TOKEN_MOD:    return parse_mod_decl(parser, is_public);
         case TOKEN_SIG:    return parse_sig_decl(parser);
         case TOKEN_USING:  return parse_using_decl(parser);
         case TOKEN_TYPE:   return parse_type_decl(parser, is_public, is_opaque);

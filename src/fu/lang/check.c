@@ -1162,8 +1162,10 @@ static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
     free_dyn_array(&type_params);
     free_dyn_array(&data.vars);
 
-    mod_decl->type = make_mod_type(context->type_table, mod_decl->mod_decl.name, signature);
     mod_decl->mod_decl.data = NULL;
+    mod_decl->type = make_mod_type(context->type_table, mod_decl->mod_decl.name, signature);
+    if (mod_decl->mod_decl.is_public)
+        add_decl_to_parent_mod(context->type_table, mod_decl, mod_decl->type);
     return mod_decl->type;
 }
 

@@ -1065,6 +1065,42 @@ static const Type* infer_fun_decl(TypingContext* context, AstNode* fun_decl) {
     return fun_decl->type;
 }
 
+static void replace_opaque_members(TypeTable* type_table, const Type* signature, const Type* mod_type) {
+    const Type* projected_type = mod_type;
+    if (signature->signature.type_param_count != 0) {
+        projected_type = make_app_type(type_table, mod_type,
+            signature->signature.type_params,
+            signature->signature.type_param_count);
+    }
+
+    // Replace signature members with no value with projections onto the module. For instance,
+    // consider the following module:
+    // 
+    //     mod M { pub opaque type T = i32; pub type U = (T, T); }
+    //
+    // This module ends up having the following signature:
+    //
+    //     sig { type T; type U = (M.T, M.T); }
+    // 
+    // This makes extracting `M.U` result in the correct type.
+    TypeMap type_map = new_type_map();
+    for (size_t i = 0; i < signature->signature.var_count; ++i) {
+        if (signature->signature.vars[i]->var.value)
+            continue;
+        insert_in_type_map(&type_map,
+            signature->signature.vars[i],
+            (void*)make_proj_type(type_table, projected_type, i));
+    }
+    for (size_t i = 0; i < signature->signature.var_count; ++i) {
+        if (!signature->signature.vars[i]->var.value)
+            continue;
+        // This replaces the variables deeply inside structures and enumerations.
+        ((Type*)signature->signature.vars[i])->var.value = replace_types_with_map(
+            type_table, signature->signature.vars[i]->var.value, &type_map, false);
+    }
+    free_type_map(&type_map);
+}
+
 static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
     Type* signature = mod_decl->mod_decl.signature_type = make_signature_type(context->type_table);
     signature->kind = infer_type_params(context,
@@ -1075,6 +1111,7 @@ static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
     for (AstNode* decl = mod_decl->mod_decl.members; decl; decl = decl->next)
         infer_decl(context, decl);
 
+    // Hide the value (i.e. the actual type) of opaque types
     for (AstNode* decl = mod_decl->mod_decl.members; decl; decl = decl->next) {
         if (is_public_decl(decl) && is_opaque_decl(decl)) {
             assert(decl->type->tag == TYPE_VAR);
@@ -1086,6 +1123,8 @@ static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
         context->type_table, mod_decl->mod_decl.name, signature);
 
     seal_signature_type(context->type_table, signature);
+    replace_opaque_members(context->type_table, signature, mod_decl->type);
+
     return mod_decl->type;
 }
 

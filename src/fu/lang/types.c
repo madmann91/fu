@@ -230,7 +230,8 @@ const Type* apply_type(TypeTable* type_table, const Type* type, const Type* type
     return replace_types(type_table, type,
         get_type_params(resolve_type(type_app->app.applied_type)),
         type_app->app.args,
-        type_app->app.arg_count);
+        type_app->app.arg_count,
+        true);
 }
 
 bool is_kind_level_type(const Type* type) {

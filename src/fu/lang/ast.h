@@ -141,7 +141,7 @@ typedef enum {
 } AstNodeTag;
 
 typedef struct AstNode AstNode;
-typedef struct ModDeclData ModDeclData;
+typedef struct ModDeclData ModDeclData; // Internal, used during type-checking
 
 struct AstNode {
     AstNodeTag tag;

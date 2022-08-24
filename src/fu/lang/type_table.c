@@ -517,11 +517,19 @@ const Type* make_mod_type(TypeTable* type_table, const char* name, Type* signatu
     // This code replaces signature members with no value with projections onto the module.
     // For instance, consider the following module:
     //
-    //     mod M { pub opaque type T = i32; pub type U = (T, T); }
+    //     mod M {
+    //         pub opaque type T = i32;
+    //         pub type U = (T, T);
+    //         pub type V = (U, T);
+    //     }
     //
     // This module ends up having the following signature:
     //
-    //     sig { type T; type U = (M.T, M.T); }
+    //     sig {
+    //         type T;
+    //         type U = (M.T, M.T);
+    //         type V = (M.U, M.T);
+    //     }
     //
     // This makes extracting `M.U` result in the correct type.
     const Type* mod_type = make_var_type_with_kind(type_table, name, signature);

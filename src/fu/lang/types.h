@@ -158,12 +158,17 @@ struct Type {
     };
 };
 
-typedef HashTable TypeMap;
+typedef struct TypeMap { HashTable hash_table; } TypeMap;
+typedef struct TypeSet { HashTable hash_table; } TypeSet;
 
 TypeMap new_type_map(void);
+TypeSet new_type_set(void);
 void free_type_map(TypeMap*);
+void free_type_set(TypeSet*);
 bool insert_in_type_map(TypeMap*, const Type*, void*);
+bool insert_in_type_set(TypeSet*, const Type*);
 void* find_in_type_map(const TypeMap*, const Type*);
+bool find_in_type_set(const TypeSet*, const Type*);
 
 bool is_prim_type(TypeTag);
 bool is_nominal_type(TypeTag);

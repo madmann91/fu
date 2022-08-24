@@ -141,6 +141,7 @@ typedef enum {
 } AstNodeTag;
 
 typedef struct AstNode AstNode;
+typedef struct ModDeclData ModDeclData;
 
 struct AstNode {
     AstNodeTag tag;
@@ -271,7 +272,7 @@ struct AstNode {
         struct {
             const char* name;
             bool is_public;
-            Type* signature_type;
+            ModDeclData* data;
             AstNode* type_params;
             AstNode* signature;
             AstNode* aliased_mod;

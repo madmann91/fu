@@ -13,11 +13,19 @@ typedef struct TypeMapElem {
 } TypeMapElem;
 
 TypeMap new_type_map(void) {
-    return new_hash_table(sizeof(TypeMapElem));
+    return (TypeMap) { .hash_table = new_hash_table(sizeof(TypeMapElem)) };
+}
+
+TypeSet new_type_set(void) {
+    return (TypeSet) { .hash_table = new_hash_table(sizeof(Type*)) };
 }
 
 void free_type_map(TypeMap* type_map) {
-    free_hash_table(type_map);
+    free_hash_table(&type_map->hash_table);
+}
+
+void free_type_set(TypeSet* type_set) {
+    free_hash_table(&type_set->hash_table);
 }
 
 static bool compare_type_map_elems(const void* left, const void* right) {
@@ -25,21 +33,43 @@ static bool compare_type_map_elems(const void* left, const void* right) {
 }
 
 bool insert_in_type_map(TypeMap* type_map, const Type* from, void* to) {
-    assert(to != NULL);
-    return insert_in_hash_table(type_map,
+    assert(from != NULL);
+    return insert_in_hash_table(&type_map->hash_table,
         &(TypeMapElem) { .from = from, .to = to },
         hash_uint64(hash_init(), from->id),
         sizeof(TypeMapElem),
         compare_type_map_elems);
 }
 
+static bool compare_type_set_elems(const void* left, const void* right) {
+    return *(Type**)left == *(Type**)right;
+}
+
+bool insert_in_type_set(TypeSet* type_set, const Type* from) {
+    assert(from != NULL);
+    return insert_in_hash_table(&type_set->hash_table,
+        &from,
+        hash_uint64(hash_init(), from->id),
+        sizeof(Type*),
+        compare_type_set_elems);
+}
+
 void* find_in_type_map(const TypeMap* type_map, const Type* from) {
-    const TypeMapElem* elem = find_in_hash_table(type_map,
+    const TypeMapElem* elem = find_in_hash_table(&type_map->hash_table,
         &(TypeMapElem) { .from = from },
         hash_uint64(hash_init(), from->id),
         sizeof(TypeMapElem),
         compare_type_map_elems);
     return elem ? elem->to : NULL;
+}
+
+bool find_in_type_set(const TypeSet* type_set, const Type* from) {
+    const TypeMapElem* elem = find_in_hash_table(&type_set->hash_table,
+        &(TypeMapElem) { .from = from },
+        hash_uint64(hash_init(), from->id),
+        sizeof(Type*),
+        compare_type_set_elems);
+    return elem != NULL;
 }
 
 bool is_prim_type(TypeTag tag) {

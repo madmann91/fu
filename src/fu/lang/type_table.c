@@ -5,7 +5,6 @@
 #include "fu/core/hash_table.h"
 #include "fu/core/hash.h"
 #include "fu/core/utils.h"
-#include "fu/core/dyn_array.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -264,7 +263,7 @@ TypeTable* new_type_table(MemPool* mem_pool) {
 
 void free_type_table(TypeTable* type_table) {
     free_hash_table(&type_table->types);
-    free_str_pool(&type_table->str_pool); 
+    free_str_pool(&type_table->str_pool);
     free(type_table);
 }
 
@@ -335,50 +334,40 @@ Type* make_var_type_with_value(TypeTable* type_table, const char* name, const Ty
 Type* make_struct_type(TypeTable* type_table, const char* name) {
     Type* struct_type = alloc_type_with_tag(type_table, TYPE_STRUCT);
     struct_type->struct_.name = make_str(&type_table->str_pool, name);
-    struct_type->struct_.fields = new_dyn_array(sizeof(StructField));
-    struct_type->struct_.type_params = new_dyn_array(sizeof(Type*));
     return struct_type;
 }
 
 Type* make_enum_type(TypeTable* type_table, const char* name) {
     Type* enum_type = alloc_type_with_tag(type_table, TYPE_ENUM);
     enum_type->enum_.name = make_str(&type_table->str_pool, name);
-    enum_type->enum_.options = new_dyn_array(sizeof(EnumOption));
-    enum_type->enum_.type_params = new_dyn_array(sizeof(Type*));
     return enum_type;
 }
 
 Type* make_signature_type(TypeTable* type_table) {
     Type* signature = alloc_type_with_tag(type_table, TYPE_SIGNATURE);
-    signature->signature.vars = new_dyn_array(sizeof(Type*));
-    signature->signature.type_params = new_dyn_array(sizeof(Type*));
     return signature;
 }
 
 static StructField* copy_and_sort_struct_fields(
     TypeTable* type_table,
     StructField* fields,
-    size_t* field_count)
+    size_t field_count)
 {
-    *field_count = get_dyn_array_size(fields);
-    StructField* fields_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(StructField) * *field_count);
-    memcpy(fields_copy, fields, sizeof(StructField) * *field_count);
-    for (size_t i = 0; i < *field_count; ++i)
+    StructField* fields_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(StructField) * field_count);
+    memcpy(fields_copy, fields, sizeof(StructField) * field_count);
+    for (size_t i = 0; i < field_count; ++i)
         fields_copy[i].name = make_str(&type_table->str_pool, fields[i].name);
-    qsort(fields_copy, *field_count, sizeof(StructField), compare_struct_fields_by_name);
-    free_dyn_array(fields);
+    qsort(fields_copy, field_count, sizeof(StructField), compare_struct_fields_by_name);
     return fields_copy;
 }
 
 static const Type** copy_type_params(
     TypeTable* type_table,
     const Type** type_params,
-    size_t* type_param_count)
+    size_t type_param_count)
 {
-    *type_param_count = get_dyn_array_size(type_params);
-    const Type** type_params_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * *type_param_count);
-    memcpy(type_params_copy, type_params, sizeof(Type*) * *type_param_count);
-    free_dyn_array(type_params);
+    const Type** type_params_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * type_param_count);
+    memcpy(type_params_copy, type_params, sizeof(Type*) * type_param_count);
     return type_params_copy;
 }
 
@@ -387,9 +376,9 @@ const Type* seal_struct_type(TypeTable* type_table, Type* type) {
     assert(!type->struct_.is_sealed);
     assert(type->kind);
     type->struct_.fields =
-        copy_and_sort_struct_fields(type_table, type->struct_.fields, &type->struct_.field_count);
+        copy_and_sort_struct_fields(type_table, type->struct_.fields, type->struct_.field_count);
     type->struct_.type_params =
-        copy_type_params(type_table, type->struct_.type_params, &type->struct_.type_param_count);
+        copy_type_params(type_table, type->struct_.type_params, type->struct_.type_param_count);
 #ifndef NDEBUG
     type->struct_.is_sealed = true;
 #endif
@@ -399,15 +388,13 @@ const Type* seal_struct_type(TypeTable* type_table, Type* type) {
 static EnumOption* copy_and_sort_enum_options(
     TypeTable* type_table,
     EnumOption* options,
-    size_t* option_count)
+    size_t option_count)
 {
-    *option_count = get_dyn_array_size(options);
-    EnumOption* options_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(EnumOption) * *option_count);
-    memcpy(options_copy, options, sizeof(EnumOption) * *option_count);
-    for (size_t i = 0; i < *option_count; ++i)
+    EnumOption* options_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(EnumOption) * option_count);
+    memcpy(options_copy, options, sizeof(EnumOption) * option_count);
+    for (size_t i = 0; i < option_count; ++i)
         options_copy[i].name = make_str(&type_table->str_pool, options[i].name);
-    qsort(options_copy, *option_count, sizeof(EnumOption), compare_enum_options_by_name);
-    free_dyn_array(options);
+    qsort(options_copy, option_count, sizeof(EnumOption), compare_enum_options_by_name);
     return options_copy;
 }
 
@@ -416,9 +403,9 @@ const Type* seal_enum_type(TypeTable* type_table, Type* type) {
     assert(!type->enum_.is_sealed);
     assert(type->kind);
     type->enum_.options =
-        copy_and_sort_enum_options(type_table, type->enum_.options, &type->enum_.option_count);
+        copy_and_sort_enum_options(type_table, type->enum_.options, type->enum_.option_count);
     type->enum_.type_params =
-        copy_type_params(type_table, type->enum_.type_params, &type->enum_.type_param_count);
+        copy_type_params(type_table, type->enum_.type_params, type->enum_.type_param_count);
 #ifndef NDEBUG
     type->enum_.is_sealed = true;
 #endif
@@ -428,13 +415,11 @@ const Type* seal_enum_type(TypeTable* type_table, Type* type) {
 static const Type** copy_and_sort_signature_vars(
     TypeTable* type_table,
     const Type** vars,
-    size_t* var_count)
+    size_t var_count)
 {
-    *var_count = get_dyn_array_size(vars);
-    const Type** vars_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * *var_count);
-    memcpy(vars_copy, vars, sizeof(Type*) * *var_count);
-    qsort(vars_copy, *var_count, sizeof(Type*), compare_signature_vars_by_name);
-    free_dyn_array(vars);
+    const Type** vars_copy = alloc_from_mem_pool(type_table->mem_pool, sizeof(Type*) * var_count);
+    memcpy(vars_copy, vars, sizeof(Type*) * var_count);
+    qsort(vars_copy, var_count, sizeof(Type*), compare_signature_vars_by_name);
     return vars_copy;
 }
 
@@ -443,9 +428,9 @@ const Type* seal_signature_type(TypeTable* type_table, Type* type) {
     assert(!type->signature.is_sealed);
     assert(type->kind);
     type->signature.vars =
-        copy_and_sort_signature_vars(type_table, type->signature.vars, &type->signature.var_count);
+        copy_and_sort_signature_vars(type_table, type->signature.vars, type->signature.var_count);
     type->signature.type_params =
-        copy_type_params(type_table, type->signature.type_params, &type->signature.type_param_count);
+        copy_type_params(type_table, type->signature.type_params, type->signature.type_param_count);
 #ifndef NDEBUG
     type->signature.is_sealed = true;
 #endif
@@ -486,9 +471,10 @@ const Type* make_unit_type(TypeTable* type_table) {
 }
 
 const Type* make_app_type(TypeTable* type_table, const Type* applied_type, const Type** args, size_t arg_count) {
+    if (arg_count == 0)
+        return applied_type;
     assert(applied_type->kind->tag == KIND_ARROW);
     assert(applied_type->kind->arrow.kind_param_count == arg_count);
-    assert(arg_count != 0);
     return get_or_insert_type(type_table, &(Type) {
         .tag = TYPE_APP,
         .kind = applied_type->kind->arrow.body,
@@ -525,6 +511,41 @@ const Type* make_proj_type(TypeTable* type_table, const Type* projected_type, si
         .kind = projected_type->kind->signature.vars[index]->kind,
         .proj = { .projected_type = projected_type, .index = index }
     });
+}
+
+const Type* make_mod_type(TypeTable* type_table, const char* name, Type* signature) {
+    // This code replaces signature members with no value with projections onto the module.
+    // For instance, consider the following module:
+    //
+    //     mod M { pub opaque type T = i32; pub type U = (T, T); }
+    //
+    // This module ends up having the following signature:
+    //
+    //     sig { type T; type U = (M.T, M.T); }
+    //
+    // This makes extracting `M.U` result in the correct type.
+    const Type* mod_type = make_var_type_with_kind(type_table, name, signature);
+    const Type* projected_type = make_app_type(type_table, mod_type,
+        signature->signature.type_params,
+        signature->signature.type_param_count);
+
+    TypeMap type_map = new_type_map();
+
+    // Map variables to their projection
+    for (size_t i = 0; i < signature->signature.var_count; ++i) {
+        insert_in_type_map(&type_map,
+            signature->signature.vars[i],
+            (void*)make_proj_type(type_table, projected_type, i));
+    }
+    for (size_t i = 0; i < signature->signature.var_count; ++i) {
+        // This replaces variables deeply inside structures and enumerations
+        Type* var = (Type*)signature->signature.vars[i];
+        var->kind = replace_types_with_map(type_table, var->kind, &type_map, false);
+        if (var->var.value)
+            var->var.value = replace_types_with_map(type_table, var->var.value, &type_map, false);
+    }
+    free_type_map(&type_map);
+    return mod_type;
 }
 
 const Type* make_alias_type(

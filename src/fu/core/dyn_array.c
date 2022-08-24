@@ -1,66 +1,57 @@
 #include "fu/core/dyn_array.h"
 #include "fu/core/alloc.h"
 
-#include <stdalign.h>
 #include <string.h>
+#include <assert.h>
 
-struct DynArray {
-    size_t size;
-    size_t capacity;
-    alignas(max_align_t) char data[];
-};
+#define DEFAULT_CAPACITY 4
 
-static DynArray* ptr_to_dyn_array(const void* ptr) {
-    return (DynArray*)(((char*)ptr) - offsetof(DynArray, data));
+static inline DynArray new_dyn_array_with_capacity(size_t elem_size, size_t capacity) {
+    void* elems = malloc_or_die(elem_size * capacity);
+    return (DynArray) {
+        .capacity = capacity,
+        .elem_size = elem_size,
+        .elems = elems
+    };
 }
 
-static void* dyn_array_to_ptr(const DynArray* dyn_array) {
-    return (void*)dyn_array->data;
+DynArray new_dyn_array(size_t elem_size) {
+    return new_dyn_array_with_capacity(elem_size, DEFAULT_CAPACITY);
 }
 
-void* new_dyn_array(size_t elem_size) {
-    static const size_t capacity = 4;
-    DynArray* dyn_array = malloc_or_die(sizeof(DynArray) + elem_size * capacity);
-    dyn_array->size = 0;
-    dyn_array->capacity = capacity;
-    return dyn_array_to_ptr(dyn_array);
+DynArray new_dyn_array_with_size(size_t elem_size, size_t size) {
+    DynArray array = new_dyn_array_with_capacity(elem_size, size);
+    array.size = size;
+    return array;
 }
 
-size_t get_dyn_array_size(const void* ptr) {
-    return ptr_to_dyn_array(ptr)->size;
+DynArray new_dyn_array_from_data_explicit(void* begin, size_t size, size_t elem_size) {
+    DynArray array = new_dyn_array_with_size(elem_size, size);
+    memcpy(array.elems, begin, size * elem_size);
+    return array;
 }
 
-void push_on_dyn_array_explicit(void* ptr, const void* elem, size_t elem_size) {
-    DynArray* array = ptr_to_dyn_array(ptr);
-    size_t index = array->size;
-    resize_dyn_array_explicit(ptr, index + 1, elem_size);
-    memcpy(array->data + elem_size * index, elem, elem_size);
+static void grow_dyn_array(DynArray* array, size_t capacity) {
+    size_t double_capacity = array->capacity * 2;
+    array->capacity = double_capacity > capacity ? double_capacity : capacity;
+    array->elems = realloc_or_die(array->elems, array->elem_size * array->capacity);
 }
 
-void pop_from_dyn_array(void* ptr) {
-    ptr_to_dyn_array(ptr)->size--;
+void push_on_dyn_array_explicit(DynArray* array, const void* elem, size_t elem_size) {
+    assert(elem_size == array->elem_size);
+    if (array->size >= array->capacity)
+        grow_dyn_array(array, array->size + 1);
+    memcpy(array->elems + array->elem_size * array->size, elem, array->elem_size);
+    array->size++;
 }
 
-void resize_dyn_array_explicit(void* ptr, size_t size, size_t elem_size) {
-    DynArray* array = ptr_to_dyn_array(ptr);
-    if (size > array->capacity) {
-        size_t double_capacity = array->capacity * 2;
-        array->capacity = double_capacity > size ? double_capacity : size;
-        array = realloc_or_die(array, sizeof(DynArray) + elem_size * array->capacity);
-    }
+void resize_dyn_array_explicit(DynArray* array, size_t size) {
+    if (size > array->capacity)
+        grow_dyn_array(array, size);
     array->size = size;
 }
 
-void copy_dyn_array_explicit(void* dst, const void* src, size_t elem_size) {
-    size_t size = get_dyn_array_size(src);
-    resize_dyn_array_explicit(dst, size, elem_size);
-    memcpy(ptr_to_dyn_array(dst)->data, ptr_to_dyn_array(src)->data, elem_size * size);
-}
-
-void clear_dyn_array(void* ptr) {
-    ptr_to_dyn_array(ptr)->size = 0;
-}
-
-void free_dyn_array(void* ptr) {
-    free(ptr_to_dyn_array(ptr));
+void free_dyn_array(DynArray* array) {
+    free(array->elems);
+    memset(array, 0, sizeof(DynArray));
 }

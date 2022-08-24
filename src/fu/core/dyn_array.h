@@ -4,26 +4,28 @@
 #include <stddef.h>
 
 /*
- * Dynamically-growing array implementation. The design is such that the
- * returned array can be manipulated just like a regular pointer.
+ * Dynamically-growing array implementation.
+ * In debug mode, assertions check that the array is not used with the wrong element type.
  */
 
-typedef struct DynArray DynArray;
+#define push_on_dyn_array(array, ...) \
+    push_on_dyn_array_explicit(array, (__VA_ARGS__), sizeof(*(__VA_ARGS__)))
+#define new_dyn_array_from_data(begin, size) \
+    new_dyn_array_from_data_explicit(begin, size, sizeof(*(begin)));
 
-#define push_on_dyn_array(ptr, ...) \
-    push_on_dyn_array_explicit(ptr, (__VA_ARGS__), sizeof(ptr[0]))
-#define resize_dyn_array(ptr, size) \
-    resize_dyn_array_explicit(ptr, size, sizeof(ptr[0]))
-#define copy_dyn_array(dst, src) \
-    copy_dyn_array_explicit(dst, src, sizeof(src[0]))
+typedef struct DynArray {
+    size_t size;
+    size_t elem_size;
+    size_t capacity;
+    void* elems;
+} DynArray;
 
-void* new_dyn_array(size_t elem_size);
-size_t get_dyn_array_size(const void*);
-void push_on_dyn_array_explicit(void*, const void*, size_t);
-void pop_from_dyn_array(void*);
-void resize_dyn_array_explicit(void*, size_t, size_t);
-void copy_dyn_array_explicit(void*, const void*, size_t);
-void clear_dyn_array(void*);
-void free_dyn_array(void*);
+DynArray new_dyn_array(size_t elem_size);
+DynArray new_dyn_array_with_size(size_t elem_size, size_t size);
+DynArray new_dyn_array_from_data_explicit(void*, size_t, size_t);
+void push_on_dyn_array_explicit(DynArray*, const void*, size_t);
+void resize_dyn_array(DynArray*, size_t);
+void clear_dyn_array(DynArray*);
+void free_dyn_array(DynArray*);
 
 #endif

@@ -13,6 +13,10 @@
 #define DEFAULT_INT_TYPE_TAG   TYPE_I32
 #define DEFAULT_FLOAT_TYPE_TAG TYPE_F32
 
+struct ModDeclData {
+    DynArray vars;
+};
+
 TypingContext new_typing_context(TypeTable* type_table, MemPool* mem_pool, Log* log) {
     return (TypingContext) {
         .log = log,
@@ -51,13 +55,11 @@ static const Type* add_to_parent_mod(
     const Type* type)
 {
     assert(ast_node->parent_scope->tag == AST_MOD_DECL);
-    assert(ast_node->parent_scope->mod_decl.signature_type);
-    assert(ast_node->parent_scope->mod_decl.signature_type->tag == TYPE_SIGNATURE);
-    assert(!ast_node->parent_scope->mod_decl.signature_type->signature.is_sealed);
+    assert(ast_node->parent_scope->mod_decl.data);
     const Type* var = is_value_decl(ast_node->tag)
-        ? make_var_type_with_kind(type_table, get_decl_name(ast_node), type)
-        : make_var_type_with_value(type_table, get_decl_name(ast_node), type);
-    push_on_dyn_array(ast_node->parent_scope->mod_decl.signature_type->signature.vars, &var);
+        ? make_var_type_with_kind(type_table, name, type)
+        : make_var_type_with_value(type_table, name, type);
+    push_on_dyn_array(&ast_node->parent_scope->mod_decl.data->vars, &var);
     return var;
 }
 
@@ -244,14 +246,14 @@ static const Type* check_type_args(
         return make_error_type(context->type_table);
     }
 
-    const Type** args = new_dyn_array(sizeof(Type*));
+    DynArray args = new_dyn_array(sizeof(Type*));
     for (AstNode* type_arg = type_args; type_arg; type_arg = type_arg->next) {
         const Type* arg = infer_type(context, type_arg);
-        push_on_dyn_array(args, &arg);
+        push_on_dyn_array(&args, &arg);
     }
 
-    const Type* applied_type = make_app_type(context->type_table, type, args, type_param_count);
-    free_dyn_array(args);
+    const Type* applied_type = make_app_type(context->type_table, type, args.elems, type_param_count);
+    free_dyn_array(&args);
     return applied_type;
 }
 
@@ -323,7 +325,7 @@ static const Type* infer_next_path_elem(TypingContext* context, AstNode* prev_el
 
 missing_member:
     return next_elem->type = report_missing_member(
-        context, next_elem->path_elem.name, prev_elem->type, &prev_elem->file_loc);;
+        context, next_elem->path_elem.name, prev_elem->type, &next_elem->file_loc);
 }
 
 static const Type* make_tuple_like_struct_ctor(TypeTable* type_table, const Type* type) {
@@ -691,12 +693,14 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
             return expr->type = expect_type(context,
                 check_expr(context, expr->typed_expr.left, infer_type(context, expr->typed_expr.type)),
                 expected_type, true, &expr->file_loc);
-        case AST_TUPLE_EXPR:
+        case AST_TUPLE_EXPR: {
             if (expected_type->tag == TYPE_UNKNOWN)
                 return infer_tuple(context, expr, infer_expr);
-            if (expected_type->tag == TYPE_TUPLE)
-                return check_tuple(context, expr, expected_type, check_expr);
+            const Type* resolved_type = resolve_type(expected_type);
+            if (resolved_type->tag == TYPE_TUPLE)
+                return check_tuple(context, expr, resolved_type, check_expr);
             return expr->type = report_type_mismatch(context, "tuple expression", expected_type, &expr->file_loc);
+        }
         case AST_IF_EXPR:
             return check_if_expr(context, expr, expected_type);
         case AST_CALL_EXPR:
@@ -871,7 +875,7 @@ static const Type* infer_type_param(TypingContext* context, AstNode* type_param)
 static const Kind* infer_type_params(
     TypingContext* context,
     AstNode* type_params,
-    const Type** type_vars,
+    DynArray* type_vars,
     const Kind* body)
 {
     for (; type_params; type_params = type_params->next) {
@@ -880,7 +884,7 @@ static const Kind* infer_type_params(
     }
     if (!body)
         return NULL;
-    return make_type_ctor_kind(context->type_table, type_vars, get_dyn_array_size(type_vars), body);
+    return make_type_ctor_kind(context->type_table, type_vars->elems, type_vars->size, body);
 }
 
 static StructField infer_field_decl(TypingContext* context, AstNode* field_decl) {
@@ -896,12 +900,13 @@ static StructField infer_field_decl(TypingContext* context, AstNode* field_decl)
 
 static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_decl) {
     Type* struct_type = make_struct_type(context->type_table, struct_decl->struct_decl.name);
+    DynArray type_params = new_dyn_array(sizeof(Type*));
+    DynArray struct_fields = new_dyn_array(sizeof(StructField));
+
     struct_type->struct_.is_tuple_like = struct_decl->struct_decl.is_tuple_like;
 
     struct_type->kind = infer_type_params(context,
-        struct_decl->struct_decl.type_params,
-        struct_type->struct_.type_params,
-        make_star_kind(context->type_table));
+        struct_decl->struct_decl.type_params, &type_params, make_star_kind(context->type_table));
 
     // Add inherited fields to the structure
     const Type* super_struct = NULL;
@@ -916,7 +921,7 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
                 StructField field = super_struct->struct_.fields[i];
                 field.type = apply_type(context->type_table, field.type, super_type);
                 field.is_inherited = true;
-                push_on_dyn_array(struct_type->struct_.fields, &field);
+                push_on_dyn_array(&struct_fields, &field);
             }
         }
         else
@@ -929,7 +934,7 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
 
     for (AstNode* field_decl = struct_decl->struct_decl.fields; field_decl; field_decl = field_decl->next) {
         if (struct_decl->struct_decl.is_tuple_like) {
-            push_on_dyn_array(struct_type->struct_.fields, &(StructField) {
+            push_on_dyn_array(&struct_fields, &(StructField) {
                 .name = "",
                 .type = infer_type(context, field_decl)
             });
@@ -940,14 +945,25 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
                 &field_decl->file_loc);
         } else {
             StructField field = infer_field_decl(context, field_decl);
-            push_on_dyn_array(struct_type->struct_.fields, &field);
+            push_on_dyn_array(&struct_fields, &field);
         }
     }
+
+    struct_type->struct_.type_params = type_params.elems;
+    struct_type->struct_.type_param_count = type_params.size;
+    struct_type->struct_.fields = struct_fields.elems;
+    struct_type->struct_.field_count = struct_fields.size;
     seal_struct_type(context->type_table, struct_type);
+    free_dyn_array(&struct_fields);
+    free_dyn_array(&type_params);
     return struct_decl->type;
 }
 
-static const Type* infer_option_decl(TypingContext* context, AstNode* option_decl, Type* enum_type) {
+static const Type* infer_option_decl(
+    TypingContext* context,
+    AstNode* option_decl,
+    Type* enum_type)
+{
     if (!option_decl->option_decl.param_type)
         return option_decl->type = make_unit_type(context->type_table);
     if (!option_decl->option_decl.is_struct_like)
@@ -955,35 +971,41 @@ static const Type* infer_option_decl(TypingContext* context, AstNode* option_dec
 
     // If the option is struct-like, we need to create an adequate structure type to represent it
     Type* struct_type = make_struct_type(context->type_table, option_decl->option_decl.name);
-    copy_dyn_array(struct_type->struct_.type_params, enum_type->enum_.type_params);
     struct_type->struct_.parent_enum = enum_type;
-    struct_type->kind = make_type_ctor_kind(
-        context->type_table,
-        struct_type->struct_.type_params,
-        get_dyn_array_size(struct_type->struct_.type_params),
+    struct_type->kind = make_type_ctor_kind(context->type_table,
+        enum_type->enum_.type_params,
+        enum_type->enum_.type_param_count,
         make_star_kind(context->type_table));
 
+    DynArray struct_fields = new_dyn_array(sizeof(StructField));
     for (AstNode* field_decl = option_decl->option_decl.param_type; field_decl; field_decl = field_decl->next) {
         StructField field = infer_field_decl(context, field_decl);
-        push_on_dyn_array(struct_type->struct_.fields, &field);
+        push_on_dyn_array(&struct_fields, &field);
     }
+    struct_type->struct_.type_params = enum_type->enum_.type_params;
+    struct_type->struct_.type_param_count = enum_type->enum_.type_param_count;
+    struct_type->struct_.fields = struct_fields.elems;
+    struct_type->struct_.field_count = struct_fields.size;
+    const Type* option_type = seal_struct_type(context->type_table, struct_type);
+    free_dyn_array(&struct_fields);
 
     // We may need to wrap the structure type into a type application if the enumeration is polymorphic
-    const Type* option_type = seal_struct_type(context->type_table, struct_type);
-    size_t type_param_count = get_dyn_array_size(enum_type->enum_.type_params);
-    if (type_param_count > 0) {
-        option_type = make_app_type(
-            context->type_table, option_type, enum_type->enum_.type_params, type_param_count);
-    }
+    option_type = make_app_type(context->type_table, option_type,
+        enum_type->enum_.type_params,
+        enum_type->enum_.type_param_count);
     return option_decl->type = option_type;
 }
 
 static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
     Type* enum_type = make_enum_type(context->type_table, enum_decl->enum_decl.name);
+    DynArray type_params = new_dyn_array(sizeof(Type*));
+    DynArray enum_options = new_dyn_array(sizeof(EnumOption));
+
     enum_type->kind = infer_type_params(context,
-        enum_decl->enum_decl.type_params,
-        enum_type->enum_.type_params,
-        make_star_kind(context->type_table));
+        enum_decl->enum_decl.type_params, &type_params, make_star_kind(context->type_table));
+
+    enum_type->enum_.type_params = type_params.elems;
+    enum_type->enum_.type_param_count = type_params.size;
 
     // Add inherited options to the enumeration
     const Type* sub_enum = NULL;
@@ -998,7 +1020,7 @@ static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
                 EnumOption option = sub_enum->enum_.options[i];
                 option.param_type = apply_type(context->type_table, option.param_type, sub_type);
                 option.is_inherited = true;
-                push_on_dyn_array(enum_type->enum_.options, &option);
+                push_on_dyn_array(&enum_options, &option);
             }
         }
         else
@@ -1016,27 +1038,33 @@ static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
                 enum_type->enum_.sub_type,
                 &option_decl->file_loc);
         } else {
-            push_on_dyn_array(enum_type->enum_.options, &(EnumOption) {
+            push_on_dyn_array(&enum_options, &(EnumOption) {
                 .name = option_decl->option_decl.name,
                 .param_type = infer_option_decl(context, option_decl, enum_type)
             });
         }
     }
+
+    enum_type->enum_.options = enum_options.elems;
+    enum_type->enum_.option_count = enum_options.size;
     seal_enum_type(context->type_table, enum_type);
+    free_dyn_array(&enum_options);
+    free_dyn_array(&type_params);
     return enum_decl->type;
 }
 
 static const Type* infer_type_decl(TypingContext* context, AstNode* type_decl) {
-    const Type** type_params = new_dyn_array(sizeof(Type*));
-    infer_type_params(context, type_decl->type_decl.type_params, type_params, NULL);
+    DynArray type_params = new_dyn_array(sizeof(Type*));
+    infer_type_params(context, type_decl->type_decl.type_params, &type_params, NULL);
 
     const Type* aliased_type = infer_type(context, type_decl->type_decl.aliased_type);
     const Type* alias_type = make_alias_type(
         context->type_table,
         type_decl->type_decl.name,
-        type_params, get_dyn_array_size(type_params),
+        type_params.elems,
+        type_params.size,
         aliased_type);
-    free_dyn_array(type_params);
+    free_dyn_array(&type_params);
 
     return type_decl->type = type_decl->type_decl.is_public
         ? add_decl_to_parent_mod(context->type_table, type_decl, alias_type)
@@ -1044,72 +1072,39 @@ static const Type* infer_type_decl(TypingContext* context, AstNode* type_decl) {
 }
 
 static const Type* infer_fun_decl(TypingContext* context, AstNode* fun_decl) {
-    const Type** type_params = new_dyn_array(sizeof(Type*));
-    infer_type_params(context, fun_decl->fun_decl.type_params, type_params, NULL);
+    DynArray type_params = new_dyn_array(sizeof(Type*));
+    infer_type_params(context, fun_decl->fun_decl.type_params, &type_params, NULL);
     const Type* dom_type = infer_pattern(context, fun_decl->fun_decl.param);
     if (fun_decl->fun_decl.ret_type) {
         const Type* codom_type = infer_type(context, fun_decl->fun_decl.ret_type);
         // Set the function type before checking the body in case
         // the function is recursive (or uses `return`).
         fun_decl->type = make_poly_fun_type(context->type_table,
-            type_params, get_dyn_array_size(type_params),
-            dom_type, codom_type);
+            type_params.elems, type_params.size, dom_type, codom_type);
         check_expr(context, fun_decl->fun_decl.body, codom_type);
     } else {
         const Type* codom_type = infer_expr(context, fun_decl->fun_decl.body);
         fun_decl->type = make_poly_fun_type(context->type_table,
-            type_params, get_dyn_array_size(type_params),
-            dom_type, codom_type);
+            type_params.elems, type_params.size, dom_type, codom_type);
     }
-    free_dyn_array(type_params);
+    free_dyn_array(&type_params);
     if (fun_decl->fun_decl.is_public)
         add_decl_to_parent_mod(context->type_table, fun_decl, fun_decl->type);
     return fun_decl->type;
 }
 
-static void replace_opaque_members(TypeTable* type_table, const Type* signature, const Type* mod_type) {
-    const Type* projected_type = mod_type;
-    if (signature->signature.type_param_count != 0) {
-        projected_type = make_app_type(type_table, mod_type,
-            signature->signature.type_params,
-            signature->signature.type_param_count);
-    }
-
-    // Replace signature members with no value with projections onto the module. For instance,
-    // consider the following module:
-    // 
-    //     mod M { pub opaque type T = i32; pub type U = (T, T); }
-    //
-    // This module ends up having the following signature:
-    //
-    //     sig { type T; type U = (M.T, M.T); }
-    // 
-    // This makes extracting `M.U` result in the correct type.
-    TypeMap type_map = new_type_map();
-    for (size_t i = 0; i < signature->signature.var_count; ++i) {
-        if (signature->signature.vars[i]->var.value)
-            continue;
-        insert_in_type_map(&type_map,
-            signature->signature.vars[i],
-            (void*)make_proj_type(type_table, projected_type, i));
-    }
-    for (size_t i = 0; i < signature->signature.var_count; ++i) {
-        // This replaces variables deeply inside structures and enumerations
-        Type* var = (Type*)signature->signature.vars[i];
-        var->kind = replace_types_with_map(type_table, var->kind, &type_map, false);
-        if (signature->signature.vars[i]->var.value)
-            var->var.value = replace_types_with_map(type_table, var->var.value, &type_map, false);
-    }
-    free_type_map(&type_map);
-}
-
 static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
-    Type* signature = mod_decl->mod_decl.signature_type = make_signature_type(context->type_table);
-    signature->kind = infer_type_params(context,
-        mod_decl->mod_decl.type_params,
-        signature->signature.type_params,
-        make_star_kind(context->type_table));
+    Type* signature = make_signature_type(context->type_table);
+    DynArray type_params = new_dyn_array(sizeof(Type*));
 
+    signature->kind = infer_type_params(context,
+        mod_decl->mod_decl.type_params, &type_params, make_star_kind(context->type_table));
+
+    signature->signature.type_params = type_params.elems;
+    signature->signature.type_param_count = type_params.size;
+
+    ModDeclData data = { .vars = new_dyn_array(sizeof(Type*)) };
+    mod_decl->mod_decl.data = &data;
     for (AstNode* decl = mod_decl->mod_decl.members; decl; decl = decl->next)
         infer_decl(context, decl);
 
@@ -1121,12 +1116,14 @@ static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
         }
     }
 
-    mod_decl->type = make_var_type_with_kind(
-        context->type_table, mod_decl->mod_decl.name, signature);
-
+    signature->signature.vars = data.vars.elems;
+    signature->signature.var_count = data.vars.size;
     seal_signature_type(context->type_table, signature);
-    replace_opaque_members(context->type_table, signature, mod_decl->type);
+    free_dyn_array(&type_params);
+    free_dyn_array(&data.vars);
 
+    mod_decl->type = make_mod_type(context->type_table, mod_decl->mod_decl.name, signature);
+    mod_decl->mod_decl.data = NULL;
     return mod_decl->type;
 }
 

@@ -204,7 +204,7 @@ static void print_msg(
     static const FormatStyle header_styles[] = {
         { STYLE_BOLD, COLOR_RED },
         { STYLE_BOLD, COLOR_YELLOW },
-        { STYLE_BOLD, COLOR_BLUE }
+        { STYLE_BOLD, COLOR_CYAN }
     };
     static const char* headers[] = { "error", "warning", "note" };
 

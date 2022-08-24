@@ -534,25 +534,27 @@ static const Type* check_call_expr(TypingContext* context, AstNode* call_expr, c
 }
 
 static const Type* check_int_literal(TypingContext* context, AstNode* literal, const Type* expected_type) {
-    if (expected_type->tag == TYPE_UNKNOWN)
+    const Type* resolved_type = resolve_type(expected_type);
+    if (resolved_type->tag == TYPE_UNKNOWN)
         return literal->type = make_prim_type(context->type_table, DEFAULT_INT_TYPE_TAG);
-    if (!is_int_or_float_type(expected_type->tag))
+    if (!is_int_or_float_type(resolved_type->tag))
         return literal->type = report_type_mismatch(context, "integer literal", expected_type, &literal->file_loc);
-    if (is_int_type(expected_type->tag) &&
-        ilog2(literal->int_literal.val) > get_prim_type_bitwidth(expected_type->tag))
+    if (is_int_type(resolved_type->tag) &&
+        ilog2(literal->int_literal.val) > get_prim_type_bitwidth(resolved_type->tag))
     {
         log_error(context->log, &literal->file_loc,
             "integer literal does not fit in type '{t}'",
-            (FormatArg[]) { { .t = expected_type } });
+            (FormatArg[]) { { .t = resolved_type } });
         return literal->type = make_error_type(context->type_table);
     }
     return literal->type = expected_type;
 }
 
 static const Type* check_float_literal(TypingContext* context, AstNode* literal, const Type* expected_type) {
-    if (expected_type->tag == TYPE_UNKNOWN)
+    const Type* resolved_type = resolve_type(expected_type);
+    if (resolved_type->tag == TYPE_UNKNOWN)
         return literal->type = make_prim_type(context->type_table, DEFAULT_FLOAT_TYPE_TAG);
-    if (!is_float_type(expected_type->tag))
+    if (!is_float_type(resolved_type->tag))
         return literal->type = report_type_mismatch(context, "floating-point literal", expected_type, &literal->file_loc);
     return literal->type = expected_type;
 }
@@ -1092,11 +1094,11 @@ static void replace_opaque_members(TypeTable* type_table, const Type* signature,
             (void*)make_proj_type(type_table, projected_type, i));
     }
     for (size_t i = 0; i < signature->signature.var_count; ++i) {
-        if (!signature->signature.vars[i]->var.value)
-            continue;
-        // This replaces the variables deeply inside structures and enumerations.
-        ((Type*)signature->signature.vars[i])->var.value = replace_types_with_map(
-            type_table, signature->signature.vars[i]->var.value, &type_map, false);
+        // This replaces variables deeply inside structures and enumerations
+        Type* var = (Type*)signature->signature.vars[i];
+        var->kind = replace_types_with_map(type_table, var->kind, &type_map, false);
+        if (signature->signature.vars[i]->var.value)
+            var->var.value = replace_types_with_map(type_table, var->var.value, &type_map, false);
     }
     free_type_map(&type_map);
 }

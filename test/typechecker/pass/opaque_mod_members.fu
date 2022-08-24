@@ -1,4 +1,9 @@
 mod Foo {
     pub opaque type T = i32;
+    pub fun f() -> T = 4;
+    pub enum E { A(T) }
+    pub struct S(T);
 }
-fun f(x: Foo.T) -> Foo.T = x;
+fun f() -> Foo.T = Foo.f();
+fun g(x: Foo.T) -> Foo.E = Foo.E.A(x);
+fun h(x: Foo.T) -> Foo.S = Foo.S(x);

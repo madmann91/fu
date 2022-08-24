@@ -576,6 +576,8 @@ const Type* replace_types_with_map(
     PRIM_TYPE_LIST(f)
 #undef f
         case TYPE_UNKNOWN:
+        case KIND_STAR:
+        case KIND_ARROW:
         case TYPE_NORET:
         case TYPE_ERROR:
             return type;

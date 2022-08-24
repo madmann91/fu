@@ -947,6 +947,9 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
     struct_type->kind = infer_type_params(context,
         struct_decl->struct_decl.type_params, &type_params, make_star_kind(context->type_table));
 
+    struct_type->struct_.type_params = type_params.elems;
+    struct_type->struct_.type_param_count = type_params.size;
+
     // Add inherited fields to the structure
     const Type* super_struct = NULL;
     if (struct_decl->struct_decl.super_type) {
@@ -988,8 +991,6 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
         }
     }
 
-    struct_type->struct_.type_params = type_params.elems;
-    struct_type->struct_.type_param_count = type_params.size;
     struct_type->struct_.fields = struct_fields.elems;
     struct_type->struct_.field_count = struct_fields.size;
     seal_struct_type(context->type_table, struct_type);

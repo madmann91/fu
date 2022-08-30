@@ -35,10 +35,15 @@ static inline void print_ast_with_delim(
     format(state, close, NULL);
 }
 
-static inline void print_many_asts_inside_block(FormatState* state, const char* sep, const AstNode* elems) {
+static inline void print_many_asts_inside_block(
+    FormatState* state,
+    const char* sep,
+    const AstNode* elems,
+    bool force_new_line)
+{
     if (!elems)
         format(state, "{{}", NULL);
-    else if (!elems->next)
+    else if (!force_new_line && !elems->next)
         print_ast_with_delim(state, "{{ ", " }", elems);
     else
         print_many_asts_with_delim(state, "{{{>}\n", sep, "{<}\n}", elems);
@@ -240,7 +245,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             if (ast_node->option_decl.param_type) {
                 if (ast_node->option_decl.is_struct_like) {
                     format(state, " ", NULL);
-                    print_many_asts_inside_block(state, ",\n", ast_node->option_decl.param_type);
+                    print_many_asts_inside_block(state, ",\n", ast_node->option_decl.param_type, false);
                 } else
                     print_with_parens(state, ast_node->option_decl.param_type);
             }
@@ -274,7 +279,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
                 ast_node->enum_decl.name,
                 ast_node->enum_decl.type_params);
             format(state, " ", NULL);
-            print_many_asts_inside_block(state, ",\n", ast_node->enum_decl.options);
+            print_many_asts_inside_block(state, ",\n", ast_node->enum_decl.options, false);
             break;
         }
         case AST_STRUCT_DECL: {
@@ -289,7 +294,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
                 format(state, ";", NULL);
             } else {
                 format(state, " ", NULL);
-                print_many_asts_inside_block(state, ",\n", ast_node->struct_decl.fields);
+                print_many_asts_inside_block(state, ",\n", ast_node->struct_decl.fields, false);
             }
             break;
         }
@@ -299,7 +304,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
                 ast_node->sig_decl.name,
                 ast_node->sig_decl.type_params);
             format(state, " ", NULL);
-            print_many_asts_inside_block(state, "\n", ast_node->sig_decl.members);
+            print_many_asts_inside_block(state, "\n", ast_node->sig_decl.members, true);
             break;
         }
         case AST_MOD_DECL: {
@@ -315,7 +320,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
                 print_ast_with_delim(state, " : ", "", ast_node->mod_decl.signature);
             if (ast_node->mod_decl.members) {
                 format(state, " ", NULL);
-                print_many_asts_inside_block(state, "\n", ast_node->mod_decl.members);
+                print_many_asts_inside_block(state, "\n", ast_node->mod_decl.members, true);
             } else if (ast_node->mod_decl.aliased_mod)
                 print_ast_with_delim(state, " = ", ";", ast_node->mod_decl.aliased_mod);
             else
@@ -347,7 +352,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
         case AST_STRUCT_EXPR:
         case AST_UPDATE_EXPR: {
             print_ast_with_delim(state, "", ast_node->tag != AST_UPDATE_EXPR ? " " : ".", ast_node->struct_pattern.left);
-            print_many_asts_inside_block(state, ",\n", ast_node->struct_pattern.fields);
+            print_many_asts_inside_block(state, ",\n", ast_node->struct_pattern.fields, false);
             break;
         }
         case AST_TUPLE_TYPE:
@@ -379,7 +384,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             print_ast_with_delim(state, "", " ", ast_node->where_type.path);
             print_keyword(state, "where");
             format(state, " ", NULL);
-            print_many_asts_inside_block(state, ", ", ast_node->where_type.clauses);
+            print_many_asts_inside_block(state, ", ", ast_node->where_type.clauses, false);
             break;
         case AST_ARRAY_PATTERN:
         case AST_ARRAY_EXPR:
@@ -387,12 +392,19 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             break;
         case AST_TYPED_PATTERN:
         case AST_TYPED_EXPR:
-            if (ast_node->typed_pattern.left->tag == ast_node->tag)
-                print_with_parens(state, ast_node->typed_pattern.left);
-            else
-                print_ast(state, ast_node->typed_pattern.left);
-            format(state, ": ", NULL);
-            print_ast(state, ast_node->typed_pattern.type);
+            if (ast_node->typed_pattern.left->tag == AST_IDENT_PATTERN &&
+                ast_node->typed_pattern.left->ident_pattern.name[0] == '_')
+            {
+                // Print anonymous function parameters the expected way.
+                print_ast(state, ast_node->typed_pattern.type);
+            } else {
+                if (ast_node->typed_pattern.left->tag == ast_node->tag)
+                    print_with_parens(state, ast_node->typed_pattern.left);
+                else
+                    print_ast(state, ast_node->typed_pattern.left);
+                format(state, ": ", NULL);
+                print_ast(state, ast_node->typed_pattern.type);
+            }
             break;
         case AST_BLOCK_EXPR:
             if (!ast_node->block_expr.stmts)
@@ -426,7 +438,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
         case AST_MATCH_EXPR:
             print_keyword(state, "match");
             print_ast_with_delim(state, " ", " ", ast_node->match_expr.arg);
-            print_many_asts_inside_block(state, ",\n", ast_node->match_expr.cases);
+            print_many_asts_inside_block(state, ",\n", ast_node->match_expr.cases, false);
             break;
         case AST_CALL_EXPR:
             if (ast_node->call_expr.callee->tag == AST_FUN_EXPR)

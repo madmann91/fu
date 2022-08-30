@@ -148,7 +148,7 @@ struct Type {
         } array;
         struct {
             bool is_const;
-            const Type* pointee;
+            const Type* pointed_type;
         } ptr;
         struct {
             const char* name;
@@ -157,6 +157,8 @@ struct Type {
         } var;
     };
 };
+
+//================================== TYPE MAPS/SETS ======================================
 
 typedef struct TypeMap { HashTable hash_table; } TypeMap;
 typedef struct TypeSet { HashTable hash_table; } TypeSet;
@@ -169,6 +171,8 @@ bool insert_in_type_map(TypeMap*, const Type*, void*);
 bool insert_in_type_set(TypeSet*, const Type*);
 void* find_in_type_map(const TypeMap*, const Type*);
 bool find_in_type_set(const TypeSet*, const Type*);
+
+//========================================================================================
 
 bool is_prim_type(TypeTag);
 bool is_nominal_type(TypeTag);
@@ -186,11 +190,14 @@ bool is_tuple_like_struct_type(const Type*);
 bool is_sub_type(TypeTable*, const Type*, const Type*);
 bool is_sub_struct_type(TypeTable*, const Type*, const Type*);
 bool is_sub_enum_type(TypeTable*, const Type*, const Type*);
-const Type* apply_type(TypeTable*, const Type*, const Type*);
+
+const Type* get_struct_field_type(TypeTable*, const Type*, size_t);
+const Type* get_enum_option_param_type(TypeTable*, const Type*, size_t);
 
 const Type* resolve_type(const Type*);
 const Type* skip_app_type(const Type*);
-const Type* get_inner_type(const Type*);
+const Type* get_applied_type(const Type*);
+
 const Type** get_type_params(const Type*);
 size_t get_type_param_count(const Type*);
 size_t get_prim_type_bitwidth(TypeTag);

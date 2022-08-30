@@ -48,7 +48,8 @@ const Type* make_noret_type(TypeTable*);
 const Type* make_tuple_type(TypeTable*, const Type** args, size_t arg_count);
 const Type* make_unit_type(TypeTable*);
 const Type* make_app_type(TypeTable*, const Type* applied_type, const Type** args, size_t arg_count);
-const Type* make_array_type(TypeTable*, const Type* elem_type);
+const Type* make_sized_array_type(TypeTable*, const Type* elem_type, const Type* size);
+const Type* make_unsized_array_type(TypeTable*, const Type* elem_type);
 const Type* make_ptr_type(TypeTable*, bool is_const, const Type* pointee_type);
 const Type* make_fun_type(TypeTable*, const Type* dom, const Type* codom);
 const Type* make_proj_type(TypeTable*, const Type* projected_type, size_t index);
@@ -70,14 +71,13 @@ const Type* make_poly_fun_type(
 
 //================================== SUBSTITUTION ========================================
 
-const Type* replace_types_with_map(TypeTable*, const Type*, TypeMap*, bool is_shallow);
+const Type* replace_types_with_map(TypeTable*, const Type*, TypeMap*);
 
 const Type* replace_types(
     TypeTable*,
     const Type* type,
     const Type** from,
     const Type** to,
-    size_t mapped_types_count,
-    bool is_shallow);
+    size_t mapped_types_count);
 
 #endif

@@ -34,8 +34,6 @@ TYPE ::=
     TUPLE_TYPE |
     ARRAY_TYPE |
     WHERE_TYPE |
-    STRUCT_DECL |
-    ENUM_DECL |
     SIG_DECL
 
 PRIM_TYPE ::=

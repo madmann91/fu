@@ -111,6 +111,10 @@ bool is_unit_type(const Type* type) {
     return type->tag == TYPE_TUPLE && type->tuple.arg_count == 0;
 }
 
+bool is_kind_level_type(const Type* type) {
+    return type->tag == KIND_STAR || type->tag == KIND_ARROW;
+}
+
 bool is_non_const_ptr_type(const Type* type) {
     return type->tag == TYPE_PTR && !type->ptr.is_const;
 }
@@ -118,7 +122,7 @@ bool is_non_const_ptr_type(const Type* type) {
 bool is_struct_like_option(const EnumOption* option) {
     if (!option->param_type)
         return false;
-    const Type* param_type = get_inner_type(option->param_type);
+    const Type* param_type = get_applied_type(option->param_type);
     return param_type->tag == TYPE_STRUCT && param_type->struct_.parent_enum;
 }
 
@@ -194,6 +198,24 @@ static void swap_types(const Type** left, const Type** right) {
     *right = tmp;
 }
 
+static const Type* replace_types_from_type_app(
+    TypeTable* type_table,
+    const Type* type,
+    const Type* type_app)
+{
+    type_app = resolve_type(type_app);
+    if (type_app->tag != TYPE_APP)
+        return type;
+    // Takes the arguments from the type application and use them to substitute the type parameters
+    const Type* applied_type = get_applied_type(type_app);
+    const Type** type_params = get_type_params(
+        applied_type->kind->tag == TYPE_SIGNATURE ? applied_type->kind : applied_type);
+    return replace_types(type_table, type,
+        type_params,
+        type_app->app.args,
+        type_app->app.arg_count);
+}
+
 static bool is_sub_struct_or_super_enum_type(
     TypeTable* type_table,
     TypeTag type_tag,
@@ -202,8 +224,8 @@ static bool is_sub_struct_or_super_enum_type(
 {
     assert(type_tag == TYPE_STRUCT || type_tag == TYPE_ENUM);
 
-    const Type* left_struct_or_enum  = get_inner_type(left);
-    const Type* right_struct_or_enum = get_inner_type(right);
+    const Type* left_struct_or_enum  = get_applied_type(left);
+    const Type* right_struct_or_enum = get_applied_type(right);
     if (left_struct_or_enum->tag != type_tag || right_struct_or_enum->tag != type_tag)
         return false;
 
@@ -213,12 +235,12 @@ static bool is_sub_struct_or_super_enum_type(
         return false;
 
     while (left_depth > right_depth) {
-        left = apply_type(type_table,
+        left = replace_types_from_type_app(type_table,
             type_tag == TYPE_STRUCT
                 ? left_struct_or_enum->struct_.super_type
                 : left_struct_or_enum->enum_.sub_type,
             left);
-        left_struct_or_enum = get_inner_type(left);
+        left_struct_or_enum = get_applied_type(left);
         assert(left_struct_or_enum->tag == type_tag);
         left_depth--;
     }
@@ -229,7 +251,7 @@ static bool is_sub_struct_or_super_enum_type(
         return true;
     if (left->tag == TYPE_APP) {
         const Type** type_params = get_type_params(left_struct_or_enum);
-        assert(right->tag == TYPE_APP && get_inner_type(right) == right_struct_or_enum);
+        assert(right->tag == TYPE_APP && get_applied_type(right) == right_struct_or_enum);
         assert(left->app.arg_count == get_type_param_count(left_struct_or_enum));
         for (size_t i = 0; i < left->app.arg_count; ++i) {
             const Type* left_arg  = left ->app.args[i];
@@ -253,19 +275,28 @@ bool is_sub_enum_type(TypeTable* type_table, const Type* left, const Type* right
     return is_sub_struct_or_super_enum_type(type_table, TYPE_ENUM, right, left);
 }
 
-const Type* apply_type(TypeTable* type_table, const Type* type, const Type* type_app) {
-    type = resolve_type(type);
-    if (type_app->tag != TYPE_APP)
-        return type;
-    return replace_types(type_table, type,
-        get_type_params(resolve_type(type_app->app.applied_type)),
-        type_app->app.args,
-        type_app->app.arg_count,
-        true);
+const Type* get_struct_field_type(TypeTable* type_table, const Type* type, size_t i) {
+    const Type* struct_type = get_applied_type(type);
+    assert(struct_type->tag == TYPE_STRUCT);
+    if (type->tag != TYPE_APP)
+        return struct_type->struct_.fields[i].type;
+    return replace_types(type_table,
+        struct_type->struct_.fields[i].type,
+        struct_type->struct_.type_params,
+        type->app.args,
+        type->app.arg_count);
 }
 
-bool is_kind_level_type(const Type* type) {
-    return type->tag == KIND_STAR || type->tag == KIND_ARROW;
+const Type* get_enum_option_param_type(TypeTable* type_table, const Type* type, size_t i) {
+    const Type* enum_type = get_applied_type(type);
+    assert(enum_type->tag == TYPE_ENUM);
+    if (type->tag != TYPE_APP)
+        return enum_type->enum_.options[i].param_type;
+    return replace_types(type_table,
+        enum_type->enum_.options[i].param_type,
+        enum_type->struct_.type_params,
+        type->app.args,
+        type->app.arg_count);
 }
 
 const Type* resolve_type(const Type* type) {
@@ -277,6 +308,7 @@ const Type* resolve_type(const Type* type) {
         else if (type->tag == TYPE_PROJ) {
             const Type* signature = type->proj.projected_type->kind;
             assert(signature && signature->tag == TYPE_SIGNATURE);
+            assert(signature->signature.type_param_count == 0);
             const Type* var = signature->signature.vars[type->proj.index];
             if (!var->var.value)
                 break;
@@ -291,7 +323,7 @@ const Type* skip_app_type(const Type* type) {
     return type->tag == TYPE_APP ? type->app.applied_type : type;
 }
 
-const Type* get_inner_type(const Type* type) {
+const Type* get_applied_type(const Type* type) {
     return resolve_type(skip_app_type(type));
 }
 
@@ -329,7 +361,7 @@ size_t get_prim_type_bitwidth(TypeTag tag) {
 size_t get_type_inheritance_depth(const Type* type) {
     size_t depth = 0;
     while (true) {
-        type = get_inner_type(type);
+        type = get_applied_type(type);
         if (type->tag == TYPE_STRUCT && type->struct_.super_type)
             type = type->struct_.super_type, depth++;
         else if (type->tag == TYPE_ENUM && type->enum_.sub_type)
@@ -513,10 +545,9 @@ void print_type(FormatState* state, const Type* type) {
                 print_keyword(state, "const");
                 format(state, " ", NULL);
             }
-            print_type(state, type->ptr.pointee);
+            print_type(state, type->ptr.pointed_type);
             break;
         case TYPE_PROJ: {
-            assert(type->proj.projected_type->tag == TYPE_VAR);
             assert(type->proj.projected_type->kind->tag == TYPE_SIGNATURE);
             const Type* signature = type->proj.projected_type->kind;
             const char* field_name = signature->signature.vars[type->proj.index]->var.name;

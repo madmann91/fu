@@ -17,7 +17,7 @@ static inline AstNode* parse_decl_without_attr_list(Parser*, bool, bool);
 static inline AstNode* parse_struct_decl(Parser*, bool, bool);
 static inline AstNode* parse_enum_decl(Parser*, bool, bool);
 static inline AstNode* parse_type_decl(Parser*, bool, bool);
-static inline AstNode* parse_sig_decl(Parser*);
+static inline AstNode* parse_sig_decl(Parser*, bool);
 
 static inline void add_ast_node_to_list(AstNodeList* list, AstNode* node) {
     if (!list->last)
@@ -448,7 +448,7 @@ AstNode* parse_type(Parser* parser) {
         case TOKEN_FUN:       return parse_fun_type(parser);
         case TOKEN_BANG:      return parse_basic_type(parser, AST_NORET_TYPE);
         case TOKEN_AMP:       return parse_ptr_type(parser);
-        case TOKEN_SIG:       return parse_sig_decl(parser);
+        case TOKEN_SIG:       return parse_sig_decl(parser, false);
         default:
             return parse_error(parser, "type");
     }
@@ -750,7 +750,10 @@ static AstNode* parse_anonymous_pattern(Parser* parser, AstNode* type) {
     return make_ast_node(parser, &type->file_loc.begin, &(AstNode) {
         .tag = AST_TYPED_PATTERN,
         .typed_pattern = {
-            .left = make_single_elem_path(parser, "_", &type->file_loc),
+            .left = make_ast_node(parser, &type->file_loc.begin, &(AstNode) {
+                .tag = AST_IDENT_PATTERN,
+                .ident_pattern.name = "_"
+            }),
             .type = type
         }
     });
@@ -1018,10 +1021,10 @@ static AstNode* parse_sig_member_decl(Parser* parser) {
     return parse_decl_without_attr_list(parser, false, false);
 }
 
-static inline AstNode* parse_sig_decl(Parser* parser) {
+static inline AstNode* parse_sig_decl(Parser* parser, bool needs_name) {
     FilePos begin = parser->ahead->file_loc.begin;
     eat_token(parser, TOKEN_SIG);
-    const char* name = parser->ahead->tag == TOKEN_IDENT ? parse_ident(parser) : NULL;
+    const char* name = needs_name || parser->ahead->tag == TOKEN_IDENT ? parse_ident(parser) : NULL;
     AstNode* type_params = parse_type_params(parser);
     AstNode* members = NULL;
     if (accept_token(parser, TOKEN_L_BRACE)) {
@@ -1031,7 +1034,7 @@ static inline AstNode* parse_sig_decl(Parser* parser) {
     }
     return make_ast_node(parser, &begin, &(AstNode) {
         .tag = AST_SIG_DECL,
-        .mod_decl = {
+        .sig_decl = {
             .name = name,
             .type_params = type_params,
             .members = members,
@@ -1161,7 +1164,7 @@ static inline AstNode* parse_decl_without_attr_list(Parser* parser, bool is_publ
         case TOKEN_STRUCT: return parse_struct_decl(parser, is_public, is_opaque);
         case TOKEN_ENUM:   return parse_enum_decl(parser, is_public, is_opaque);
         case TOKEN_MOD:    return parse_mod_decl(parser, is_public);
-        case TOKEN_SIG:    return parse_sig_decl(parser);
+        case TOKEN_SIG:    return parse_sig_decl(parser, true);
         case TOKEN_USING:  return parse_using_decl(parser);
         case TOKEN_TYPE:   return parse_type_decl(parser, is_public, is_opaque);
         case TOKEN_CONST:  return parse_const_decl(parser, is_public);

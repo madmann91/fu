@@ -26,6 +26,8 @@ test('pass-attrs',     fu, suite: 'parser', workdir: root, args: ['--no-type-che
 test('fail-empty-type-params', fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_enum.fu'])
 test('fail-empty-enum',        fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_type_params.fu'])
 test('fail-empty-enum-option', fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_enum_option.fu'])
+test('fail-empty-sig',         fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_sig.fu'])
+test('fail-anonymous-sig',     fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/anonymous_sig.fu'])
 
 # Typechecker tests
 test('pass-mono-structs',        fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/mono_structs.fu'])
@@ -37,6 +39,7 @@ test('pass-struct-inheritance',  fu, suite: 'typechecker', workdir: root, args: 
 test('pass-enum-inheritance',    fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/enum_inheritance.fu'])
 test('pass-pub-mod-members',     fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/pub_mod_members.fu'])
 test('pass-opaque-mod-members',  fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/opaque_mod_members.fu'])
+test('pass-poly-mods',           fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/poly_mods.fu'])
 
 test('fail-type-access-enum',    fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/type_access_enum.fu'])
 test('fail-type-access-struct',  fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/type_access_struct.fu'])

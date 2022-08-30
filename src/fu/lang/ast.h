@@ -141,7 +141,7 @@ typedef enum {
 } AstNodeTag;
 
 typedef struct AstNode AstNode;
-typedef struct ModDeclData ModDeclData; // Internal, used during type-checking
+typedef struct SignatureVars SignatureVars;// Internal, used during type-checking
 
 struct AstNode {
     AstNodeTag tag;
@@ -266,13 +266,14 @@ struct AstNode {
         struct {
             const char* name;
             bool is_public;
+            SignatureVars* vars;
             AstNode* type_params;
             AstNode* members;
         } sig_decl;
         struct {
             const char* name;
             bool is_public;
-            ModDeclData* data;
+            SignatureVars* vars;
             AstNode* type_params;
             AstNode* signature;
             AstNode* aliased_mod;

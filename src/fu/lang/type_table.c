@@ -79,13 +79,15 @@ static HashCode hash_type(HashCode hash, const Type* type) {
             break;
         case TYPE_ARRAY:
             hash = hash_uint64(hash, type->array.elem_type->id);
+            if (type->array.size)
+                hash = hash_uint64(hash, type->array.size->id);
             break;
         case TYPE_VAR:
             hash = hash_str(hash, type->var.name);
             break;
         case TYPE_PTR:
             hash = hash_uint8(hash, type->ptr.is_const);
-            hash = hash_uint64(hash, type->ptr.pointee->id);
+            hash = hash_uint64(hash, type->ptr.pointed_type->id);
             break;
         default:
             assert(false && "invalid type");
@@ -151,13 +153,15 @@ static bool compare_types(const Type* left, const Type* right) {
                 compare_type_params(left, right);
         }
         case TYPE_ARRAY:
-            return left->array.elem_type == right->array.elem_type;
+            return
+                left->array.elem_type == right->array.elem_type &&
+                left->array.size == right->array.size;
         case TYPE_VAR:
             return left->var.name == right->var.name;
         case TYPE_PTR:
             return
                 left->ptr.is_const == right->ptr.is_const &&
-                left->ptr.pointee  == right->ptr.pointee;
+                left->ptr.pointed_type == right->ptr.pointed_type;
         default:
             assert(false && "invalid type");
             break;
@@ -470,19 +474,98 @@ const Type* make_unit_type(TypeTable* type_table) {
     return type_table->unit_type;
 }
 
+static const Type* copy_var_type(TypeTable* type_table, const Type* var) {
+    assert(var->tag == TYPE_VAR);
+    return var->var.value
+        ? make_var_type_with_value(type_table, var->var.name, var->var.value)
+        : make_var_type_with_kind(type_table, var->var.name, var->kind);
+}
+
+static inline void replace_struct_fields(TypeTable* type_table, Type* struct_type, TypeMap* type_map) {
+    assert(struct_type->tag == TYPE_STRUCT);
+    for (size_t i = 0; i < struct_type->struct_.field_count; ++i) {
+        struct_type->struct_.fields[i].type = replace_types_with_map(
+            type_table, struct_type->struct_.fields[i].type, type_map);
+    }
+}
+
+static inline void replace_enum_options(TypeTable* type_table, Type* enum_type, TypeMap* type_map) {
+    assert(enum_type->tag == TYPE_ENUM);
+    for (size_t i = 0; i < enum_type->enum_.option_count; ++i) {
+        enum_type->enum_.options[i].param_type = replace_types_with_map(
+            type_table, enum_type->enum_.options[i].param_type, type_map);
+    }
+}
+
+static inline void replace_signature_vars(TypeTable* type_table, Type* signature, TypeMap* type_map) {
+    assert(signature->tag == TYPE_SIGNATURE);
+    for (size_t i = 0; i < signature->signature.var_count; ++i) {
+        Type* var = (Type*)signature->signature.vars[i];
+        var->kind = replace_types_with_map(type_table, var->kind, type_map);
+        if (var->var.value) {
+            if (var->var.value->tag == TYPE_STRUCT)
+                replace_struct_fields(type_table, (Type*)var->var.value, type_map);
+            else if (var->var.value->tag == TYPE_ENUM)
+                replace_enum_options(type_table, (Type*)var->var.value, type_map);
+            else if (var->var.value->tag == TYPE_SIGNATURE)
+                replace_signature_vars(type_table, (Type*)var->var.value, type_map);
+            else
+                var->var.value = replace_types_with_map(type_table, var->var.value, type_map);
+        }
+    }
+}
+
+
 const Type* make_app_type(TypeTable* type_table, const Type* applied_type, const Type** args, size_t arg_count) {
     if (arg_count == 0)
         return applied_type;
-    assert(applied_type->kind->tag == KIND_ARROW);
-    assert(applied_type->kind->arrow.kind_param_count == arg_count);
-    return get_or_insert_type(type_table, &(Type) {
-        .tag = TYPE_APP,
-        .kind = applied_type->kind->arrow.body,
-        .app = { .applied_type = applied_type, .args = args, .arg_count = arg_count }
-    });
+    if (applied_type->kind->tag == KIND_ARROW) {
+        assert(applied_type->kind->arrow.kind_param_count == arg_count);
+        return get_or_insert_type(type_table, &(Type) {
+            .tag = TYPE_APP,
+            .kind = applied_type->kind->arrow.body,
+            .app = { .applied_type = applied_type, .args = args, .arg_count = arg_count }
+        });
+    } else if (applied_type->kind->tag == TYPE_SIGNATURE) {
+        assert(applied_type->kind->signature.type_param_count == arg_count);
+        const Type* app_type = get_or_insert_type(type_table, &(Type) {
+            .tag = TYPE_APP,
+            .app = { .applied_type = applied_type, .args = args, .arg_count = arg_count }
+        });
+        if (!app_type->kind) {
+            // Lazily compute the result of applying the module to the given type arguments, so that
+            // successive calls to `make_app_type()` get the same kind.
+            Type* signature = make_signature_type(type_table);
+
+            TypeMap type_map = new_type_map();
+            for (size_t i = 0; i < arg_count; ++i)
+                insert_in_type_map(&type_map, applied_type->kind->signature.type_params[i], (void*)args[i]);
+
+            const Type** vars = malloc_or_die(sizeof(Type*) * applied_type->kind->signature.var_count);
+            for (size_t i = 0; i < applied_type->kind->signature.var_count; ++i)
+                vars[i] = copy_var_type(type_table, applied_type->kind->signature.vars[i]);
+
+            signature->kind = make_star_kind(type_table);
+            signature->signature.type_param_count = 0;
+            signature->signature.type_params = NULL;
+            signature->signature.var_count = applied_type->kind->signature.var_count;
+            signature->signature.vars = vars;
+
+            seal_signature_type(type_table, signature);
+            replace_signature_vars(type_table, signature, &type_map);
+
+            free(vars);
+            free_type_map(&type_map);
+            ((Type*)app_type)->kind = signature;
+        }
+        return app_type;
+    } else {
+        assert(false && "invalid type in type application");
+        return applied_type;
+    }
 }
 
-const Type* make_array_type(TypeTable* type_table, const Type* elem_type) {
+const Type* make_unsized_array_type(TypeTable* type_table, const Type* elem_type) {
     return get_or_insert_type(type_table, &(Type) {
         .tag = TYPE_ARRAY,
         .kind = make_star_kind(type_table),
@@ -490,11 +573,19 @@ const Type* make_array_type(TypeTable* type_table, const Type* elem_type) {
     });
 }
 
-const Type* make_ptr_type(TypeTable* type_table, bool is_const, const Type* pointee_type) {
+const Type* make_sized_array_type(TypeTable* type_table, const Type* elem_type, const Type* size) {
+    return get_or_insert_type(type_table, &(Type) {
+        .tag = TYPE_ARRAY,
+        .kind = make_star_kind(type_table),
+        .array = { .elem_type = elem_type, .size = size }
+    });
+}
+
+const Type* make_ptr_type(TypeTable* type_table, bool is_const, const Type* pointed_type) {
     return get_or_insert_type(type_table, &(Type) {
         .tag = TYPE_PTR,
         .kind = make_star_kind(type_table),
-        .ptr = { .is_const = is_const, .pointee = pointee_type }
+        .ptr = { .is_const = is_const, .pointed_type = pointed_type }
     });
 }
 
@@ -503,7 +594,6 @@ const Type* make_fun_type(TypeTable* type_table, const Type* dom, const Type* co
 }
 
 const Type* make_proj_type(TypeTable* type_table, const Type* projected_type, size_t index) {
-    assert(projected_type->tag == TYPE_VAR);
     assert(projected_type->kind->tag == TYPE_SIGNATURE);
     assert(index < projected_type->kind->signature.var_count);
     return get_or_insert_type(type_table, &(Type) {
@@ -533,25 +623,18 @@ const Type* make_mod_type(TypeTable* type_table, const char* name, Type* signatu
     //
     // This makes extracting `M.U` result in the correct type.
     const Type* mod_type = make_var_type_with_kind(type_table, name, signature);
-    const Type* projected_type = make_app_type(type_table, mod_type,
+    const Type* applied_type = make_app_type(type_table, mod_type,
         signature->signature.type_params,
         signature->signature.type_param_count);
 
     TypeMap type_map = new_type_map();
-
     // Map variables to their projection
     for (size_t i = 0; i < signature->signature.var_count; ++i) {
         insert_in_type_map(&type_map,
             signature->signature.vars[i],
-            (void*)make_proj_type(type_table, projected_type, i));
+            (void*)make_proj_type(type_table, applied_type, i));
     }
-    for (size_t i = 0; i < signature->signature.var_count; ++i) {
-        // This replaces variables deeply inside structures and enumerations
-        Type* var = (Type*)signature->signature.vars[i];
-        var->kind = replace_types_with_map(type_table, var->kind, &type_map, false);
-        if (var->var.value)
-            var->var.value = replace_types_with_map(type_table, var->var.value, &type_map, false);
-    }
+    replace_signature_vars(type_table, signature, &type_map);
     free_type_map(&type_map);
     return mod_type;
 }
@@ -597,8 +680,7 @@ const Type* make_poly_fun_type(
 const Type* replace_types_with_map(
     TypeTable* type_table,
     const Type* type,
-    TypeMap* type_map,
-    bool is_shallow)
+    TypeMap* type_map)
 {
     switch (type->tag) {
 #define f(name, ...) case TYPE_##name:
@@ -609,29 +691,14 @@ const Type* replace_types_with_map(
         case KIND_ARROW:
         case TYPE_NORET:
         case TYPE_ERROR:
-            return type;
         case TYPE_STRUCT:
-            if (!is_shallow && !find_in_type_map(type_map, type)) {
-                for (size_t i = 0; i < type->struct_.field_count; ++i) {
-                    ((Type*)type)->struct_.fields[i].type = replace_types_with_map(
-                        type_table, type->struct_.fields[i].type, type_map, is_shallow);
-                }
-                insert_in_type_map(type_map, type, (void*)type);
-            }
-            return type;
+        case TYPE_SIGNATURE:
         case TYPE_ENUM:
-            if (!is_shallow && !find_in_type_map(type_map, type)) {
-                for (size_t i = 0; i < type->enum_.option_count; ++i) {
-                    ((Type*)type)->enum_.options[i].param_type = replace_types_with_map(
-                        type_table, type->enum_.options[i].param_type, type_map, is_shallow);
-                }
-                insert_in_type_map(type_map, type, (void*)type);
-            }
             return type;
         case TYPE_TUPLE: {
             const Type** types = malloc(sizeof(Type*) * type->tuple.arg_count);
             for (size_t i = 0, n = type->tuple.arg_count; i < n; ++i)
-                types[i] = replace_types_with_map(type_table, type->tuple.args[i], type_map, is_shallow);
+                types[i] = replace_types_with_map(type_table, type->tuple.args[i], type_map);
             type = make_tuple_type(type_table, types, type->tuple.arg_count);
             free(types);
             return type;
@@ -641,17 +708,17 @@ const Type* replace_types_with_map(
                 type->alias.name,
                 type->alias.type_params,
                 type->alias.type_param_count,
-                replace_types_with_map(type_table, type->alias.aliased_type, type_map, is_shallow));
+                replace_types_with_map(type_table, type->alias.aliased_type, type_map));
         case TYPE_PROJ:
             return make_proj_type(type_table,
-                replace_types_with_map(type_table, type->proj.projected_type, type_map, is_shallow),
+                replace_types_with_map(type_table, type->proj.projected_type, type_map),
                 type->proj.index);
         case TYPE_APP: {
             const Type** args = malloc(sizeof(Type*) * type->app.arg_count);
             for (size_t i = 0, n = type->app.arg_count; i < n; ++i)
-                args[i] = replace_types_with_map(type_table, type->app.args[i], type_map, is_shallow);
+                args[i] = replace_types_with_map(type_table, type->app.args[i], type_map);
             type = make_app_type(type_table,
-                replace_types_with_map(type_table, type->app.applied_type, type_map, is_shallow),
+                replace_types_with_map(type_table, type->app.applied_type, type_map),
                 args, type->app.arg_count);
             free(args);
             return type;
@@ -660,12 +727,16 @@ const Type* replace_types_with_map(
             return make_poly_fun_type(type_table,
                 type->fun.type_params,
                 type->fun.type_param_count,
-                replace_types_with_map(type_table, type->fun.dom, type_map, is_shallow),
-                replace_types_with_map(type_table, type->fun.codom, type_map, is_shallow));
+                replace_types_with_map(type_table, type->fun.dom, type_map),
+                replace_types_with_map(type_table, type->fun.codom, type_map));
         }
         case TYPE_ARRAY: {
-            return make_array_type(type_table,
-                replace_types_with_map(type_table, type->array.elem_type, type_map, is_shallow));
+            const Type* elem_type =
+                replace_types_with_map(type_table, type->array.elem_type, type_map);
+            if (!type->array.size)
+                return make_unsized_array_type(type_table, elem_type);
+            return make_sized_array_type(type_table, elem_type,
+                replace_types_with_map(type_table, type->array.size, type_map));
         }
         case TYPE_VAR: {
             const Type* mapped_type = find_in_type_map(type_map, type);
@@ -674,7 +745,7 @@ const Type* replace_types_with_map(
         case TYPE_PTR: {
             return make_ptr_type(type_table,
                 type->ptr.is_const,
-                replace_types_with_map(type_table, type->ptr.pointee, type_map, is_shallow));
+                replace_types_with_map(type_table, type->ptr.pointed_type, type_map));
         }
         default:
             assert(false && "invalid type");
@@ -687,13 +758,12 @@ const Type* replace_types(
     const Type* type,
     const Type** from,
     const Type** to,
-    size_t mapped_type_count,
-    bool is_shallow)
+    size_t mapped_type_count)
 {
     TypeMap type_map = new_type_map();
     for (size_t i = 0; i < mapped_type_count; ++i)
         insert_in_type_map(&type_map, from[i], (void*)to[i]);
-    const Type* replaced_type = replace_types_with_map(type_table, type, &type_map, is_shallow);
+    const Type* replaced_type = replace_types_with_map(type_table, type, &type_map);
     free_type_map(&type_map);
     return replaced_type;
 }

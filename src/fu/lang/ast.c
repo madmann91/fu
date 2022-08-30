@@ -572,22 +572,28 @@ bool is_assignable_expr(const AstNode* expr) {
 }
 
 bool is_public_decl(const AstNode* decl) {
-    if (decl->tag == AST_FUN_DECL)    return decl->fun_decl.is_public;
-    if (decl->tag == AST_CONST_DECL)  return decl->const_decl.is_public;
-    if (decl->tag == AST_VAR_DECL)    return decl->var_decl.is_public;
-    if (decl->tag == AST_STRUCT_DECL) return decl->struct_decl.is_public;
-    if (decl->tag == AST_ENUM_DECL)   return decl->enum_decl.is_public;
-    if (decl->tag == AST_TYPE_DECL)   return decl->type_decl.is_public;
-    if (decl->tag == AST_SIG_DECL)    return decl->sig_decl.is_public;
-    if (decl->tag == AST_MOD_DECL)    return decl->mod_decl.is_public;
-    return false;
+    switch (decl->tag) {
+        case AST_CONST_DECL:  return decl->const_decl.is_public;
+        case AST_VAR_DECL:    return decl->var_decl.is_public;
+        case AST_FUN_DECL:    return decl->fun_decl.is_public;
+        case AST_TYPE_DECL:   return decl->type_decl.is_public;
+        case AST_STRUCT_DECL: return decl->struct_decl.is_public;
+        case AST_ENUM_DECL:   return decl->enum_decl.is_public;
+        case AST_SIG_DECL:    return decl->sig_decl.is_public;
+        case AST_MOD_DECL:    return decl->mod_decl.is_public;
+        default:
+            return false;
+    }
 }
 
 bool is_opaque_decl(const AstNode* decl) {
-    if (decl->tag == AST_STRUCT_DECL) return decl->struct_decl.is_opaque;
-    if (decl->tag == AST_ENUM_DECL)   return decl->enum_decl.is_opaque;
-    if (decl->tag == AST_TYPE_DECL)   return decl->type_decl.is_opaque;
-    return false;
+    switch (decl->tag) {
+        case AST_TYPE_DECL:   return decl->type_decl.is_opaque;
+        case AST_STRUCT_DECL: return decl->struct_decl.is_opaque;
+        case AST_ENUM_DECL:   return decl->enum_decl.is_opaque;
+        default:
+            return false;
+    }
 }
 
 size_t count_ast_nodes(const AstNode* node) {
@@ -698,17 +704,12 @@ const char* get_decl_keyword(AstNodeTag tag) {
 
 const char* get_decl_name(const AstNode* decl) {
     switch (decl->tag) {
-        case AST_TYPE_DECL:
-            return decl->type_decl.name;
-        case AST_STRUCT_DECL:
-            return decl->enum_decl.name;
-        case AST_ENUM_DECL:
-            return decl->struct_decl.name;
-        case AST_SIG_DECL:
-        case AST_MOD_DECL:
-            return decl->mod_decl.name;
-        case AST_FUN_DECL:
-            return decl->fun_decl.name;
+        case AST_FUN_DECL:    return decl->fun_decl.name;
+        case AST_TYPE_DECL:   return decl->type_decl.name;
+        case AST_STRUCT_DECL: return decl->struct_decl.name;
+        case AST_ENUM_DECL:   return decl->enum_decl.name;
+        case AST_SIG_DECL:    return decl->sig_decl.name;
+        case AST_MOD_DECL:    return decl->mod_decl.name;
         default:
             return NULL;
     }

@@ -326,49 +326,46 @@ static const Type* infer_next_path_elem(TypingContext* context, AstNode* prev_el
     bool is_type_expected = false;
     AstNode* next_elem = prev_elem->next;
     const Type* applied_type = get_applied_type(prev_elem->type);
-    switch(applied_type->tag) {
-        case TYPE_STRUCT: {
-            const StructField* field = find_struct_field(applied_type, next_elem->path_elem.name);
-            if (!field) goto missing_member;
-            next_elem->path_elem.index = field - applied_type->struct_.fields;
-            next_elem->path_elem.is_type = false;
-            next_elem->type = get_struct_field_type(
-                context->type_table, prev_elem->type, next_elem->path_elem.index);
-            break;
-        }
-        case TYPE_ENUM: {
-            const EnumOption* option = find_enum_option(applied_type, next_elem->path_elem.name);
-            if (!option) goto missing_member;
-            bool is_struct_like = is_struct_like_option(option);
-            next_elem->path_elem.index = option - applied_type->enum_.options;
-            next_elem->path_elem.is_type = is_struct_like;
-            const Type* param_type = get_enum_option_param_type(
-                context->type_table, prev_elem->type, next_elem->path_elem.index);
-            next_elem->type = is_struct_like
-                ? param_type : make_enum_ctor_type(context->type_table, prev_elem->type, param_type);
-            is_type_expected = true;
-            break;
-        }
-        case TYPE_VAR: {
-            if (applied_type->kind->tag != TYPE_SIGNATURE)
-                goto missing_member;
-            const Type** var = find_signature_var(applied_type->kind, next_elem->path_elem.name);
-            if (!var)
-                goto missing_member;
-            next_elem->path_elem.index = var - applied_type->kind->signature.vars;
-            if (is_kind_level_type((*var)->kind)) {
-                next_elem->path_elem.is_type = true;
-                next_elem->type = make_proj_type(
-                    context->type_table, prev_elem->type, next_elem->path_elem.index);
-            } else {
-                next_elem->path_elem.is_type = false;
-                next_elem->type = (*var)->kind;
-            }
-            break;
-        }
-        default:
+    if (applied_type->tag == TYPE_STRUCT) {
+        const StructField* field = find_struct_field(applied_type, next_elem->path_elem.name);
+        if (!field)
             goto missing_member;
+
+        next_elem->path_elem.index = field - applied_type->struct_.fields;
+        next_elem->path_elem.is_type = false;
+        next_elem->type = get_struct_field_type(
+            context->type_table, prev_elem->type, next_elem->path_elem.index);
+    } else if (applied_type->tag == TYPE_ENUM) {
+        const EnumOption* option = find_enum_option(applied_type, next_elem->path_elem.name);
+        if (!option)
+            goto missing_member;
+
+        bool is_struct_like = is_struct_like_option(option);
+        next_elem->path_elem.index = option - applied_type->enum_.options;
+        next_elem->path_elem.is_type = is_struct_like;
+        const Type* param_type = get_enum_option_param_type(
+            context->type_table, prev_elem->type, next_elem->path_elem.index);
+        next_elem->type = is_struct_like
+            ? param_type : make_enum_ctor_type(context->type_table, prev_elem->type, param_type);
+        is_type_expected = true;
+    } else if (prev_elem->type->kind->tag == TYPE_SIGNATURE) {
+        const Type* signature = prev_elem->type->kind;
+        const Type** var = find_signature_var(signature, next_elem->path_elem.name);
+        if (!var)
+            goto missing_member;
+
+        next_elem->path_elem.index = var - signature->signature.vars;
+        if (is_kind_level_type((*var)->kind)) {
+            next_elem->path_elem.is_type = true;
+            next_elem->type = make_proj_type(
+                context->type_table, prev_elem->type, next_elem->path_elem.index);
+        } else {
+            next_elem->path_elem.is_type = false;
+            next_elem->type = (*var)->kind;
+        }
     }
+    else
+        goto missing_member;
 
     // Make sure we do not perform accesses on a type. For instance, given the type
     // `struct Foo { ... }`, an expression of the form `Foo.x` should be rejected.

@@ -5,6 +5,11 @@ mod B[T,U] {
     pub type X = T;
     pub type Y = U;
 }
+mod C[T] {
+    pub opaque type X = i32;
+    pub const x : X = 1;
+}
 
 const x : A[i32].X = 1 : i32;
 const y : B[i32, i64].Y = 1 : i64;
+const z : C[i32].X = C[i32].x;

@@ -27,20 +27,20 @@ test('fail-empty-type-params',  fu, suite: 'parser', workdir: root, should_fail:
 test('fail-empty-enum',         fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_type_params.fu'])
 test('fail-empty-enum-option',  fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_enum_option.fu'])
 test('fail-empty-sig',          fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_sig.fu'])
-test('fail-anonymous-sig',      fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/anonymous_sig.fu'])
+test('fail-anon-sig',           fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/anon_sig.fu'])
 test('fail-missing-const-init', fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/missing_const_init.fu'])
 
 # Typechecker tests
-test('pass-mono-structs',        fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/mono_structs.fu'])
-test('pass-poly-structs',        fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/poly_structs.fu'])
-test('pass-mono-enums',          fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/mono_enums.fu'])
-test('pass-poly-enums',          fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/poly_enums.fu'])
+test('pass-structs',             fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/structs.fu'])
+test('pass-enums',               fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/enums.fu'])
+test('pass-parametric-structs',  fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/parametric_structs.fu'])
+test('pass-parametric-enums',    fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/parametric_enums.fu'])
 test('pass-tuple-like-structs',  fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/tuple_like_structs.fu'])
 test('pass-struct-inheritance',  fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/struct_inheritance.fu'])
 test('pass-enum-inheritance',    fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/enum_inheritance.fu'])
 test('pass-pub-mod-members',     fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/pub_mod_members.fu'])
 test('pass-opaque-mod-members',  fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/opaque_mod_members.fu'])
-test('pass-poly-mods',           fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/poly_mods.fu'])
+test('pass-parametric-mods',     fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/parametric_mods.fu'])
 
 test('fail-type-access-enum',    fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/type_access_enum.fu'])
 test('fail-type-access-struct',  fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/type_access_struct.fu'])
@@ -50,6 +50,5 @@ test('fail-bad-sub-enum',        fu, suite: 'typechecker', workdir: root, should
 test('fail-hidden-mod-members',  fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/hidden_mod_members.fu'])
 test('fail-opaque-mod-members',  fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/opaque_mod_members.fu'])
 
-test('fail-redeclared-struct-field', fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/redeclared_struct_field.fu'])
-test('fail-redeclared-enum-option',  fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/redeclared_enum_option.fu'])
-
+test('fail-redecl-struct-field', fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/redecl_struct_field.fu'])
+test('fail-redecl-enum-option',  fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/redecl_enum_option.fu'])

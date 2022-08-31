@@ -328,21 +328,25 @@ const Type* get_applied_type(const Type* type) {
 }
 
 const Type** get_type_params(const Type* type) {
-    if (type->tag == TYPE_ALIAS)     return type->alias.type_params;
-    if (type->tag == TYPE_SIGNATURE) return type->signature.type_params;
-    if (type->tag == TYPE_STRUCT)    return type->struct_.type_params;
-    if (type->tag == TYPE_ENUM)      return type->enum_.type_params;
-    if (type->tag == TYPE_FUN)       return type->fun.type_params;
-    return NULL;
+    switch (type->tag) {
+        case TYPE_ALIAS:     return type->alias.type_params;
+        case TYPE_SIGNATURE: return type->signature.type_params;
+        case TYPE_STRUCT:    return type->struct_.type_params;
+        case TYPE_ENUM:      return type->enum_.type_params;
+        case TYPE_FUN:       return type->fun.type_params;
+        default:             return NULL;
+    }
 }
 
 size_t get_type_param_count(const Type* type) {
-    if (type->tag == TYPE_ALIAS)     return type->alias.type_param_count;
-    if (type->tag == TYPE_SIGNATURE) return type->signature.type_param_count;
-    if (type->tag == TYPE_STRUCT)    return type->struct_.type_param_count;
-    if (type->tag == TYPE_ENUM)      return type->enum_.type_param_count;
-    if (type->tag == TYPE_FUN)       return type->fun.type_param_count;
-    return 0;
+    switch (type->tag) {
+        case TYPE_ALIAS:     return type->alias.type_param_count;
+        case TYPE_SIGNATURE: return type->signature.type_param_count;
+        case TYPE_STRUCT:    return type->struct_.type_param_count;
+        case TYPE_ENUM:      return type->enum_.type_param_count;
+        case TYPE_FUN:       return type->fun.type_param_count;
+        default:             return 0;
+    }
 }
 
 size_t get_prim_type_bitwidth(TypeTag tag) {

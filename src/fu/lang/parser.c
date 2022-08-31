@@ -1104,7 +1104,9 @@ static inline AstNode* parse_const_or_var_decl(
     eat_token(parser, token_tag);
     AstNode* pattern = parse_pattern(parser);
     AstNode* init = NULL;
-    if (accept_token(parser, TOKEN_EQUAL))
+    if (token_tag == TOKEN_CONST)
+        expect_token(parser, TOKEN_EQUAL);
+    if (token_tag == TOKEN_CONST || accept_token(parser, TOKEN_EQUAL))
         init = parse_expr(parser);
     expect_token(parser, TOKEN_SEMICOLON);
     return make_ast_node(parser, &begin, &(AstNode) {

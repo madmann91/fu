@@ -23,11 +23,12 @@ test('pass-exprs',     fu, suite: 'parser', workdir: root, args: ['--no-type-che
 test('pass-loops',     fu, suite: 'parser', workdir: root, args: ['--no-type-check', '--print-ast', 'test/parser/pass/loops.fu'])
 test('pass-attrs',     fu, suite: 'parser', workdir: root, args: ['--no-type-check', '--print-ast', 'test/parser/pass/attrs.fu'])
 
-test('fail-empty-type-params', fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_enum.fu'])
-test('fail-empty-enum',        fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_type_params.fu'])
-test('fail-empty-enum-option', fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_enum_option.fu'])
-test('fail-empty-sig',         fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_sig.fu'])
-test('fail-anonymous-sig',     fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/anonymous_sig.fu'])
+test('fail-empty-type-params',  fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_enum.fu'])
+test('fail-empty-enum',         fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_type_params.fu'])
+test('fail-empty-enum-option',  fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_enum_option.fu'])
+test('fail-empty-sig',          fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_sig.fu'])
+test('fail-anonymous-sig',      fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/anonymous_sig.fu'])
+test('fail-missing-const-init', fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/missing_const_init.fu'])
 
 # Typechecker tests
 test('pass-mono-structs',        fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/mono_structs.fu'])

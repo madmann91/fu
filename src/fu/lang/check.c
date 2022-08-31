@@ -144,11 +144,10 @@ static void show_resolved_types(TypingContext* context, const Type** types, size
     for (size_t i = 0, j = 0; i < count; ++i) {
         const Type* resolved_type = resolve_type(types[i]);
         if (types[i] != resolved_type) {
-            log_note(context->log, NULL, "{s} '{t}' is '{t}'",
-                (FormatArg[]) {
-                    { .s = j++ == 0 ? "where" : "and" },
-                    { .t = types[i] },
-                    { .t = resolved_type } });
+            if (j++ == 0)
+                log_note(context->log, NULL, "where", NULL);
+            log_note(context->log, NULL, " '{t}' is '{t}'",
+                (FormatArg[]) { { .t = types[i] }, { .t = resolved_type } });
         }
     }
 }

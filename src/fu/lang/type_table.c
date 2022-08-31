@@ -537,6 +537,23 @@ const Type* make_app_type(TypeTable* type_table, const Type* applied_type, const
             // successive calls to `make_app_type()` get the same kind.
             Type* signature = make_signature_type(type_table);
 
+            // The signature can appear within its own variables, since some modules hide the
+            // implementations of types. For instance the module
+            //
+            //     mod Foo[T] {
+            //         pub opaque type T = T;
+            //         const x : T = 1;
+            //     }
+            //
+            // has the type
+            //
+            //     sig[T] { T: *, x: Foo[T].T }
+            //
+            // This means that, in order to compute the type of, Foo[i32].x, one needs to construct
+            // Foo[i32]. This in turn means that we need to be wary of infinite recursion, which is
+            // why the signature is set early on.
+            ((Type*)app_type)->kind = signature;
+
             TypeMap type_map = new_type_map();
             for (size_t i = 0; i < arg_count; ++i)
                 insert_in_type_map(&type_map, applied_type->kind->signature.type_params[i], (void*)args[i]);
@@ -556,7 +573,6 @@ const Type* make_app_type(TypeTable* type_table, const Type* applied_type, const
 
             free(vars);
             free_type_map(&type_map);
-            ((Type*)app_type)->kind = signature;
         }
         return app_type;
     } else {

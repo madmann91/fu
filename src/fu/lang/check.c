@@ -535,10 +535,6 @@ static const Type* infer_where_type(TypingContext* context, AstNode* where_type)
 
     // Create a new signature type to hold the modified signature with new bindings from the clauses
     Type* signature = copy_signature_type(context->type_table, source_signature);
-    const Type** vars = signature->signature.vars;
-    seal_signature_type(context->type_table, signature);
-    free(vars);
-
     for (AstNode* where_clause = where_type->where_type.clauses; where_clause; where_clause = where_clause->next)
         check_where_clause(context, where_clause, signature);
     return signature;

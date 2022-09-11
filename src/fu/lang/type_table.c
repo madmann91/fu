@@ -441,6 +441,109 @@ const Type* seal_signature_type(TypeTable* type_table, Type* type) {
     return type;
 }
 
+static Type* copy_var_type(TypeTable* type_table, const Type* var) {
+    assert(var->tag == TYPE_VAR);
+    return var->var.value
+        ? make_var_type_with_value(type_table, var->var.name, var->var.value)
+        : make_var_type_with_kind(type_table, var->var.name, var->kind);
+}
+
+Type* copy_signature_type(TypeTable* type_table, const Type* signature) {
+    assert(signature->tag == TYPE_SIGNATURE);
+    Type* signature_copy = make_signature_type(type_table);
+
+    const Type** vars = malloc_or_die(sizeof(Type*) * signature->signature.var_count);
+    for (size_t i = 0; i < signature->signature.var_count; ++i)
+        vars[i] = copy_var_type(type_table, signature->signature.vars[i]);
+
+    signature_copy->signature.type_param_count = signature->signature.type_param_count;
+    signature_copy->signature.type_params = signature->signature.type_params;
+    signature_copy->signature.var_count = signature->signature.var_count;
+    signature_copy->signature.vars = vars;
+    signature_copy->kind = signature->kind;
+    seal_signature_type(type_table, signature_copy);
+    free(vars);
+
+    return signature_copy;
+}
+
+Type* copy_struct_type(TypeTable* type_table, const Type* struct_type) {
+    assert(struct_type->tag == TYPE_STRUCT);
+    Type* struct_copy = make_struct_type(type_table, struct_type->struct_.name);
+
+    StructField* fields = malloc_or_die(sizeof(StructField) * struct_type->struct_.field_count);
+    memcpy(fields, struct_type->struct_.fields, sizeof(StructField) * struct_type->struct_.field_count);
+
+    struct_copy->struct_.type_params = struct_type->struct_.type_params;
+    struct_copy->struct_.type_param_count = struct_type->struct_.type_param_count;
+    struct_copy->struct_.field_count = struct_type->struct_.field_count;
+    struct_copy->struct_.fields = fields;
+    struct_copy->kind = struct_type->kind;
+    seal_struct_type(type_table, struct_copy);
+    free(fields);
+
+    return struct_copy;
+}
+
+Type* copy_enum_type(TypeTable* type_table, const Type* enum_type) {
+    assert(enum_type->tag == TYPE_ENUM);
+    Type* enum_copy = make_enum_type(type_table, enum_type->enum_.name);
+
+    EnumOption* options = malloc_or_die(sizeof(EnumOption) * enum_type->enum_.option_count);
+    memcpy(options, enum_type->enum_.options, sizeof(EnumOption) * enum_type->enum_.option_count);
+
+    enum_copy->enum_.type_params = enum_type->enum_.type_params;
+    enum_copy->enum_.type_param_count = enum_type->enum_.type_param_count;
+    enum_copy->enum_.option_count = enum_type->enum_.option_count;
+    enum_copy->enum_.options = options;
+    enum_copy->kind = enum_type->kind;
+    seal_enum_type(type_table, enum_copy);
+    free(options);
+
+    return enum_copy;
+}
+
+static Type* deep_copy_signature_type(TypeTable* type_table, const Type* signature, TypeMap* type_map) {
+    assert(signature->tag == TYPE_SIGNATURE);
+    Type* signature_copy = make_signature_type(type_table);
+
+    Type** vars = malloc_or_die(sizeof(Type*) * signature->signature.var_count);
+    for (size_t i = 0; i < signature->signature.var_count; ++i) {
+        vars[i] = copy_var_type(type_table, signature->signature.vars[i]);
+        insert_in_type_map(type_map, signature->signature.vars[i], (void*)vars[i]);
+
+        // Copy modules signatures
+        if (vars[i]->kind->tag == TYPE_SIGNATURE)
+            vars[i]->kind = deep_copy_signature_type(type_table, vars[i]->kind, type_map);
+
+        // Copy type definitions
+        if (vars[i]->var.value && is_nominal_type(vars[i]->var.value->tag)) {
+            switch (vars[i]->var.value->tag) {
+                case TYPE_STRUCT:
+                    vars[i]->var.value = copy_struct_type(type_table, vars[i]->var.value);
+                    break;
+                case TYPE_ENUM:
+                    vars[i]->var.value = copy_enum_type(type_table, vars[i]->var.value);
+                    break;
+                case TYPE_SIGNATURE:
+                    vars[i]->var.value = deep_copy_signature_type(type_table, vars[i]->var.value, type_map);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    signature_copy->signature.type_param_count = signature->signature.type_param_count;
+    signature_copy->signature.type_params = signature->signature.type_params;
+    signature_copy->signature.var_count = signature->signature.var_count;
+    signature_copy->signature.vars = (const Type**)vars;
+    signature_copy->kind = signature->kind;
+
+    // Note: This returns a signature in unsealed state, variables have to be freed after sealing.
+    return signature_copy;
+}
+
 const Type* make_prim_type(TypeTable* type_table, TypeTag tag) {
     assert(is_prim_type(tag));
     return type_table->prim_types[tag];
@@ -472,13 +575,6 @@ const Type* make_tuple_type(TypeTable* type_table, const Type** args, size_t arg
 
 const Type* make_unit_type(TypeTable* type_table) {
     return type_table->unit_type;
-}
-
-static const Type* copy_var_type(TypeTable* type_table, const Type* var) {
-    assert(var->tag == TYPE_VAR);
-    return var->var.value
-        ? make_var_type_with_value(type_table, var->var.name, var->var.value)
-        : make_var_type_with_kind(type_table, var->var.name, var->kind);
 }
 
 static inline void replace_struct_fields(TypeTable* type_table, Type* struct_type, TypeMap* type_map) {
@@ -535,7 +631,15 @@ const Type* make_app_type(TypeTable* type_table, const Type* applied_type, const
         if (!app_type->kind) {
             // Lazily compute the result of applying the module to the given type arguments, so that
             // successive calls to `make_app_type()` get the same kind.
-            Type* signature = make_signature_type(type_table);
+            TypeMap type_map = new_type_map();
+            Type* signature = deep_copy_signature_type(type_table, applied_type->kind, &type_map);
+
+            const Type** vars = signature->signature.vars;
+            signature->kind = make_star_kind(type_table);
+            signature->signature.type_param_count = 0;
+            signature->signature.type_params = NULL;
+            seal_signature_type(type_table, signature);
+            free(vars);
 
             // The signature can appear within its own variables, since some modules hide the
             // implementations of types. For instance the module
@@ -554,24 +658,21 @@ const Type* make_app_type(TypeTable* type_table, const Type* applied_type, const
             // why the signature is set early on.
             ((Type*)app_type)->kind = signature;
 
-            TypeMap type_map = new_type_map();
-            for (size_t i = 0; i < arg_count; ++i)
-                insert_in_type_map(&type_map, applied_type->kind->signature.type_params[i], (void*)args[i]);
+            // Replace instances of the type variables of the old signature into the new ones.
+            for (size_t i = 0; i < signature->signature.var_count; ++i) {
+                insert_in_type_map(&type_map,
+                    applied_type->kind->signature.vars[i],
+                    (void*)signature->signature.vars[i]);
+            }
 
-            const Type** vars = malloc_or_die(sizeof(Type*) * applied_type->kind->signature.var_count);
-            for (size_t i = 0; i < applied_type->kind->signature.var_count; ++i)
-                vars[i] = copy_var_type(type_table, applied_type->kind->signature.vars[i]);
+            // Replace the type parameters of the old signature with the type arguments.
+            for (size_t i = 0; i < arg_count; ++i) {
+                insert_in_type_map(&type_map,
+                    applied_type->kind->signature.type_params[i],
+                    (void*)args[i]);
+            }
 
-            signature->kind = make_star_kind(type_table);
-            signature->signature.type_param_count = 0;
-            signature->signature.type_params = NULL;
-            signature->signature.var_count = applied_type->kind->signature.var_count;
-            signature->signature.vars = vars;
-
-            seal_signature_type(type_table, signature);
             replace_signature_vars(type_table, signature, &type_map);
-
-            free(vars);
             free_type_map(&type_map);
         }
         return app_type;

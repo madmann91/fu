@@ -506,6 +506,44 @@ const Type* infer_kind(TypingContext* context, AstNode* kind) {
     }
 }
 
+static const Type* check_where_clause(TypingContext* context, AstNode* where_clause, const Type* signature) {
+    const Type** var_ptr = find_signature_var(signature, where_clause->where_clause.name);
+    if (!var_ptr)
+    {
+        report_missing_member(context,
+            where_clause->where_clause.name, signature, &where_clause->file_loc);
+        return make_error_type(context->type_table);
+    }
+    Type* var = (Type*)*var_ptr;
+    if (var->var.value)
+    {
+        log_error(context->log, &where_clause->file_loc,
+            "cannot rebind '{s}' to another type",
+            (FormatArg[]) { { .s = var->var.name } });
+        log_note(context->log, NULL, "'{s}' already bound to '{t}'",
+            (FormatArg[]) { { .s = var->var.name }, { .t = var->var.value } });
+        return make_error_type(context->type_table);
+    }
+    ((Type*)var)->var.value = infer_type(context, where_clause->where_clause.type);
+    return var;
+}
+
+static const Type* infer_where_type(TypingContext* context, AstNode* where_type) {
+    const Type* source_signature = infer_path(context, where_type->where_type.path, true);
+    if (!expect_type_with_tag(context, source_signature, TYPE_SIGNATURE, "signature", &where_type->where_type.path->file_loc))
+        return make_error_type(context->type_table);
+
+    // Create a new signature type to hold the modified signature with new bindings from the clauses
+    Type* signature = copy_signature_type(context->type_table, source_signature);
+    const Type** vars = signature->signature.vars;
+    seal_signature_type(context->type_table, signature);
+    free(vars);
+
+    for (AstNode* where_clause = where_type->where_type.clauses; where_clause; where_clause = where_clause->next)
+        check_where_clause(context, where_clause, signature);
+    return signature;
+}
+
 static const Type* infer_type_with_noret(TypingContext* context, AstNode* type, bool accept_noret) {
     switch (type->tag) {
 #define f(name, ...) case AST_TYPE_##name: return type->type = make_prim_type(context->type_table, TYPE_##name);
@@ -530,6 +568,8 @@ static const Type* infer_type_with_noret(TypingContext* context, AstNode* type, 
             return make_ptr_type(context->type_table,
                 type->ptr_type.is_const,
                 infer_type(context, type->ptr_type.pointed_type));
+        case AST_WHERE_TYPE:
+            return infer_where_type(context, type);
         case AST_SIG_DECL:
             return infer_decl(context, type);
         default:

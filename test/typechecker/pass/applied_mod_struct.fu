@@ -1,0 +1,8 @@
+mod Foo[T] {
+    pub struct S { t: T }
+}
+
+const x : Foo[i32].S = Foo[i32].S { t = 1 };
+const y : Foo[f32].S = Foo[f32].S { t = 1 };
+const z : i32 = x.t;
+const w : f32 = y.t;

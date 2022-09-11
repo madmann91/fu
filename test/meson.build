@@ -41,6 +41,7 @@ test('pass-enum-inheritance',    fu, suite: 'typechecker', workdir: root, args: 
 test('pass-pub-mod-members',     fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/pub_mod_members.fu'])
 test('pass-opaque-mod-members',  fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/opaque_mod_members.fu'])
 test('pass-parametric-mods',     fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/parametric_mods.fu'])
+test('pass-applied-mod-struct',  fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/applied_mod_struct.fu'])
 
 test('fail-type-access-enum',    fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/type_access_enum.fu'])
 test('fail-type-access-struct',  fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/type_access_struct.fu'])
@@ -52,3 +53,4 @@ test('fail-opaque-mod-members',  fu, suite: 'typechecker', workdir: root, should
 
 test('fail-redecl-struct-field', fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/redecl_struct_field.fu'])
 test('fail-redecl-enum-option',  fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/redecl_enum_option.fu'])
+

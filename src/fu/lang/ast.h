@@ -197,7 +197,7 @@ struct AstNode {
             AstNode* clauses;
         } where_type;
         struct {
-            AstNode* path;
+            const char* name;
             AstNode* type;
         } where_clause;
         struct {

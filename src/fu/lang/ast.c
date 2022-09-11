@@ -377,7 +377,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             print_ast(state, ast_node->ptr_type.pointed_type);
             break;
         case AST_WHERE_CLAUSE:
-            print_ast_with_delim(state, "", " = ", ast_node->where_clause.path);
+            format(state, "{s} = ", (FormatArg[]) { { .s = ast_node->where_clause.name } });
             print_ast(state, ast_node->where_clause.type);
             break;
         case AST_WHERE_TYPE:

@@ -39,6 +39,10 @@ const Type* seal_struct_type(TypeTable*, Type*);
 const Type* seal_enum_type(TypeTable*, Type*);
 const Type* seal_signature_type(TypeTable*, Type*);
 
+Type* copy_struct_type(TypeTable*, const Type*);
+Type* copy_enum_type(TypeTable*, const Type*);
+Type* copy_signature_type(TypeTable*, const Type*);
+
 //================================= STRUCTURAL TYPES =====================================
 
 const Type* make_prim_type(TypeTable*, TypeTag);

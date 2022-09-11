@@ -409,12 +409,13 @@ static inline AstNode* parse_ptr_type(Parser* parser) {
 }
 
 static inline AstNode* parse_where_clause(Parser* parser) {
-    AstNode* path = parse_path(parser);
+    FilePos begin = parser->ahead->file_loc.begin;
+    const char* name = parse_ident(parser);
     expect_token(parser, TOKEN_EQUAL);
     AstNode* type = parse_type(parser);
-    return make_ast_node(parser, &path->file_loc.begin, &(AstNode) {
+    return make_ast_node(parser, &begin, &(AstNode) {
         .tag = AST_WHERE_CLAUSE,
-        .where_clause = { .path = path, .type = type }
+        .where_clause = { .name = name, .type = type }
     });
 }
 
@@ -1049,7 +1050,7 @@ static inline AstNode* parse_mod_decl(Parser* parser, bool is_public) {
     AstNode* type_params = parse_type_params(parser);
     AstNode* signature = NULL;
     if (accept_token(parser, TOKEN_COLON))
-        signature = parse_path(parser);
+        signature = parse_type(parser);
     AstNode* aliased_mod = NULL;
     AstNode* members = NULL;
     if (accept_token(parser, TOKEN_L_BRACE)) {

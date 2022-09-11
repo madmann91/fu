@@ -29,6 +29,7 @@ test('fail-empty-enum-option',  fu, suite: 'parser', workdir: root, should_fail:
 test('fail-empty-sig',          fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/empty_sig.fu'])
 test('fail-anon-sig',           fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/anon_sig.fu'])
 test('fail-missing-const-init', fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/missing_const_init.fu'])
+test('fail-unbound-type',       fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/unbound_type.fu'])
 
 # Typechecker tests
 test('pass-structs',             fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/structs.fu'])

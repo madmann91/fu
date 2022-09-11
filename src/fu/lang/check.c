@@ -1161,13 +1161,9 @@ static const Type* infer_type_decl(TypingContext* context, AstNode* type_decl) {
 
     if (!type_decl->type_decl.aliased_type) {
         // Types without an actual binding should not exist outside of signatures.
-        if (type_decl->parent_scope && type_decl->parent_scope->tag == AST_SIG_DECL) {
-            return type_decl->type = add_to_parent_sig_or_mod(
-                context->type_table, type_decl, type_kind, type_decl->type_decl.name, true);
-        } else {
-            log_error(context->log, &type_decl->file_loc, "missing binding for type alias", NULL);
-            return type_decl->type = make_error_type(context->type_table);
-        }
+        assert(type_decl->parent_scope && type_decl->parent_scope->tag == AST_SIG_DECL);
+        return type_decl->type = add_to_parent_sig_or_mod(
+            context->type_table, type_decl, type_kind, type_decl->type_decl.name, true);
     } else {
         const Type* aliased_type = infer_type(context, type_decl->type_decl.aliased_type);
         const Type* alias_type = make_alias_type(

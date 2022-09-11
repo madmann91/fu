@@ -13,10 +13,10 @@ typedef struct {
     AstNode* last;
 } AstNodeList;
 
-static inline AstNode* parse_decl_without_attr_list(Parser*, bool, bool);
+static inline AstNode* parse_decl_without_attr_list(Parser*, bool, bool, bool);
 static inline AstNode* parse_struct_decl(Parser*, bool, bool);
 static inline AstNode* parse_enum_decl(Parser*, bool, bool);
-static inline AstNode* parse_type_decl(Parser*, bool, bool);
+static inline AstNode* parse_type_decl(Parser*, bool, bool, bool);
 static inline AstNode* parse_sig_decl(Parser*, bool);
 
 static inline void add_ast_node_to_list(AstNodeList* list, AstNode* node) {
@@ -1019,7 +1019,7 @@ static inline AstNode* parse_enum_decl(Parser* parser, bool is_public, bool is_o
 }
 
 static AstNode* parse_sig_member_decl(Parser* parser) {
-    return parse_decl_without_attr_list(parser, false, false);
+    return parse_decl_without_attr_list(parser, false, false, true);
 }
 
 static inline AstNode* parse_sig_decl(Parser* parser, bool needs_name) {
@@ -1074,13 +1074,20 @@ static inline AstNode* parse_mod_decl(Parser* parser, bool is_public) {
     });
 }
 
-static inline AstNode* parse_type_decl(Parser* parser, bool is_public, bool is_opaque) {
+static inline AstNode* parse_type_decl(
+    Parser* parser,
+    bool is_public,
+    bool is_opaque,
+    bool allow_unbound_types)
+{
     FilePos begin = parser->ahead->file_loc.begin;
     eat_token(parser, TOKEN_TYPE);
     const char* name = parse_ident(parser);
     AstNode* type_params = parse_type_params(parser);
     AstNode* aliased_type = NULL;
-    if (accept_token(parser, TOKEN_EQUAL))
+    if (!allow_unbound_types)
+        expect_token(parser, TOKEN_EQUAL);
+    if (!allow_unbound_types || accept_token(parser, TOKEN_EQUAL))
         aliased_type = parse_type(parser);
     expect_token(parser, TOKEN_SEMICOLON);
     return make_ast_node(parser, &begin, &(AstNode) {
@@ -1144,7 +1151,7 @@ AstNode* parse_stmt(Parser* parser) {
     switch (parser->ahead->tag) {
         case TOKEN_FOR:    return parse_for_loop(parser);
         case TOKEN_WHILE:  return parse_while_loop(parser);
-        case TOKEN_TYPE:   return parse_type_decl(parser, false, false);
+        case TOKEN_TYPE:   return parse_type_decl(parser, false, false, false);
         case TOKEN_STRUCT: return parse_struct_decl(parser, false, false);
         case TOKEN_USING:  return parse_using_decl(parser);
         case TOKEN_ENUM:   return parse_enum_decl(parser, false, false);
@@ -1162,14 +1169,19 @@ AstNode* parse_stmt(Parser* parser) {
     }
 }
 
-static inline AstNode* parse_decl_without_attr_list(Parser* parser, bool is_public, bool is_opaque) {
+static inline AstNode* parse_decl_without_attr_list(
+    Parser* parser,
+    bool is_public,
+    bool is_opaque,
+    bool allow_unbound_types)
+{
     switch (parser->ahead->tag) {
         case TOKEN_STRUCT: return parse_struct_decl(parser, is_public, is_opaque);
         case TOKEN_ENUM:   return parse_enum_decl(parser, is_public, is_opaque);
         case TOKEN_MOD:    return parse_mod_decl(parser, is_public);
         case TOKEN_SIG:    return parse_sig_decl(parser, true);
         case TOKEN_USING:  return parse_using_decl(parser);
-        case TOKEN_TYPE:   return parse_type_decl(parser, is_public, is_opaque);
+        case TOKEN_TYPE:   return parse_type_decl(parser, is_public, is_opaque, allow_unbound_types);
         case TOKEN_CONST:  return parse_const_decl(parser, is_public);
         case TOKEN_VAR:    return parse_var_decl(parser, is_public);
         case TOKEN_FUN:    return parse_fun_decl(parser, is_public);
@@ -1185,7 +1197,7 @@ AstNode* parse_decl(Parser* parser) {
     bool is_public = accept_token(parser, TOKEN_PUB);
     FileLoc opaque_loc = parser->ahead->file_loc;
     bool is_opaque = is_public && accept_token(parser, TOKEN_OPAQUE);
-    AstNode* decl = parse_decl_without_attr_list(parser, is_public, is_opaque);
+    AstNode* decl = parse_decl_without_attr_list(parser, is_public, is_opaque, false);
     if (is_opaque && is_value_decl(decl->tag)) {
         log_error(parser->lexer->log, &opaque_loc, "cannot use '{$}opaque{$}' here",
             (FormatArg[]) { { .style = keyword_style }, { .style = reset_style } });

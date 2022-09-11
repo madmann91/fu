@@ -53,4 +53,5 @@ test('fail-opaque-mod-members',  fu, suite: 'typechecker', workdir: root, should
 
 test('fail-redecl-struct-field', fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/redecl_struct_field.fu'])
 test('fail-redecl-enum-option',  fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/redecl_enum_option.fu'])
+test('fail-rebind-where-clause', fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/rebind_where_clause.fu'])
 

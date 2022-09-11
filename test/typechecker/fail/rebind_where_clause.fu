@@ -1,0 +1,2 @@
+sig Foo { type T = i32; }
+type Bar = Foo where T = i64;

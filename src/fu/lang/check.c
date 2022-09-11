@@ -518,10 +518,8 @@ static const Type* check_where_clause(TypingContext* context, AstNode* where_cla
     if (var->var.value)
     {
         log_error(context->log, &where_clause->file_loc,
-            "cannot rebind '{s}' to another type",
-            (FormatArg[]) { { .s = var->var.name } });
-        log_note(context->log, NULL, "'{s}' already bound to '{t}'",
-            (FormatArg[]) { { .s = var->var.name }, { .t = var->var.value } });
+            "'{s}' is already bound to '{t}'",
+            (FormatArg[]) { { .s = var->var.name }, { .t = resolve_type(var->var.value) } });
         return make_error_type(context->type_table);
     }
     ((Type*)var)->var.value = infer_type(context, where_clause->where_clause.type);

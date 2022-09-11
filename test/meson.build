@@ -44,6 +44,7 @@ test('pass-opaque-mod-members',  fu, suite: 'typechecker', workdir: root, args: 
 test('pass-parametric-mods',     fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/parametric_mods.fu'])
 test('pass-applied-mod-struct',  fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/applied_mod_struct.fu'])
 
+test('fail-recursive-fun',       fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/recursive_fun.fu'])
 test('fail-type-access-enum',    fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/type_access_enum.fu'])
 test('fail-type-access-struct',  fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/type_access_struct.fu'])
 test('fail-value_access-struct', fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/value_access_struct.fu'])

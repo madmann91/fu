@@ -282,7 +282,7 @@ static const Type* infer_decl_site(TypingContext* context, AstNode* decl_site) {
     return decl_site->type;
 }
 
-static const Type* infer_type_arg(const TypeBounds* type_bounds, const Type* type_param) {
+static const Type* infer_type_arg_from_bounds(const TypeBounds* type_bounds, const Type* type_param) {
     assert(type_param->tag == TYPE_VAR);
     return type_param->var.variance == TYPE_CONTRAVARIANT ? type_bounds->upper : type_bounds->lower;
 }
@@ -300,7 +300,7 @@ static bool check_type_var_bounds(
     for (; i < fun_type->fun.type_param_count; ++i) {
         if (!is_sub_type(context->type_table, type_bounds[i].lower, type_bounds[i].upper))
             goto error_found;
-        const Type* type_arg = infer_type_arg(&type_bounds[i], fun_type->fun.type_params[i]);
+        const Type* type_arg = infer_type_arg_from_bounds(&type_bounds[i], fun_type->fun.type_params[i]);
         if (type_arg->tag == TYPE_BOTTOM || type_arg->tag == TYPE_TOP)
             goto error_found;
         insert_in_type_map(type_map, fun_type->fun.type_params[i], (void*)type_arg);
@@ -310,7 +310,7 @@ static bool check_type_var_bounds(
 error_found:
     log_error(context->log, file_loc, "cannot infer type arguments", NULL);
     for (; i < fun_type->fun.type_param_count; ++i) {
-        const Type* type_arg = infer_type_arg(&type_bounds[i], fun_type->fun.type_params[i]);
+        const Type* type_arg = infer_type_arg_from_bounds(&type_bounds[i], fun_type->fun.type_params[i]);
         if (!is_sub_type(context->type_table, type_bounds[i].lower, type_bounds[i].upper)) {
             log_note(context->log, NULL,
                 "cannot satisfy type bounds '{t}' <: '{t}' <: '{t}'",
@@ -328,7 +328,7 @@ error_found:
     return false;
 }
 
-static const Type* infer_type_args(
+static const Type* infer_fun_app_type_args(
     TypingContext* context,
     const Type* fun_type,
     const Type** type_args,
@@ -344,12 +344,12 @@ static const Type* infer_type_args(
     TypeMap type_map = new_type_map();
     for (size_t i = 0; i < fun_type->fun.type_param_count; ++i)
         insert_in_type_map(&type_map, fun_type->fun.type_params[i], (void*)type_args[i]);
-    const Type* dom_type = replace_types_with_map(context->type_table, fun_type->fun.dom, &type_map);
-    const Type* arg_type = check_expr(context, call_arg, dom_type);
+    const Type* arg_type = check_expr(context, call_arg,
+        replace_types_with_map(context->type_table, fun_type->fun.dom, &type_map));
+    clear_type_map(&type_map);
 
     // Get the type bounds for each type parameter of the function type
     TypeBounds* type_bounds = malloc_or_die(sizeof(TypeBounds) * fun_type->fun.type_param_count);
-    clear_type_map(&type_map);
     for (size_t i = 0; i < fun_type->fun.type_param_count; ++i) {
         type_bounds[i] = (TypeBounds) {
             .lower = make_bottom_type(context->type_table),
@@ -358,10 +358,10 @@ static const Type* infer_type_args(
         insert_in_type_map(&type_map, fun_type->fun.type_params[i], &type_bounds[i]);
     }
     get_type_var_bounds(fun_type->fun.dom, arg_type, &type_map);
+    clear_type_map(&type_map);
 
     // Deduce monomorphic function type from type bounds
     const Type* result_type = make_error_type(context->type_table);
-    clear_type_map(&type_map);
     if (check_type_var_bounds(context, &type_map, fun_type, type_bounds, file_loc)) {
         result_type = make_fun_type(context->type_table,
             replace_types_with_map(context->type_table, fun_type->fun.dom, &type_map),
@@ -431,7 +431,7 @@ static const Type* check_type_args(
         push_on_dyn_array(&args, &unknown_type);
 
     const Type* applied_type = type->tag == TYPE_FUN
-        ? infer_type_args(context, type, args.elems, call_arg, file_loc)
+        ? infer_fun_app_type_args(context, type, args.elems, call_arg, file_loc)
         : make_app_type(context->type_table, type, args.elems, type_param_count);
     free_dyn_array(&args);
     return applied_type;

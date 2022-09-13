@@ -116,30 +116,6 @@ static inline void add_idents_to_parent_mod(TypeTable* type_table, AstNode* patt
     }
 }
 
-static const Type** check_many(
-    TypingContext* context,
-    AstNode* elems,
-    const Type** expected_types,
-    size_t count,
-    const Type* (*check_one)(TypingContext*, AstNode*, const Type*))
-{
-    const Type** types = malloc_or_die(sizeof(Type*) * count);
-    for (size_t i = 0; i < count; ++i, elems = elems->next)
-        types[i] = check_one(context, elems, expected_types[i]);
-    return types;
-}
-
-static const Type** infer_many(
-    TypingContext* context,
-    AstNode* elems, size_t count,
-    const Type* (*infer_one)(TypingContext*, AstNode*))
-{
-    const Type** types = malloc_or_die(sizeof(Type*) * count);
-    for (size_t i = 0; i < count; ++i, elems = elems->next)
-        types[i] = infer_one(context, elems);
-    return types;
-}
-
 static void show_resolved_types(TypingContext* context, const Type** types, size_t count) {
     for (size_t i = 0, j = 0; i < count; ++i) {
         const Type* resolved_type = resolve_type(types[i]);
@@ -582,8 +558,10 @@ static const Type* infer_tuple(
     AstNode* tuple,
     const Type* (*infer_arg)(TypingContext*, AstNode*))
 {
-    size_t arg_count = count_ast_nodes(tuple->tuple_expr.args);
-    const Type** arg_types = infer_many(context, tuple->tuple_expr.args, arg_count, infer_arg);
+    size_t i = 0, arg_count = count_ast_nodes(tuple->tuple_expr.args);
+    const Type** arg_types = malloc_or_die(sizeof(Type*) * arg_count);
+    for (AstNode* arg = tuple->tuple_expr.args; arg; arg = arg->next, i++)
+        arg_types[i] = infer_arg(context, arg);
     tuple->type = make_tuple_type(context->type_table, arg_types, arg_count);
     free(arg_types);
     return tuple->type;
@@ -597,7 +575,7 @@ static const Type* check_tuple(
 {
     assert(expected_type->tag == TYPE_TUPLE);
 
-    size_t arg_count = count_ast_nodes(tuple->tuple_expr.args);
+    size_t i = 0, arg_count = count_ast_nodes(tuple->tuple_expr.args);
     if (expected_type->tuple.arg_count != arg_count) {
         log_error(context->log, &tuple->file_loc,
             "expected tuple with {u} argument(s), but got {u}",
@@ -605,10 +583,9 @@ static const Type* check_tuple(
         return make_error_type(context->type_table);
     }
 
-    const Type** arg_types = check_many(context,
-        tuple->tuple_expr.args,
-        expected_type->tuple.args,
-        arg_count, check_arg);
+    const Type** arg_types = malloc_or_die(sizeof(Type*) * arg_count);
+    for (AstNode* arg = tuple->tuple_expr.args; arg; arg = arg->next, i++)
+        arg_types[i] = check_arg(context, arg, expected_type->tuple.args[i]);
     tuple->type = make_tuple_type(context->type_table, arg_types, arg_count);
     free(arg_types);
     return tuple->type;
@@ -622,11 +599,13 @@ const Type* infer_kind(TypingContext* context, AstNode* kind) {
         case AST_KIND_STAR:
             return make_star_kind(context->type_table);
         case AST_KIND_ARROW: {
-            size_t type_param_count = count_ast_nodes(kind->arrow_kind.dom_kinds);
-            const Type** type_params = infer_many(context, kind->arrow_kind.dom_kinds, type_param_count, infer_kind);
+            size_t i = 0, kind_param_count = count_ast_nodes(kind->arrow_kind.dom_kinds);
+            const Type** kind_params = malloc_or_die(sizeof(Type*) * kind_param_count);
+            for (AstNode* dom_kind = kind->arrow_kind.dom_kinds; dom_kind; dom_kind = dom_kind->next, i++)
+                kind_params[i] = infer_kind(context, dom_kind);
             const Type* body = infer_kind(context, kind->arrow_kind.codom_kind);
-            const Type* arrow = make_arrow_kind(context->type_table, type_params, type_param_count, body);
-            free(type_params);
+            const Type* arrow = make_arrow_kind(context->type_table, kind_params, kind_param_count, body);
+            free(kind_params);
             return arrow;
         }
         case AST_PATH:

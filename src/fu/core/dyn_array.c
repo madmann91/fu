@@ -41,7 +41,7 @@ void push_on_dyn_array_explicit(DynArray* array, const void* elem, size_t elem_s
     assert(elem_size == array->elem_size);
     if (array->size >= array->capacity)
         grow_dyn_array(array, array->size + 1);
-    memcpy(array->elems + array->elem_size * array->size, elem, array->elem_size);
+    memcpy((char*)array->elems + array->elem_size * array->size, elem, array->elem_size);
     array->size++;
 }
 

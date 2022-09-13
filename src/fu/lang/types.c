@@ -20,13 +20,10 @@ TypeSet new_type_set(void) {
     return (TypeSet) { .hash_table = new_hash_table(sizeof(Type*)) };
 }
 
-void free_type_map(TypeMap* type_map) {
-    free_hash_table(&type_map->hash_table);
-}
-
-void free_type_set(TypeSet* type_set) {
-    free_hash_table(&type_set->hash_table);
-}
+void clear_type_map(TypeMap* type_map) { clear_hash_table(&type_map->hash_table); }
+void clear_type_set(TypeSet* type_set) { clear_hash_table(&type_set->hash_table); }
+void free_type_map(TypeMap* type_map) { free_hash_table(&type_map->hash_table); }
+void free_type_set(TypeSet* type_set) { free_hash_table(&type_set->hash_table); }
 
 static bool compare_type_map_elems(const void* left, const void* right) {
     return ((TypeMapElem*)left)->from == ((TypeMapElem*)right)->from;
@@ -105,6 +102,10 @@ bool is_int_type(TypeTag tag) {
 
 bool is_int_or_float_type(TypeTag tag) {
     return is_int_type(tag) || is_float_type(tag);
+}
+
+bool is_bottom_or_top_type(TypeTag tag) {
+    return tag == TYPE_BOTTOM || tag == TYPE_TOP;
 }
 
 bool is_unit_type(const Type* type) {
@@ -376,6 +377,14 @@ size_t get_type_inheritance_depth(const Type* type) {
     return depth;
 }
 
+void get_type_var_bounds(const Type* from, const Type* to, TypeMap* type_map) {
+    // TODO
+    switch (from->tag) {
+        default:
+            break;
+    }
+}
+
 int compare_signature_vars_by_name(const void* left, const void* right) {
     return strcmp((*(const Type**)left)->var.name, (*(const Type**)right)->var.name);
 }
@@ -491,6 +500,12 @@ void print_type(FormatState* state, const Type* type) {
             break;
         case TYPE_ERROR:
             print_with_style(state, "<error>", error_style);
+            break;
+        case TYPE_BOTTOM:
+            print_with_style(state, "bot", error_style);
+            break;
+        case TYPE_TOP:
+            print_with_style(state, "top", error_style);
             break;
         case TYPE_NORET:
             format(state, "!", NULL);

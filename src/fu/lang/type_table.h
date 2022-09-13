@@ -45,6 +45,8 @@ Type* copy_signature_type(TypeTable*, const Type*);
 
 //================================= STRUCTURAL TYPES =====================================
 
+const Type* make_top_type(TypeTable*);
+const Type* make_bottom_type(TypeTable*);
 const Type* make_prim_type(TypeTable*, TypeTag);
 const Type* make_unknown_type(TypeTable*);
 const Type* make_error_type(TypeTable*);

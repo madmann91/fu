@@ -5,12 +5,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
-// GCOV_EXCL_START
-static inline void die(const char* msg) {
-    fputs(msg, stderr);
-    abort();
-}
-// GCOV_EXCL_STOP
+#include "fu/core/utils.h"
 
 static inline void* malloc_or_die(size_t size) {
     void* ptr = malloc(size);

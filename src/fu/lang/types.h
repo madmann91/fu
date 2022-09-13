@@ -43,6 +43,8 @@ typedef enum {
     KIND_STAR,
     KIND_ARROW,
     TYPE_UNKNOWN,
+    TYPE_BOTTOM,
+    TYPE_TOP,
     TYPE_SIGNATURE,
     TYPE_STRUCT,
     TYPE_ENUM,
@@ -158,6 +160,11 @@ struct Type {
     };
 };
 
+typedef struct TypeBounds {
+    const Type* upper;
+    const Type* lower;
+} TypeBounds;
+
 //================================== TYPE MAPS/SETS ======================================
 
 typedef struct TypeMap { HashTable hash_table; } TypeMap;
@@ -167,6 +174,8 @@ TypeMap new_type_map(void);
 TypeSet new_type_set(void);
 void free_type_map(TypeMap*);
 void free_type_set(TypeSet*);
+void clear_type_map(TypeMap*);
+void clear_type_set(TypeSet*);
 bool insert_in_type_map(TypeMap*, const Type*, void*);
 bool insert_in_type_set(TypeSet*, const Type*);
 void* find_in_type_map(const TypeMap*, const Type*);
@@ -203,6 +212,7 @@ size_t get_type_param_count(const Type*);
 size_t get_prim_type_bitwidth(TypeTag);
 size_t get_type_inheritance_depth(const Type*);
 const Kind* get_type_kind(const Type*);
+void get_type_var_bounds(const Type*, const Type*, TypeMap*);
 
 int compare_signature_vars_by_name(const void* left, const void* right);
 int compare_struct_fields_by_name(const void* left, const void* right);

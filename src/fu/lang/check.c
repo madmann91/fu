@@ -46,7 +46,7 @@ static void pop_decl(TypingContext* context, AstNode* decl) {
     remove_from_hash_table(&context->visited_decls, ptr, sizeof(AstNode*));
 }
 
-static bool must_add_to_parent_sig_or_mod(const AstNode* ast_node) {
+static bool should_add_to_parent_sig_or_mod(const AstNode* ast_node) {
     return
         is_public_decl(ast_node) ||
         (ast_node->parent_scope && ast_node->parent_scope->tag == AST_SIG_DECL);
@@ -162,12 +162,15 @@ static const Type* expect_type(
     bool matches_type = is_sub_type(context->type_table,
         is_upper_bound ? type : expected_type,
         is_upper_bound ? expected_type : type);
+    const char* kind_or_type = is_kind_level_type(type) ? "kind" : "type";
     if (!matches_type) {
         if (!expected_type->contains_error && !type->contains_error) {
-            log_error(context->log, file_loc, "expected {s} type '{t}', but got type '{t}'",
+            log_error(context->log, file_loc, "expected {s} {s} '{t}', but got {s} '{t}'",
                 (FormatArg[]) {
                     { .s = is_upper_bound ? "at most" : "at least" },
+                    { .s = kind_or_type },
                     { .t = expected_type },
+                    { .s = kind_or_type },
                     { .t = type }
                 });
             show_resolved_types(context, (const Type*[]) { type, expected_type }, 2);
@@ -279,39 +282,157 @@ static const Type* infer_decl_site(TypingContext* context, AstNode* decl_site) {
     return decl_site->type;
 }
 
+static const Type* infer_type_arg(const TypeBounds* type_bounds, const Type* type_param) {
+    assert(type_param->tag == TYPE_VAR);
+    return type_param->var.variance == TYPE_CONTRAVARIANT ? type_bounds->upper : type_bounds->lower;
+}
+
+static bool check_type_var_bounds(
+    TypingContext* context,
+    TypeMap* type_map,
+    const Type* fun_type,
+    const TypeBounds* type_bounds,
+    const FileLoc* file_loc)
+{
+    // Replace type parameters with their actual inferred lower/upper bound depending on the
+    // variance of the type parameter.
+    size_t i = 0;
+    for (; i < fun_type->fun.type_param_count; ++i) {
+        if (!is_sub_type(context->type_table, type_bounds[i].lower, type_bounds[i].upper))
+            goto error_found;
+        const Type* type_arg = infer_type_arg(&type_bounds[i], fun_type->fun.type_params[i]);
+        if (type_arg->tag == TYPE_BOTTOM || type_arg->tag == TYPE_TOP)
+            goto error_found;
+        insert_in_type_map(type_map, fun_type->fun.type_params[i], (void*)type_arg);
+    }
+    return true;
+
+error_found:
+    log_error(context->log, file_loc, "cannot infer type arguments", NULL);
+    for (; i < fun_type->fun.type_param_count; ++i) {
+        const Type* type_arg = infer_type_arg(&type_bounds[i], fun_type->fun.type_params[i]);
+        if (!is_sub_type(context->type_table, type_bounds[i].lower, type_bounds[i].upper)) {
+            log_note(context->log, NULL,
+                "cannot satisfy type bounds '{t}' <: '{t}' <: '{t}'",
+                (FormatArg[]) {
+                    { .t = type_bounds[i].lower },
+                    { .t = fun_type->fun.type_params[i] },
+                    { .t = type_bounds[i].upper }
+                });
+        } else if (type_arg->tag == TYPE_BOTTOM || type_arg->tag == TYPE_TOP) {
+            log_note(context->log, NULL,
+                "cannot infer type for type parameter '{t}'",
+                (FormatArg[]) { { .t = fun_type->fun.type_params[i] } });
+        }
+    }
+    return false;
+}
+
+static const Type* infer_type_args(
+    TypingContext* context,
+    const Type* fun_type,
+    const Type** type_args,
+    AstNode* call_arg,
+    const FileLoc* file_loc)
+{
+    if (!call_arg) {
+        report_cannot_infer(context, "polymorphic function instantiation", file_loc);
+        return make_error_type(context->type_table);
+    }
+
+    // Replace type parameters with unknown types and infer the argument to the function call.
+    TypeMap type_map = new_type_map();
+    for (size_t i = 0; i < fun_type->fun.type_param_count; ++i)
+        insert_in_type_map(&type_map, fun_type->fun.type_params[i], (void*)type_args[i]);
+    const Type* dom_type = replace_types_with_map(context->type_table, fun_type->fun.dom, &type_map);
+    const Type* arg_type = check_expr(context, call_arg, dom_type);
+
+    // Get the type bounds for each type parameter of the function type
+    TypeBounds* type_bounds = malloc_or_die(sizeof(TypeBounds) * fun_type->fun.type_param_count);
+    clear_type_map(&type_map);
+    for (size_t i = 0; i < fun_type->fun.type_param_count; ++i) {
+        type_bounds[i] = (TypeBounds) {
+            .lower = make_bottom_type(context->type_table),
+            .upper = make_top_type(context->type_table)
+        };
+        insert_in_type_map(&type_map, fun_type->fun.type_params[i], &type_bounds[i]);
+    }
+    get_type_var_bounds(fun_type->fun.dom, arg_type, &type_map);
+
+    // Deduce monomorphic function type from type bounds
+    const Type* result_type = make_error_type(context->type_table);
+    clear_type_map(&type_map);
+    if (check_type_var_bounds(context, &type_map, fun_type, type_bounds, file_loc)) {
+        result_type = make_fun_type(context->type_table,
+            replace_types_with_map(context->type_table, fun_type->fun.dom, &type_map),
+            replace_types_with_map(context->type_table, fun_type->fun.codom, &type_map));
+    }
+
+    free_type_map(&type_map);
+    free(type_bounds);
+    return result_type;
+}
+
 static const Type* check_type_args(
     TypingContext* context,
     const Type* type,
     AstNode* type_args,
+    AstNode* call_arg,
     const FileLoc* file_loc)
 {
     size_t type_param_count = type->kind->tag == TYPE_SIGNATURE
         ? type->kind->signature.type_param_count : get_type_param_count(type);
+
     if (!type_args) {
-        if (type_param_count != 0) {
+        if (type_param_count == 0)
+            return type;
+        if (type->tag != TYPE_FUN && type_param_count != 0) {
             log_error(context->log, file_loc,
                 "missing type arguments for type '{t}'", (FormatArg[]) { { .t = type } });
             return make_error_type(context->type_table);
         }
-        return type;
     } else if (type_param_count == 0) {
         log_error(context->log, file_loc,
             "type arguments are not allowed on type '{t}'", (FormatArg[]) { { .t = type } });
         return make_error_type(context->type_table);
-    } else if (count_ast_nodes(type_args) != type_param_count) {
+    }
+
+    // Check that there are exactly the number of type arguments for type applications,
+    // or that there are at most the required number of type arguments for polymorphic function
+    // applications.
+    size_t type_arg_count = count_ast_nodes(type_args);
+    if (type_arg_count > type_param_count ||
+        (type->tag != TYPE_FUN && type_arg_count != type_param_count))
+    {
         log_error(context->log, file_loc,
-            "expected {0:u} type argument(s), but got {1:u}",
-            (FormatArg[]) { { .u = type_param_count }, { .u = count_ast_nodes(type_args) } });
+            "expected {s} {u} type argument(s), but got {u}",
+            (FormatArg[]) {
+                { .s = type->tag == TYPE_FUN ? "at most" : "" },
+                { .u = type_param_count },
+                { .u = count_ast_nodes(type_args) }
+            });
         return make_error_type(context->type_table);
     }
 
+    const Type** type_params = type->kind->tag == TYPE_SIGNATURE
+        ? type->kind->signature.type_params : get_type_params(type);
+
+    // Create type arguments for the call by inferring them and padding whatever remains with
+    // unknown types, so that the type inference algorithm can infer partially-specified polymorphic
+    // function applications.
     DynArray args = new_dyn_array(sizeof(Type*));
     for (AstNode* type_arg = type_args; type_arg; type_arg = type_arg->next) {
         const Type* arg = infer_type(context, type_arg);
+        expect_type(context, arg->kind, type_params[args.size]->kind, true, &type_arg->file_loc);
         push_on_dyn_array(&args, &arg);
     }
+    const Type* unknown_type = make_unknown_type(context->type_table);
+    for (size_t i = args.size; i < type_param_count; ++i)
+        push_on_dyn_array(&args, &unknown_type);
 
-    const Type* applied_type = make_app_type(context->type_table, type, args.elems, type_param_count);
+    const Type* applied_type = type->tag == TYPE_FUN
+        ? infer_type_args(context, type, args.elems, call_arg, file_loc)
+        : make_app_type(context->type_table, type, args.elems, type_param_count);
     free_dyn_array(&args);
     return applied_type;
 }
@@ -320,7 +441,7 @@ static const Type* make_enum_ctor_type(TypeTable* type_table, const Type* enum_t
     return !is_unit_type(param_type) ? make_fun_type(type_table, param_type, enum_type) : enum_type;
 }
 
-static const Type* infer_next_path_elem(TypingContext* context, AstNode* prev_elem) {
+static const Type* infer_next_path_elem(TypingContext* context, AstNode* prev_elem, AstNode* call_arg) {
     assert(prev_elem->type && prev_elem->next);
 
     bool is_type_expected = false;
@@ -378,6 +499,7 @@ static const Type* infer_next_path_elem(TypingContext* context, AstNode* prev_el
     return check_type_args(context,
         next_elem->type,
         next_elem->path_elem.type_args,
+        next_elem->next ? NULL : call_arg,
         &next_elem->file_loc);
 
 missing_member:
@@ -402,9 +524,9 @@ static const Type* make_tuple_like_struct_ctor(TypeTable* type_table, const Type
     return type;
 }
 
-static const Type* infer_path_elems(TypingContext* context, AstNode* path_elem, bool is_type_expected) {
+static const Type* infer_path_elems(TypingContext* context, AstNode* path_elem, AstNode* call_arg, bool is_type_expected) {
     while (path_elem->next) {
-        infer_next_path_elem(context, path_elem);
+        infer_next_path_elem(context, path_elem, call_arg);
         path_elem = path_elem->next;
     }
 
@@ -426,7 +548,12 @@ static const Type* infer_path_elems(TypingContext* context, AstNode* path_elem, 
     return path_elem->type;
 }
 
-static const Type* infer_path(TypingContext* context, AstNode* path, bool is_type_expected) {
+static const Type* infer_path(
+    TypingContext* context,
+    AstNode* path,
+    AstNode* call_arg,
+    bool is_type_expected)
+{
     assert(path->path.elems);
     if (!path->path.decl_site) {
         // This error should have been reported by the name binding algorithm
@@ -444,9 +571,10 @@ static const Type* infer_path(TypingContext* context, AstNode* path, bool is_typ
     path_elem->type = check_type_args(context,
         path_elem->type,
         path_elem->path_elem.type_args,
+        path_elem->next ? NULL : call_arg,
         &path_elem->file_loc);
 
-    return path->type = infer_path_elems(context, path_elem, is_type_expected);
+    return path->type = infer_path_elems(context, path_elem, call_arg, is_type_expected);
 }
 
 static const Type* infer_tuple(
@@ -502,7 +630,7 @@ const Type* infer_kind(TypingContext* context, AstNode* kind) {
             return arrow;
         }
         case AST_PATH:
-            return infer_path(context, kind, true);
+            return infer_path(context, kind, NULL, true);
     }
 }
 
@@ -527,7 +655,7 @@ static const Type* check_where_clause(TypingContext* context, AstNode* where_cla
 }
 
 static const Type* infer_where_type(TypingContext* context, AstNode* where_type) {
-    const Type* source_signature = infer_path(context, where_type->where_type.path, true);
+    const Type* source_signature = infer_path(context, where_type->where_type.path, NULL, true);
     if (!expect_type_with_tag(context, source_signature, TYPE_SIGNATURE, "signature", &where_type->where_type.path->file_loc))
         return make_error_type(context->type_table);
 
@@ -544,7 +672,7 @@ static const Type* infer_type_with_noret(TypingContext* context, AstNode* type, 
         PRIM_TYPE_LIST(f)
 #undef f
         case AST_PATH:
-            return type->type = infer_path(context, type, true);
+            return type->type = infer_path(context, type, NULL, true);
         case AST_NORET_TYPE:
             if (!accept_noret)
                 log_error(context->log, &type->file_loc, "type '!' can only be used as a return type", NULL);
@@ -622,14 +750,15 @@ static const Type* check_call(
         call_or_op->tag == AST_CALL_EXPR ? &call_or_op->call_expr.callee->file_loc : &call_or_op->file_loc;
     if (!expect_type_with_tag(context, callee_type, TYPE_FUN, "function", callee_loc))
         return make_error_type(context->type_table);
-    assert(callee_type->tag == TYPE_FUN);
     check_expr(context, arg, callee_type->fun.dom);
     return expect_type(context,
         callee_type->fun.codom, expected_type, true, &call_or_op->file_loc);
 }
 
 static const Type* check_call_expr(TypingContext* context, AstNode* call_expr, const Type* expected_type) {
-    const Type* callee_type = infer_expr(context, call_expr->call_expr.callee);
+    const Type* callee_type = call_expr->call_expr.callee->tag == AST_PATH
+        ? infer_path(context, call_expr->call_expr.callee, call_expr->call_expr.arg, false)
+        : infer_expr(context, call_expr->call_expr.callee);
     return call_expr->type = check_call(context, call_expr, call_expr->call_expr.arg, callee_type, expected_type);
 }
 
@@ -757,7 +886,7 @@ static const Type* check_member_expr(TypingContext* context, AstNode* member_exp
             .next = member_expr->member_expr.elems_or_index,
             .path_elem.is_type = false
         };
-        member_type = infer_path_elems(context, &first_elem, false);
+        member_type = infer_path_elems(context, &first_elem, NULL, false);
     }
 
     if (!member_type)
@@ -771,7 +900,8 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
     switch (expr->tag) {
         case AST_PATH:
             return expr->type = expect_type(context,
-                infer_path(context, expr, false), expected_type, true, &expr->file_loc);
+                infer_path(context, expr, NULL, false),
+                expected_type, true, &expr->file_loc);
         case AST_INT_LITERAL:
             return check_int_literal(context, expr, expected_type);
         case AST_FLOAT_LITERAL:
@@ -886,7 +1016,7 @@ const Type* check_pattern(TypingContext* context, AstNode* pattern, const Type* 
                 return pattern->type = report_cannot_infer(context, "pattern", &pattern->file_loc);
             return pattern->type = expected_type;
         case AST_PATH:
-            return infer_path(context, pattern, true);
+            return infer_path(context, pattern, NULL, true);
         default:
             assert(false && "invalid pattern");
             return make_error_type(context->type_table);
@@ -959,7 +1089,7 @@ static const Type* infer_const_or_var_decl(TypingContext* context, AstNode* decl
         decl->var_decl.pattern,
         decl->var_decl.init,
         make_unknown_type(context->type_table));
-    if (must_add_to_parent_sig_or_mod(decl))
+    if (should_add_to_parent_sig_or_mod(decl))
         add_idents_to_parent_mod(context->type_table, decl->var_decl.pattern);
     return type;
 }
@@ -1031,7 +1161,7 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
             super_struct = NULL;
     }
 
-    struct_decl->type = must_add_to_parent_sig_or_mod(struct_decl)
+    struct_decl->type = should_add_to_parent_sig_or_mod(struct_decl)
         ? add_decl_to_parent_sig_or_mod(context->type_table, struct_decl, struct_type)
         : struct_type;
 
@@ -1128,7 +1258,7 @@ static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
             sub_enum = NULL;
     }
 
-    enum_decl->type = must_add_to_parent_sig_or_mod(enum_decl)
+    enum_decl->type = should_add_to_parent_sig_or_mod(enum_decl)
         ? add_decl_to_parent_sig_or_mod(context->type_table, enum_decl, enum_type)
         : enum_type;
 
@@ -1174,7 +1304,7 @@ static const Type* infer_type_decl(TypingContext* context, AstNode* type_decl) {
             aliased_type);
         free_dyn_array(&type_params);
 
-        return type_decl->type = must_add_to_parent_sig_or_mod(type_decl)
+        return type_decl->type = should_add_to_parent_sig_or_mod(type_decl)
             ? add_decl_to_parent_sig_or_mod(context->type_table, type_decl, alias_type)
             : alias_type;
     }
@@ -1199,7 +1329,7 @@ static const Type* infer_fun_decl(TypingContext* context, AstNode* fun_decl) {
     } else
         report_cannot_infer(context, "function declaration", &fun_decl->file_loc);
     free_dyn_array(&type_params);
-    if (must_add_to_parent_sig_or_mod(fun_decl))
+    if (should_add_to_parent_sig_or_mod(fun_decl))
         add_decl_to_parent_sig_or_mod(context->type_table, fun_decl, fun_decl->type);
     return fun_decl->type;
 }
@@ -1247,7 +1377,7 @@ static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
 
     mod_decl->mod_decl.vars = NULL;
     mod_decl->type = make_mod_type(context->type_table, mod_decl->mod_decl.name, signature);
-    if (must_add_to_parent_sig_or_mod(mod_decl))
+    if (should_add_to_parent_sig_or_mod(mod_decl))
         add_decl_to_parent_sig_or_mod(context->type_table, mod_decl, mod_decl->type);
     return mod_decl->type;
 }
@@ -1274,7 +1404,7 @@ const Type* infer_sig_decl(TypingContext* context, AstNode* sig_decl) {
     free_dyn_array(&vars.vars);
 
     sig_decl->sig_decl.vars = NULL;
-    return sig_decl->type = must_add_to_parent_sig_or_mod(sig_decl)
+    return sig_decl->type = should_add_to_parent_sig_or_mod(sig_decl)
         ? add_decl_to_parent_sig_or_mod(context->type_table, sig_decl, signature)
         : signature;
 }

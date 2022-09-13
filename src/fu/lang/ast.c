@@ -3,6 +3,7 @@
 #include "fu/core/utils.h"
 
 #include <limits.h>
+#include <assert.h>
 
 static inline void print_many_asts(FormatState* state, const char* sep, const AstNode* elems) {
     for (; elems; elems = elems->next) {

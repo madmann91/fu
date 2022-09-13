@@ -6,6 +6,7 @@
 #include <stdbool.h>
 
 #include "fu/core/hash.h"
+#include "fu/core/utils.h"
 
 /*
  * This table only uses the lower bits of the hash value.

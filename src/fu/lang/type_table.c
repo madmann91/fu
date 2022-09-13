@@ -25,6 +25,8 @@ struct TypeTable {
     size_t type_count, kind_count;
     const Type* star_kind;
     const Type* prim_types[PRIM_TYPE_COUNT];
+    const Type* top_type;
+    const Type* bottom_type;
     const Type* unknown_type;
     const Type* noret_type;
     const Type* unit_type;
@@ -48,6 +50,8 @@ static HashCode hash_type(HashCode hash, const Type* type) {
     PRIM_TYPE_LIST(f)
 #undef f
         case KIND_STAR:
+        case TYPE_TOP:
+        case TYPE_BOTTOM:
         case TYPE_UNKNOWN:
         case TYPE_NORET:
         case TYPE_ERROR:
@@ -111,6 +115,8 @@ static bool compare_types(const Type* left, const Type* right) {
     PRIM_TYPE_LIST(f)
 #undef f
         case KIND_STAR:
+        case TYPE_TOP:
+        case TYPE_BOTTOM:
         case TYPE_UNKNOWN:
         case TYPE_NORET:
         case TYPE_ERROR:
@@ -238,7 +244,8 @@ static const Type* get_or_insert_type(TypeTable* type_table, const Type* type) {
             break;
     }
 
-    must_succeed(insert_in_hash_table(&type_table->types, &new_type, hash, sizeof(Type*), compare_types_wrapper));
+    if (!insert_in_hash_table(&type_table->types, &new_type, hash, sizeof(Type*), compare_types_wrapper))
+        assert(false && "cannot insert type in type table");
     return new_type;
 }
 
@@ -258,6 +265,8 @@ TypeTable* new_type_table(MemPool* mem_pool) {
     const Type* star = type_table->star_kind = get_or_insert_type(type_table, &(Type) { .tag = KIND_STAR });
     for (size_t i = 0; i < PRIM_TYPE_COUNT; ++i)
         type_table->prim_types[i] = get_or_insert_type(type_table, &(Type) { .tag = get_first_prim_type_tag() + i, .kind = star });
+    type_table->top_type = get_or_insert_type(type_table, &(Type) { .tag = TYPE_TOP, .kind = star });
+    type_table->bottom_type = get_or_insert_type(type_table, &(Type) { .tag = TYPE_BOTTOM, .kind = star });
     type_table->unknown_type = get_or_insert_type(type_table, &(Type) { .tag = TYPE_UNKNOWN, .kind = star });
     type_table->noret_type = get_or_insert_type(type_table, &(Type) { .tag = TYPE_NORET, .kind = star });
     type_table->error_type = get_or_insert_type(type_table, &(Type) { .tag = TYPE_ERROR, .kind = star });
@@ -503,6 +512,30 @@ Type* copy_enum_type(TypeTable* type_table, const Type* enum_type) {
     return enum_copy;
 }
 
+static Type* deep_copy_signature_type(TypeTable*, const Type*, TypeMap*);
+
+static Type* seal_signature_type_and_free_vars(TypeTable* type_table, Type* signature) {
+    const Type** vars = signature->signature.vars;
+    seal_signature_type(type_table, signature);
+    free(vars);
+    return signature;
+}
+
+static Type* deep_copy_nominal_type(TypeTable* type_table, const Type* nominal_type, TypeMap* type_map) {
+    switch (nominal_type->tag) {
+        case TYPE_STRUCT:
+            return copy_struct_type(type_table, nominal_type);
+        case TYPE_ENUM:
+            return copy_enum_type(type_table, nominal_type);
+        case TYPE_SIGNATURE:
+            return seal_signature_type_and_free_vars(type_table,
+                deep_copy_signature_type(type_table, nominal_type, type_map));
+        default:
+            assert(false && "invalid nominal type");
+            return (Type*)nominal_type;
+    }
+}
+
 static Type* deep_copy_signature_type(TypeTable* type_table, const Type* signature, TypeMap* type_map) {
     assert(signature->tag == TYPE_SIGNATURE);
     Type* signature_copy = make_signature_type(type_table);
@@ -514,24 +547,11 @@ static Type* deep_copy_signature_type(TypeTable* type_table, const Type* signatu
 
         // Copy modules signatures
         if (vars[i]->kind->tag == TYPE_SIGNATURE)
-            vars[i]->kind = deep_copy_signature_type(type_table, vars[i]->kind, type_map);
+            vars[i]->kind = deep_copy_nominal_type(type_table, vars[i]->kind, type_map);
 
         // Copy type definitions
-        if (vars[i]->var.value && is_nominal_type(vars[i]->var.value->tag)) {
-            switch (vars[i]->var.value->tag) {
-                case TYPE_STRUCT:
-                    vars[i]->var.value = copy_struct_type(type_table, vars[i]->var.value);
-                    break;
-                case TYPE_ENUM:
-                    vars[i]->var.value = copy_enum_type(type_table, vars[i]->var.value);
-                    break;
-                case TYPE_SIGNATURE:
-                    vars[i]->var.value = deep_copy_signature_type(type_table, vars[i]->var.value, type_map);
-                    break;
-                default:
-                    break;
-            }
-        }
+        if (vars[i]->var.value && is_nominal_type(vars[i]->var.value->tag))
+            vars[i]->var.value = deep_copy_nominal_type(type_table, vars[i]->var.value, type_map);
     }
 
     signature_copy->signature.type_param_count = signature->signature.type_param_count;
@@ -542,6 +562,14 @@ static Type* deep_copy_signature_type(TypeTable* type_table, const Type* signatu
 
     // Note: This returns a signature in unsealed state, variables have to be freed after sealing.
     return signature_copy;
+}
+
+const Type* make_top_type(TypeTable* type_table) {
+    return type_table->top_type;
+}
+
+const Type* make_bottom_type(TypeTable* type_table) {
+    return type_table->bottom_type;
 }
 
 const Type* make_prim_type(TypeTable* type_table, TypeTag tag) {
@@ -634,12 +662,10 @@ const Type* make_app_type(TypeTable* type_table, const Type* applied_type, const
             TypeMap type_map = new_type_map();
             Type* signature = deep_copy_signature_type(type_table, applied_type->kind, &type_map);
 
-            const Type** vars = signature->signature.vars;
             signature->kind = make_star_kind(type_table);
             signature->signature.type_param_count = 0;
             signature->signature.type_params = NULL;
-            seal_signature_type(type_table, signature);
-            free(vars);
+            seal_signature_type_and_free_vars(type_table, signature);
 
             // The signature can appear within its own variables, since some modules hide the
             // implementations of types. For instance the module

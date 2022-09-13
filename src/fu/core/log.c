@@ -4,6 +4,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <assert.h>
 
 #define LINE_SEARCH_RANGE 64
 #define LINE_BUF_CAPACITY 64
@@ -52,9 +53,10 @@ static FILE* get_cached_file(Log* log, const char* file_name) {
     FILE* file = fopen(file_name, "rb");
     if (!file)
         return NULL;
-    must_succeed(insert_in_hash_table(&log->file_cache,
+    if (!insert_in_hash_table(&log->file_cache,
         &(FileEntry) { .file_name = file_name, .file = file }, hash,
-        sizeof(FileEntry), compare_file_entries));
+        sizeof(FileEntry), compare_file_entries))
+        assert(false && "cannot insert file in source file cache");
     return file;
 }
 

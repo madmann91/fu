@@ -304,7 +304,7 @@ error_found:
     return false;
 }
 
-static const Type* infer_fun_app_type_args(
+static const Type* infer_type_args(
     TypingContext* context,
     const Type* fun_type,
     const Type** type_args,
@@ -407,7 +407,7 @@ static const Type* check_type_args(
         push_on_dyn_array(&args, &unknown_type);
 
     const Type* applied_type = type->tag == TYPE_FUN
-        ? infer_fun_app_type_args(context, type, args.elems, call_arg, file_loc)
+        ? infer_type_args(context, type, args.elems, call_arg, file_loc)
         : make_app_type(context->type_table, type, args.elems, type_param_count);
     free_dyn_array(&args);
     return applied_type;

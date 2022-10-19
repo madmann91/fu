@@ -42,6 +42,8 @@ test('pass-enum-inheritance',    fu, suite: 'typechecker', workdir: root, args: 
 test('pass-pub-mod-members',     fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/pub_mod_members.fu'])
 test('pass-opaque-mod-members',  fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/opaque_mod_members.fu'])
 test('pass-parametric-mods',     fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/parametric_mods.fu'])
+test('pass-polymorphic-fun',     fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/polymorphic_fun.fu'])
+test('pass-polymorphic-mod-fun', fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/polymorphic_mod_fun.fu'])
 test('pass-applied-mod-struct',  fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/applied_mod_struct.fu'])
 
 test('fail-recursive-fun',       fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/recursive_fun.fu'])

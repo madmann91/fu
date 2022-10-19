@@ -470,7 +470,7 @@ static const Type* infer_next_path_elem(TypingContext* context, AstNode* prev_el
             : report_value_expected(context, prev_elem->type, &prev_elem->file_loc);
     }
 
-    return check_type_args(context,
+    return next_elem->type = check_type_args(context,
         next_elem->type,
         next_elem->path_elem.type_args,
         next_elem->next ? NULL : call_arg,

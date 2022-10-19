@@ -1,0 +1,2 @@
+pub fun foo[T, U](t: T, u: U) = (t, u);
+const x = foo(1, 2);

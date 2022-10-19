@@ -328,6 +328,7 @@ static Type* alloc_type_with_tag(TypeTable* type_table, TypeTag tag) {
 Type* make_var_type(TypeTable* type_table, const char* name) {
     Type* var = alloc_type_with_tag(type_table, TYPE_VAR);
     var->var.name = make_str(&type_table->str_pool, name);
+    var->var.variance = TYPE_INVARIANT;
     return var;
 }
 

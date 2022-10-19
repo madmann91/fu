@@ -1,0 +1,5 @@
+mod M {
+    pub fun foo[T, U](t: T, u: U) = (t, u);
+}
+
+const x = M.foo(1, 2);

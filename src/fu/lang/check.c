@@ -331,7 +331,7 @@ static const Type* infer_type_args(
         };
         insert_in_type_map(&type_map, fun_type->fun.type_params[i], &type_bounds[i]);
     }
-    get_type_var_bounds(fun_type->fun.dom, arg_type, TYPE_CONTRAVARIANT, &type_map);
+    get_type_vars_bounds(fun_type->fun.dom, arg_type, TYPE_CONTRAVARIANT, &type_map);
     clear_type_map(&type_map);
 
     // Deduce monomorphic function type from type bounds

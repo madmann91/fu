@@ -154,7 +154,7 @@ struct Type {
         struct {
             const char* name;
             const Type* value;
-            TypeVariance variance;
+            TypeVariance variance; // for functions only
         } var;
     };
 };
@@ -212,8 +212,8 @@ size_t get_prim_type_bitwidth(TypeTag);
 size_t get_type_inheritance_depth(const Type*);
 const Kind* get_type_kind(const Type*);
 
-void get_type_var_bounds(const Type*, const Type*, TypeVariance, TypeMap*);
-void get_type_var_variance(const Type*, TypeVariance, TypeMap*);
+void get_type_vars_bounds(const Type*, const Type*, TypeVariance, TypeMap*);
+void get_type_vars_variance(const Type*, TypeVariance, TypeMap*);
 
 int compare_signature_vars_by_name(const void* left, const void* right);
 int compare_struct_fields_by_name(const void* left, const void* right);

@@ -178,33 +178,6 @@ bool is_sub_type(TypeTable* type_table, const Type* left, const Type* right) {
     return false;
 }
 
-static bool is_sub_type_arg(
-    TypeTable* type_table,
-    TypeVariance variance,
-    const Type* left,
-    const Type* right)
-{
-    switch (variance) {
-        case TYPE_CONSTANT:
-            return true;
-        case TYPE_INVARIANT:
-            return left == right;
-        case TYPE_COVARIANT:
-            return is_sub_type(type_table, left, right);
-        case TYPE_CONTRAVARIANT:
-            return is_sub_type(type_table, right, left);
-        default:
-            assert(false && "invalid type variance");
-            return false;
-    }
-}
-
-static void swap_types(const Type** left, const Type** right) {
-    const Type* tmp = *left;
-    *left = *right;
-    *right = tmp;
-}
-
 static const Type* replace_types_using_type_app(
     TypeTable* type_table,
     const Type* type,
@@ -253,26 +226,7 @@ static bool is_sub_struct_or_super_enum_type(
         left_depth--;
     }
 
-    if (left == right)
-        return true;
-    if (left_struct_or_enum != right_struct_or_enum)
-        return false;
-    if (left->tag == TYPE_APP) {
-        const Type** type_params = get_type_params(left_struct_or_enum);
-        assert(right->tag == TYPE_APP && get_applied_type(right) == right_struct_or_enum);
-        assert(left->app.arg_count == get_type_param_count(left_struct_or_enum));
-        for (size_t i = 0; i < left->app.arg_count; ++i) {
-            const Type* left_arg  = left ->app.args[i];
-            const Type* right_arg = right->app.args[i];
-            if (type_tag != TYPE_STRUCT)
-                swap_types(&left_arg, &right_arg);
-            if (!is_sub_type_arg(type_table, type_params[i]->var.variance, left_arg, right_arg))
-                return false;
-        }
-        return true;
-    }
-    assert(right->tag != TYPE_APP);
-    return false;
+    return left == right;
 }
 
 bool is_sub_struct_type(TypeTable* type_table, const Type* left, const Type* right) {
@@ -384,95 +338,89 @@ size_t get_type_inheritance_depth(const Type* type) {
     return depth;
 }
 
-static TypeVariance invert_variance(TypeVariance variance) {
+static inline TypeVariance invert_variance(TypeVariance variance) {
     if (variance == TYPE_COVARIANT) return TYPE_CONTRAVARIANT;
     if (variance == TYPE_CONTRAVARIANT) return TYPE_COVARIANT;
     return variance;
 }
 
-void get_type_vars_variance(const Type* type, TypeVariance variance, TypeMap* type_map) {
-    switch (type->tag) {
-        case TYPE_VAR: {
-            TypeVariance* type_variance = find_in_type_map(type_map, type);
-            if (!type_variance)
-                break;
-            *type_variance |= variance;
+static void traverse_type_with_variance(
+    const Type* from,
+    const Type* to,
+    TypeVariance variance,
+    TypeMap* type_map,
+    void (*traverse_var)(const Type*, const Type*, TypeVariance, TypeMap*))
+{
+    if (from->tag != to->tag && from->tag != TYPE_VAR)
+        return;
+    switch (from->tag) {
+        case TYPE_VAR:
+            traverse_var(from, to, variance, type_map);
             break;
-        }
         case TYPE_TUPLE:
-            for (size_t i = 0; i < type->tuple.arg_count; ++i)
-                get_type_vars_variance(type->tuple.args[i], variance, type_map);
+            for (size_t i = 0; i < from->tuple.arg_count && i < to->tuple.arg_count; ++i)
+                traverse_type_with_variance(from->tuple.args[i], to->tuple.args[i], variance, type_map, traverse_var);
+            break;
+        case TYPE_FUN:
+            traverse_type_with_variance(from->fun.dom, to->fun.dom, invert_variance(variance), type_map, traverse_var);
+            traverse_type_with_variance(from->fun.codom, to->fun.codom, variance, type_map, traverse_var);
             break;
         case TYPE_ARRAY:
-            get_type_vars_variance(type->array.elem_type, TYPE_INVARIANT, type_map);
+            traverse_type_with_variance(from->array.elem_type, to->array.elem_type, TYPE_INVARIANT, type_map, traverse_var);
             break;
         case TYPE_PTR:
-            get_type_vars_variance(type->ptr.pointed_type, TYPE_INVARIANT, type_map);
+            traverse_type_with_variance(from->ptr.pointed_type, to->ptr.pointed_type, TYPE_INVARIANT, type_map, traverse_var);
             break;
         case TYPE_PROJ:
-            get_type_vars_variance(type->proj.projected_type, TYPE_INVARIANT, type_map);
+            traverse_type_with_variance(from->proj.projected_type, to->proj.projected_type, TYPE_INVARIANT, type_map, traverse_var);
             return;
         case TYPE_APP: {
-            const Type** type_params = get_type_params(get_applied_type(type));
-            get_type_vars_variance(type->app.applied_type, TYPE_INVARIANT, type_map);
-            for (size_t i = 0; i < type->app.arg_count; ++i) {
-                get_type_vars_variance(type->app.args[i],
-                    type_params ? type_params[i]->var.variance : TYPE_INVARIANT, type_map);
-            }
+            traverse_type_with_variance(from->app.applied_type, to->app.applied_type, TYPE_INVARIANT, type_map, traverse_var);
+            for (size_t i = 0; i < from->app.arg_count && i < to->app.arg_count; ++i)
+                traverse_type_with_variance(from->app.args[i], to->app.args[i], TYPE_INVARIANT, type_map, traverse_var);
             break;
         }
-        case TYPE_FUN:
-            get_type_vars_variance(type->fun.dom, invert_variance(variance), type_map);
-            get_type_vars_variance(type->fun.codom, variance, type_map);
-            break;
         default:
             break;
     }
 }
 
-void get_type_var_bounds(const Type* from, const Type* to, TypeVariance variance, TypeMap* type_map) {
-    if (from->tag != to->tag && from->tag != TYPE_VAR)
-        return;
-    switch (from->tag) {
-        case TYPE_VAR: {
-            TypeBounds* type_bounds = find_in_type_map(type_map, from);
-            if (!type_bounds)
-                break;
-            if (variance & TYPE_COVARIANT)     type_bounds->upper = to;
-            if (variance & TYPE_CONTRAVARIANT) type_bounds->lower = to;
-            break;
-        }
-        case TYPE_TUPLE:
-            for (size_t i = 0; i < from->tuple.arg_count && i < to->tuple.arg_count; ++i)
-                get_type_var_bounds(from->tuple.args[i], to->tuple.args[i], variance, type_map);
-            break;
-        case TYPE_FUN:
-            get_type_var_bounds(from->fun.dom, to->fun.dom, invert_variance(variance), type_map);
-            get_type_var_bounds(from->fun.codom, to->fun.codom, variance, type_map);
-            break;
-        case TYPE_ARRAY:
-            get_type_var_bounds(from->array.elem_type, to->array.elem_type, TYPE_INVARIANT, type_map);
-            break;
-        case TYPE_PTR:
-            get_type_var_bounds(from->ptr.pointed_type, to->ptr.pointed_type, TYPE_INVARIANT, type_map);
-            break;
-        case TYPE_PROJ:
-            get_type_var_bounds(from->proj.projected_type, to->proj.projected_type, TYPE_INVARIANT, type_map);
-            return;
-        case TYPE_APP: {
-            const Type** type_params = get_type_params(get_applied_type(from));
-            if (get_type_params(get_applied_type(to)) != type_params)
-                type_params = NULL;
-            get_type_var_bounds(from->app.applied_type, to->app.applied_type, TYPE_INVARIANT, type_map);
-            for (size_t i = 0; i < from->app.arg_count && i < to->app.arg_count; ++i) {
-                get_type_var_bounds(from->app.args[i], to->app.args[i],
-                    type_params ? type_params[i]->var.variance : TYPE_INVARIANT, type_map);
-            }
-            break;
-        }
-        default:
-            break;
+static void store_type_bounds(
+    const Type* from,
+    const Type* to,
+    TypeVariance variance,
+    TypeMap* type_map)
+{
+    TypeBounds* type_bounds = find_in_type_map(type_map, from);
+    if (type_bounds) {
+        if (variance & TYPE_COVARIANT)     type_bounds->upper = to;
+        if (variance & TYPE_CONTRAVARIANT) type_bounds->lower = to;
     }
+}
+
+static void store_type_variance(
+    const Type* from,
+    const Type* to,
+    TypeVariance variance,
+    TypeMap* type_map)
+{
+    (void)to;
+    TypeVariance* type_variance = find_in_type_map(type_map, from);
+    if (type_variance)
+        *type_variance = variance;
+}
+
+void get_type_vars_bounds(
+    const Type* from,
+    const Type* to,
+    TypeVariance variance,
+    TypeMap* type_map)
+{
+    traverse_type_with_variance(from, to, variance, type_map, store_type_bounds);
+}
+
+void get_type_vars_variance(const Type* type, TypeVariance variance, TypeMap* type_map) {
+    traverse_type_with_variance(type, type, variance, type_map, store_type_variance);
 }
 
 int compare_signature_vars_by_name(const void* left, const void* right) {

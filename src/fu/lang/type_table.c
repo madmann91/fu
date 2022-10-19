@@ -605,6 +605,8 @@ const Type* make_unit_type(TypeTable* type_table) {
     return type_table->unit_type;
 }
 
+static inline void replace_nominal_type_contents(TypeTable*, Type*, TypeMap*);
+
 static inline void replace_struct_fields(TypeTable* type_table, Type* struct_type, TypeMap* type_map) {
     assert(struct_type->tag == TYPE_STRUCT);
     for (size_t i = 0; i < struct_type->struct_.field_count; ++i) {
@@ -621,24 +623,45 @@ static inline void replace_enum_options(TypeTable* type_table, Type* enum_type, 
     }
 }
 
-static inline void replace_signature_vars(TypeTable* type_table, Type* signature, TypeMap* type_map) {
-    assert(signature->tag == TYPE_SIGNATURE);
-    for (size_t i = 0; i < signature->signature.var_count; ++i) {
-        Type* var = (Type*)signature->signature.vars[i];
+static inline void replace_signature_var(TypeTable* type_table, Type* var, TypeMap* type_map) {
+    if (is_nominal_type(var->kind->tag))
+        replace_nominal_type_contents(type_table, (Type*)var->kind, type_map);
+    else
         var->kind = replace_types_with_map(type_table, var->kind, type_map);
-        if (var->var.value) {
-            if (var->var.value->tag == TYPE_STRUCT)
-                replace_struct_fields(type_table, (Type*)var->var.value, type_map);
-            else if (var->var.value->tag == TYPE_ENUM)
-                replace_enum_options(type_table, (Type*)var->var.value, type_map);
-            else if (var->var.value->tag == TYPE_SIGNATURE)
-                replace_signature_vars(type_table, (Type*)var->var.value, type_map);
-            else
-                var->var.value = replace_types_with_map(type_table, var->var.value, type_map);
-        }
+    if (var->var.value) {
+        if (is_nominal_type(var->var.value->tag))
+            replace_nominal_type_contents(type_table, (Type*)var->var.value, type_map);
+        else
+            var->var.value = replace_types_with_map(type_table, var->var.value, type_map);
     }
 }
 
+static inline void replace_signature_vars(TypeTable* type_table, Type* signature, TypeMap* type_map) {
+    assert(signature->tag == TYPE_SIGNATURE);
+    for (size_t i = 0; i < signature->signature.var_count; ++i)
+        replace_signature_var(type_table, (Type*)signature->signature.vars[i], type_map);
+}
+
+static inline void replace_nominal_type_contents(
+    TypeTable* type_table,
+    Type* nominal_type,
+    TypeMap* type_map)
+{
+    switch (nominal_type->tag) {
+        case TYPE_STRUCT:
+            replace_struct_fields(type_table, nominal_type, type_map);
+            break;
+        case TYPE_ENUM:
+            replace_enum_options(type_table, nominal_type, type_map);
+            break;
+        case TYPE_SIGNATURE:
+            replace_signature_vars(type_table, nominal_type, type_map);
+            break;
+        default:
+            assert(false && "invalid nominal type");
+            return;
+    }
+}
 
 const Type* make_app_type(TypeTable* type_table, const Type* applied_type, const Type** args, size_t arg_count) {
     if (arg_count == 0)

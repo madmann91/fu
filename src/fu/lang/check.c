@@ -258,11 +258,6 @@ static const Type* infer_decl_site(TypingContext* context, AstNode* decl_site) {
     return decl_site->type;
 }
 
-static const Type* infer_type_arg_from_bounds(const TypeBounds* type_bounds, const Type* type_param) {
-    assert(type_param->tag == TYPE_VAR);
-    return type_param->var.variance == TYPE_CONTRAVARIANT ? type_bounds->upper : type_bounds->lower;
-}
-
 static bool check_type_var_bounds(
     TypingContext* context,
     TypeMap* type_map,
@@ -270,38 +265,40 @@ static bool check_type_var_bounds(
     const TypeBounds* type_bounds,
     const FileLoc* file_loc)
 {
-    // Replace type parameters with their actual inferred lower/upper bound depending on the
+    // Fill the map from type parameters to their their actual inferred lower/upper bound depending on the
     // variance of the type parameter.
-    size_t i = 0;
-    for (; i < fun_type->fun.type_param_count; ++i) {
-        if (!is_sub_type(context->type_table, type_bounds[i].lower, type_bounds[i].upper))
-            goto error_found;
-        const Type* type_arg = infer_type_arg_from_bounds(&type_bounds[i], fun_type->fun.type_params[i]);
-        if (type_arg->tag == TYPE_BOTTOM || type_arg->tag == TYPE_TOP)
-            goto error_found;
+    bool has_errors = false;
+    for (size_t i = 0; i < fun_type->fun.type_param_count; ++i) {
+        const Type* type_arg = fun_type->fun.type_params[i]->var.variance == TYPE_CONTRAVARIANT
+            ? type_bounds[i].upper : type_bounds[i].lower;
         insert_in_type_map(type_map, fun_type->fun.type_params[i], (void*)type_arg);
+        has_errors |=
+            type_arg->tag == TYPE_BOTTOM ||
+            type_arg->tag == TYPE_TOP ||
+            !is_sub_type(context->type_table, type_bounds[i].lower, type_bounds[i].upper);
     }
-    return true;
 
-error_found:
-    log_error(context->log, file_loc, "cannot infer type arguments", NULL);
-    for (; i < fun_type->fun.type_param_count; ++i) {
-        const Type* type_arg = infer_type_arg_from_bounds(&type_bounds[i], fun_type->fun.type_params[i]);
-        if (!is_sub_type(context->type_table, type_bounds[i].lower, type_bounds[i].upper)) {
-            log_note(context->log, NULL,
-                "cannot satisfy type bounds '{t}' <: '{t}' <: '{t}'",
-                (FormatArg[]) {
-                    { .t = type_bounds[i].lower },
-                    { .t = fun_type->fun.type_params[i] },
-                    { .t = type_bounds[i].upper }
-                });
-        } else if (type_arg->tag == TYPE_BOTTOM || type_arg->tag == TYPE_TOP) {
-            log_note(context->log, NULL,
-                "cannot infer type for type parameter '{t}'",
-                (FormatArg[]) { { .t = fun_type->fun.type_params[i] } });
+    if (has_errors) {
+        log_error(context->log, file_loc, "cannot infer type arguments", NULL);
+        for (size_t i = 0; i < fun_type->fun.type_param_count; ++i) {
+            const Type* type_arg = find_in_type_map(type_map, fun_type->fun.type_params[i]);
+            if (!is_sub_type(context->type_table, type_bounds[i].lower, type_bounds[i].upper)) {
+                log_note(context->log, NULL,
+                    "cannot satisfy type bounds '{t}' <: '{t}' <: '{t}'",
+                    (FormatArg[]) {
+                        { .t = type_bounds[i].lower },
+                        { .t = fun_type->fun.type_params[i] },
+                        { .t = type_bounds[i].upper }
+                    });
+            } else if (type_arg->tag == TYPE_BOTTOM || type_arg->tag == TYPE_TOP) {
+                log_note(context->log, NULL,
+                    "cannot infer type for type parameter '{t}'",
+                    (FormatArg[]) { { .t = fun_type->fun.type_params[i] } });
+            }
         }
     }
-    return false;
+
+    return !has_errors;
 }
 
 static const Type* infer_type_args(
@@ -327,13 +324,14 @@ static const Type* infer_type_args(
     // Get the type bounds for each type parameter of the function type
     TypeBounds* type_bounds = malloc_or_die(sizeof(TypeBounds) * fun_type->fun.type_param_count);
     for (size_t i = 0; i < fun_type->fun.type_param_count; ++i) {
+        bool is_known = type_args[i]->tag != TYPE_UNKNOWN;
         type_bounds[i] = (TypeBounds) {
-            .lower = make_bottom_type(context->type_table),
-            .upper = make_top_type(context->type_table)
+            .lower = is_known ? type_args[i] : make_bottom_type(context->type_table),
+            .upper = is_known ? type_args[i] : make_top_type(context->type_table)
         };
         insert_in_type_map(&type_map, fun_type->fun.type_params[i], &type_bounds[i]);
     }
-    get_type_var_bounds(fun_type->fun.dom, arg_type, &type_map);
+    get_type_var_bounds(fun_type->fun.dom, arg_type, TYPE_CONTRAVARIANT, &type_map);
     clear_type_map(&type_map);
 
     // Deduce monomorphic function type from type bounds
@@ -1307,7 +1305,18 @@ static const Type* infer_fun_decl(TypingContext* context, AstNode* fun_decl) {
             type_params.elems, type_params.size, dom_type, codom_type);
     } else
         report_cannot_infer(context, "function declaration", &fun_decl->file_loc);
+
+    // Infer the variance of type parameters automatically
+    TypeMap type_map = new_type_map();
+    for (size_t i = 0; i < type_params.size; ++i) {
+        insert_in_type_map(&type_map,
+            ((Type**)type_params.elems)[i],
+            &((Type**)type_params.elems)[i]->var.variance);
+    }
+    get_type_vars_variance(fun_decl->type, TYPE_COVARIANT, &type_map);
+    free_type_map(&type_map);
     free_dyn_array(&type_params);
+
     if (should_add_to_parent_sig_or_mod(fun_decl))
         add_decl_to_parent_sig_or_mod(context->type_table, fun_decl, fun_decl->type);
     return fun_decl->type;

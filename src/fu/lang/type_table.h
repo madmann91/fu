@@ -84,6 +84,6 @@ const Type* replace_types(
     const Type* type,
     const Type** from,
     const Type** to,
-    size_t mapped_types_count);
+    size_t type_count);
 
 #endif

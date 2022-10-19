@@ -29,13 +29,6 @@ typedef struct Type Type;
 typedef struct Type Kind; // For documentation purposes only
 typedef struct TypeTable TypeTable;
 
-typedef enum TypeVariance {
-    TYPE_CONSTANT = 0x00,
-    TYPE_COVARIANT = 0x01,
-    TYPE_CONTRAVARIANT = 0x02,
-    TYPE_INVARIANT = TYPE_COVARIANT | TYPE_CONTRAVARIANT
-} TypeVariance;
-
 typedef enum {
 #define f(name, ...) TYPE_##name,
     PRIM_TYPE_LIST(f)
@@ -55,7 +48,6 @@ typedef enum {
     TYPE_NORET,
     TYPE_ERROR,
     TYPE_ARRAY,
-    TYPE_PI,
     TYPE_FUN,
     TYPE_TUPLE,
     TYPE_APP
@@ -73,6 +65,13 @@ typedef struct EnumOption {
     const Type* param_type;
     bool is_inherited;
 } EnumOption;
+
+typedef enum TypeVariance {
+    TYPE_CONSTANT = 0x00,
+    TYPE_COVARIANT = 0x01,
+    TYPE_CONTRAVARIANT = 0x02,
+    TYPE_INVARIANT = TYPE_COVARIANT | TYPE_CONTRAVARIANT
+} TypeVariance;
 
 struct Type {
     TypeTag tag;
@@ -212,7 +211,9 @@ size_t get_type_param_count(const Type*);
 size_t get_prim_type_bitwidth(TypeTag);
 size_t get_type_inheritance_depth(const Type*);
 const Kind* get_type_kind(const Type*);
-void get_type_var_bounds(const Type*, const Type*, TypeMap*);
+
+void get_type_var_bounds(const Type*, const Type*, TypeVariance, TypeMap*);
+void get_type_var_variance(const Type*, TypeVariance, TypeMap*);
 
 int compare_signature_vars_by_name(const void* left, const void* right);
 int compare_struct_fields_by_name(const void* left, const void* right);

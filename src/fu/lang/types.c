@@ -7,6 +7,8 @@
 #include <assert.h>
 #include <string.h>
 
+//================================== TYPE MAPS/SETS ======================================
+
 typedef struct TypeMapElem {
     const Type* from;
     void* to;
@@ -68,6 +70,8 @@ bool find_in_type_set(const TypeSet* type_set, const Type* from) {
         compare_type_set_elems);
     return elem != NULL;
 }
+
+//========================================================================================
 
 bool is_prim_type(TypeTag tag) {
     switch (tag) {
@@ -136,6 +140,8 @@ bool is_sub_type(TypeTable* type_table, const Type* left, const Type* right) {
     right = resolve_type(right);
 
     if (left == right ||
+        right->tag == TYPE_TOP ||
+        left->tag == TYPE_BOTTOM ||
         left->tag == TYPE_NORET ||
         left->tag == TYPE_UNKNOWN ||
         right->tag == TYPE_UNKNOWN)
@@ -199,7 +205,7 @@ static void swap_types(const Type** left, const Type** right) {
     *right = tmp;
 }
 
-static const Type* replace_types_from_type_app(
+static const Type* replace_types_using_type_app(
     TypeTable* type_table,
     const Type* type,
     const Type* type_app)
@@ -207,7 +213,8 @@ static const Type* replace_types_from_type_app(
     type_app = resolve_type(type_app);
     if (type_app->tag != TYPE_APP)
         return type;
-    // Takes the arguments from the type application and use them to substitute the type parameters
+
+    // Take the arguments from the type application and use them to substitute the type parameters
     const Type* applied_type = get_applied_type(type_app);
     const Type** type_params = get_type_params(
         applied_type->kind->tag == TYPE_SIGNATURE ? applied_type->kind : applied_type);
@@ -236,7 +243,7 @@ static bool is_sub_struct_or_super_enum_type(
         return false;
 
     while (left_depth > right_depth) {
-        left = replace_types_from_type_app(type_table,
+        left = replace_types_using_type_app(type_table,
             type_tag == TYPE_STRUCT
                 ? left_struct_or_enum->struct_.super_type
                 : left_struct_or_enum->enum_.sub_type,
@@ -246,10 +253,10 @@ static bool is_sub_struct_or_super_enum_type(
         left_depth--;
     }
 
-    if (left_struct_or_enum != right_struct_or_enum)
-        return false;
     if (left == right)
         return true;
+    if (left_struct_or_enum != right_struct_or_enum)
+        return false;
     if (left->tag == TYPE_APP) {
         const Type** type_params = get_type_params(left_struct_or_enum);
         assert(right->tag == TYPE_APP && get_applied_type(right) == right_struct_or_enum);
@@ -377,9 +384,92 @@ size_t get_type_inheritance_depth(const Type* type) {
     return depth;
 }
 
-void get_type_var_bounds(const Type* from, const Type* to, TypeMap* type_map) {
-    // TODO
+static TypeVariance invert_variance(TypeVariance variance) {
+    if (variance == TYPE_COVARIANT) return TYPE_CONTRAVARIANT;
+    if (variance == TYPE_CONTRAVARIANT) return TYPE_COVARIANT;
+    return variance;
+}
+
+void get_type_vars_variance(const Type* type, TypeVariance variance, TypeMap* type_map) {
+    switch (type->tag) {
+        case TYPE_VAR: {
+            TypeVariance* type_variance = find_in_type_map(type_map, type);
+            if (!type_variance)
+                break;
+            *type_variance |= variance;
+            break;
+        }
+        case TYPE_TUPLE:
+            for (size_t i = 0; i < type->tuple.arg_count; ++i)
+                get_type_vars_variance(type->tuple.args[i], variance, type_map);
+            break;
+        case TYPE_ARRAY:
+            get_type_vars_variance(type->array.elem_type, TYPE_INVARIANT, type_map);
+            break;
+        case TYPE_PTR:
+            get_type_vars_variance(type->ptr.pointed_type, TYPE_INVARIANT, type_map);
+            break;
+        case TYPE_PROJ:
+            get_type_vars_variance(type->proj.projected_type, TYPE_INVARIANT, type_map);
+            return;
+        case TYPE_APP: {
+            const Type** type_params = get_type_params(get_applied_type(type));
+            get_type_vars_variance(type->app.applied_type, TYPE_INVARIANT, type_map);
+            for (size_t i = 0; i < type->app.arg_count; ++i) {
+                get_type_vars_variance(type->app.args[i],
+                    type_params ? type_params[i]->var.variance : TYPE_INVARIANT, type_map);
+            }
+            break;
+        }
+        case TYPE_FUN:
+            get_type_vars_variance(type->fun.dom, invert_variance(variance), type_map);
+            get_type_vars_variance(type->fun.codom, variance, type_map);
+            break;
+        default:
+            break;
+    }
+}
+
+void get_type_var_bounds(const Type* from, const Type* to, TypeVariance variance, TypeMap* type_map) {
+    if (from->tag != to->tag && from->tag != TYPE_VAR)
+        return;
     switch (from->tag) {
+        case TYPE_VAR: {
+            TypeBounds* type_bounds = find_in_type_map(type_map, from);
+            if (!type_bounds)
+                break;
+            if (variance & TYPE_COVARIANT)     type_bounds->upper = to;
+            if (variance & TYPE_CONTRAVARIANT) type_bounds->lower = to;
+            break;
+        }
+        case TYPE_TUPLE:
+            for (size_t i = 0; i < from->tuple.arg_count && i < to->tuple.arg_count; ++i)
+                get_type_var_bounds(from->tuple.args[i], to->tuple.args[i], variance, type_map);
+            break;
+        case TYPE_FUN:
+            get_type_var_bounds(from->fun.dom, to->fun.dom, invert_variance(variance), type_map);
+            get_type_var_bounds(from->fun.codom, to->fun.codom, variance, type_map);
+            break;
+        case TYPE_ARRAY:
+            get_type_var_bounds(from->array.elem_type, to->array.elem_type, TYPE_INVARIANT, type_map);
+            break;
+        case TYPE_PTR:
+            get_type_var_bounds(from->ptr.pointed_type, to->ptr.pointed_type, TYPE_INVARIANT, type_map);
+            break;
+        case TYPE_PROJ:
+            get_type_var_bounds(from->proj.projected_type, to->proj.projected_type, TYPE_INVARIANT, type_map);
+            return;
+        case TYPE_APP: {
+            const Type** type_params = get_type_params(get_applied_type(from));
+            if (get_type_params(get_applied_type(to)) != type_params)
+                type_params = NULL;
+            get_type_var_bounds(from->app.applied_type, to->app.applied_type, TYPE_INVARIANT, type_map);
+            for (size_t i = 0; i < from->app.arg_count && i < to->app.arg_count; ++i) {
+                get_type_var_bounds(from->app.args[i], to->app.args[i],
+                    type_params ? type_params[i]->var.variance : TYPE_INVARIANT, type_map);
+            }
+            break;
+        }
         default:
             break;
     }

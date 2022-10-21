@@ -1,0 +1,4 @@
+sig Equal {
+    type T;
+    val is_equal : fun (T, T) -> bool;
+}

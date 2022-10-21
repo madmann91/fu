@@ -344,6 +344,12 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
                 print_ast_with_delim(state, " = ", "", ast_node->const_decl.init);
             format(state, ";", NULL);
             break;
+        case AST_VAL_DECL:
+            print_keyword(state, "val");
+            format(state, "{s} : ", (FormatArg[]) { { .s = ast_node->val_decl.name } });
+            print_ast(state, ast_node->val_decl.type);
+            format(state, ";", NULL);
+            break;
         case AST_FIELD_PATTERN:
         case AST_FIELD_EXPR:
             format(state, "{s} = ", (FormatArg[]) { { .s = ast_node->field_pattern.name } });
@@ -697,6 +703,7 @@ const char* get_decl_keyword(AstNodeTag tag) {
         case AST_SIG_DECL:    return "sig";
         case AST_VAR_DECL:    return "var";
         case AST_CONST_DECL:  return "const";
+        case AST_VAL_DECL:    return "val";
         default:
             assert(false && "invalid declaration");
             return NULL;
@@ -707,6 +714,7 @@ const char* get_decl_name(const AstNode* decl) {
     switch (decl->tag) {
         case AST_FUN_DECL:    return decl->fun_decl.name;
         case AST_TYPE_DECL:   return decl->type_decl.name;
+        case AST_VAL_DECL:    return decl->val_decl.name;
         case AST_STRUCT_DECL: return decl->struct_decl.name;
         case AST_ENUM_DECL:   return decl->enum_decl.name;
         case AST_SIG_DECL:    return decl->sig_decl.name;

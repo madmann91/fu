@@ -94,6 +94,7 @@ typedef enum {
     AST_FUN_DECL,
     AST_CONST_DECL,
     AST_VAR_DECL,
+    AST_VAL_DECL,
     AST_TYPE_DECL,
     AST_FIELD_DECL,
     AST_OPTION_DECL,
@@ -185,6 +186,7 @@ struct AstNode {
             AstNode* elem_type;
         } array_type;
         struct {
+            AstNode* type_params;
             AstNode* dom_type;
             AstNode* codom_type;
         } fun_type;
@@ -235,6 +237,10 @@ struct AstNode {
             AstNode* pattern;
             AstNode* init;
         } const_decl, var_decl;
+        struct {
+            const char* name;
+            AstNode* type;
+        } val_decl;
         struct {
             const char* name;
             size_t index;

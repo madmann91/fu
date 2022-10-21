@@ -643,6 +643,29 @@ static const Type* infer_where_type(TypingContext* context, AstNode* where_type)
     return signature;
 }
 
+static const Type* infer_type_param(TypingContext* context, AstNode* type_param) {
+    const Type* kind = type_param->type_param.kind
+        ? infer_kind(context, type_param->type_param.kind)
+        : make_star_kind(context->type_table);
+    return type_param->type = make_var_type_with_kind(
+        context->type_table, type_param->type_param.name, kind);
+}
+
+static const Kind* infer_type_params(
+    TypingContext* context,
+    AstNode* type_params,
+    DynArray* type_vars,
+    const Kind* body)
+{
+    for (; type_params; type_params = type_params->next) {
+        infer_type_param(context, type_params);
+        push_on_dyn_array(type_vars, &type_params->type);
+    }
+    if (!body)
+        return NULL;
+    return make_type_ctor_kind(context->type_table, type_vars->elems, type_vars->size, body);
+}
+
 static const Type* infer_type_with_noret(TypingContext* context, AstNode* type, bool accept_noret) {
     switch (type->tag) {
 #define f(name, ...) case AST_TYPE_##name: return type->type = make_prim_type(context->type_table, TYPE_##name);
@@ -656,10 +679,17 @@ static const Type* infer_type_with_noret(TypingContext* context, AstNode* type, 
             return type->type = make_noret_type(context->type_table);
         case AST_TUPLE_TYPE:
             return infer_tuple(context, type, infer_type);
-        case AST_FUN_TYPE:
-            return type->type = make_fun_type(context->type_table,
+        case AST_FUN_TYPE: {
+            DynArray type_params = new_dyn_array(sizeof(Type*));
+            infer_type_params(context, type->fun_type.type_params, &type_params, NULL);
+            type->type = make_poly_fun_type(context->type_table,
+                type_params.elems,
+                type_params.size,
                 infer_type(context, type->fun_type.dom_type),
                 infer_type_with_noret(context, type->fun_type.codom_type, true));
+            free_dyn_array(&type_params);
+            return type->type;
+        }
         case AST_ARRAY_TYPE:
             return type->type = make_unsized_array_type(
                 context->type_table, infer_type(context, type->array_type.elem_type));
@@ -1071,29 +1101,6 @@ static const Type* infer_const_or_var_decl(TypingContext* context, AstNode* decl
     return type;
 }
 
-static const Type* infer_type_param(TypingContext* context, AstNode* type_param) {
-    const Type* kind = type_param->type_param.kind
-        ? infer_kind(context, type_param->type_param.kind)
-        : make_star_kind(context->type_table);
-    return type_param->type = make_var_type_with_kind(
-        context->type_table, type_param->type_param.name, kind);
-}
-
-static const Kind* infer_type_params(
-    TypingContext* context,
-    AstNode* type_params,
-    DynArray* type_vars,
-    const Kind* body)
-{
-    for (; type_params; type_params = type_params->next) {
-        infer_type_param(context, type_params);
-        push_on_dyn_array(type_vars, &type_params->type);
-    }
-    if (!body)
-        return NULL;
-    return make_type_ctor_kind(context->type_table, type_vars->elems, type_vars->size, body);
-}
-
 static StructField infer_field_decl(TypingContext* context, AstNode* field_decl) {
     const Type* field_type = infer_type(context, field_decl->field_decl.type);
     if (field_decl->field_decl.val)
@@ -1269,7 +1276,7 @@ static const Type* infer_type_decl(TypingContext* context, AstNode* type_decl) {
     if (!type_decl->type_decl.aliased_type) {
         // Types without an actual binding should not exist outside of signatures.
         assert(type_decl->parent_scope && type_decl->parent_scope->tag == AST_SIG_DECL);
-        return type_decl->type = add_to_parent_sig_or_mod(
+        type_decl->type = add_to_parent_sig_or_mod(
             context->type_table, type_decl, type_kind, type_decl->type_decl.name, true);
     } else {
         const Type* aliased_type = infer_type(context, type_decl->type_decl.aliased_type);
@@ -1279,12 +1286,13 @@ static const Type* infer_type_decl(TypingContext* context, AstNode* type_decl) {
             type_params.elems,
             type_params.size,
             aliased_type);
-        free_dyn_array(&type_params);
 
-        return type_decl->type = should_add_to_parent_sig_or_mod(type_decl)
+        type_decl->type = should_add_to_parent_sig_or_mod(type_decl)
             ? add_decl_to_parent_sig_or_mod(context->type_table, type_decl, alias_type)
             : alias_type;
     }
+    free_dyn_array(&type_params);
+    return type_decl->type;
 }
 
 static const Type* infer_fun_decl(TypingContext* context, AstNode* fun_decl) {
@@ -1320,6 +1328,13 @@ static const Type* infer_fun_decl(TypingContext* context, AstNode* fun_decl) {
     if (should_add_to_parent_sig_or_mod(fun_decl))
         add_decl_to_parent_sig_or_mod(context->type_table, fun_decl, fun_decl->type);
     return fun_decl->type;
+}
+
+static const Type* infer_val_decl(TypingContext* context, AstNode* val_decl) {
+    val_decl->type = infer_type(context, val_decl->val_decl.type);
+    if (should_add_to_parent_sig_or_mod(val_decl))
+        add_decl_to_parent_sig_or_mod(context->type_table, val_decl, val_decl->type);
+    return val_decl->type;
 }
 
 static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
@@ -1411,6 +1426,8 @@ const Type* infer_decl(TypingContext* context, AstNode* decl) {
             return infer_mod_decl(context, decl);
         case AST_SIG_DECL:
             return infer_sig_decl(context, decl);
+        case AST_VAL_DECL:
+            return infer_val_decl(context, decl);
         case AST_VAR_DECL:
         case AST_CONST_DECL:
             return infer_const_or_var_decl(context, decl);

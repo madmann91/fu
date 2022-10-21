@@ -384,6 +384,8 @@ void bind_decl(Env* env, AstNode* decl) {
             bind_type(env, decl->using_decl.used_mod);
             pop_scope(env);
             break;
+        case AST_VAL_DECL:
+            break;
         default:
             assert(false && "invalid declaration");
             break;

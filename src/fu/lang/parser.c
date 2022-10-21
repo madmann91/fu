@@ -13,10 +13,10 @@ typedef struct {
     AstNode* last;
 } AstNodeList;
 
-static inline AstNode* parse_decl_without_attr_list(Parser*, bool, bool, bool);
 static inline AstNode* parse_struct_decl(Parser*, bool, bool);
 static inline AstNode* parse_enum_decl(Parser*, bool, bool);
 static inline AstNode* parse_type_decl(Parser*, bool, bool, bool);
+static inline AstNode* parse_mod_decl(Parser*, bool);
 static inline AstNode* parse_sig_decl(Parser*, bool);
 
 static inline void add_ast_node_to_list(AstNodeList* list, AstNode* node) {
@@ -379,6 +379,16 @@ static AstNode* parse_type_param(Parser* parser) {
     });
 }
 
+static inline AstNode* parse_type_params(Parser* parser) {
+    if (accept_token(parser, TOKEN_L_BRACKET)) {
+        AstNode* type_params = parse_many_at_least_one(
+            parser, "type parameter lists", TOKEN_R_BRACKET, TOKEN_COMMA, parse_type_param);
+        expect_token(parser, TOKEN_R_BRACKET);
+        return type_params;
+    }
+    return NULL;
+}
+
 static inline AstNode* parse_basic_type(Parser* parser, AstNodeTag tag) {
     FilePos begin = parser->ahead->file_loc.begin;
     skip_token(parser);
@@ -388,12 +398,17 @@ static inline AstNode* parse_basic_type(Parser* parser, AstNodeTag tag) {
 static inline AstNode* parse_fun_type(Parser* parser) {
     FilePos begin = parser->ahead->file_loc.begin;
     eat_token(parser, TOKEN_FUN);
+    AstNode* type_params = parse_type_params(parser);
     AstNode* dom_type = parse_tuple_or_error(parser, "function type domain", parse_tuple_type);
     expect_token(parser, TOKEN_THIN_ARROW);
     AstNode* codom_type = parse_type(parser);
     return make_ast_node(parser, &begin, &(AstNode) {
         .tag = AST_FUN_TYPE,
-        .fun_type = { .dom_type = dom_type, .codom_type = codom_type }
+        .fun_type = {
+            .type_params = type_params,
+            .dom_type = dom_type,
+            .codom_type = codom_type
+        }
     });
 }
 
@@ -857,16 +872,6 @@ static inline AstNode* parse_while_loop(Parser* parser) {
     });
 }
 
-static inline AstNode* parse_type_params(Parser* parser) {
-    if (accept_token(parser, TOKEN_L_BRACKET)) {
-        AstNode* type_params = parse_many_at_least_one(
-            parser, "type parameter lists", TOKEN_R_BRACKET, TOKEN_COMMA, parse_type_param);
-        expect_token(parser, TOKEN_R_BRACKET);
-        return type_params;
-    }
-    return NULL;
-}
-
 static inline AstNode* parse_fun_param(Parser* parser) {
     return parse_typed_pattern(parser, parse_untyped_pattern(parser, true));
 }
@@ -1018,8 +1023,30 @@ static inline AstNode* parse_enum_decl(Parser* parser, bool is_public, bool is_o
     });
 }
 
-static AstNode* parse_sig_member_decl(Parser* parser) {
-    return parse_decl_without_attr_list(parser, false, false, true);
+static inline AstNode* parse_val_decl(Parser* parser) {
+    FilePos begin = parser->ahead->file_loc.begin;
+    eat_token(parser, TOKEN_VAL);
+    const char* name = parse_ident(parser);
+    expect_token(parser, TOKEN_COLON);
+    AstNode* type = parse_type(parser);
+    expect_token(parser, TOKEN_SEMICOLON);
+    return make_ast_node(parser, &begin, &(AstNode) {
+        .tag = AST_VAL_DECL,
+        .val_decl = {
+            .name = name,
+            .type = type
+        }
+    });
+}
+
+static AstNode* parse_sig_member(Parser* parser) {
+    switch (parser->ahead->tag) {
+        case TOKEN_MOD:  return parse_mod_decl(parser, false);
+        case TOKEN_TYPE: return parse_type_decl(parser, false, false, true);
+        case TOKEN_VAL:  return parse_val_decl(parser);
+        default:
+            return parse_error(parser, "declaration");
+    }
 }
 
 static inline AstNode* parse_sig_decl(Parser* parser, bool needs_name) {
@@ -1030,7 +1057,7 @@ static inline AstNode* parse_sig_decl(Parser* parser, bool needs_name) {
     AstNode* members = NULL;
     if (accept_token(parser, TOKEN_L_BRACE)) {
         members = parse_many_at_least_one(
-            parser, "signatures", TOKEN_R_BRACE, TOKEN_ERROR, parse_sig_member_decl);
+            parser, "signatures", TOKEN_R_BRACE, TOKEN_ERROR, parse_sig_member);
         expect_token(parser, TOKEN_R_BRACE);
     }
     return make_ast_node(parser, &begin, &(AstNode) {
@@ -1169,22 +1196,17 @@ AstNode* parse_stmt(Parser* parser) {
     }
 }
 
-static inline AstNode* parse_decl_without_attr_list(
-    Parser* parser,
-    bool is_public,
-    bool is_opaque,
-    bool allow_unbound_types)
-{
+static inline AstNode* parse_decl_without_attr_list(Parser* parser, bool is_public, bool is_opaque) {
     switch (parser->ahead->tag) {
         case TOKEN_STRUCT: return parse_struct_decl(parser, is_public, is_opaque);
         case TOKEN_ENUM:   return parse_enum_decl(parser, is_public, is_opaque);
         case TOKEN_MOD:    return parse_mod_decl(parser, is_public);
         case TOKEN_SIG:    return parse_sig_decl(parser, true);
         case TOKEN_USING:  return parse_using_decl(parser);
-        case TOKEN_TYPE:   return parse_type_decl(parser, is_public, is_opaque, allow_unbound_types);
+        case TOKEN_TYPE:   return parse_type_decl(parser, is_public, is_opaque, false);
+        case TOKEN_FUN:    return parse_fun_decl(parser, is_public);
         case TOKEN_CONST:  return parse_const_decl(parser, is_public);
         case TOKEN_VAR:    return parse_var_decl(parser, is_public);
-        case TOKEN_FUN:    return parse_fun_decl(parser, is_public);
         default:
             return parse_error(parser, "declaration");
     }
@@ -1197,7 +1219,7 @@ AstNode* parse_decl(Parser* parser) {
     bool is_public = accept_token(parser, TOKEN_PUB);
     FileLoc opaque_loc = parser->ahead->file_loc;
     bool is_opaque = is_public && accept_token(parser, TOKEN_OPAQUE);
-    AstNode* decl = parse_decl_without_attr_list(parser, is_public, is_opaque, false);
+    AstNode* decl = parse_decl_without_attr_list(parser, is_public, is_opaque);
     if (is_opaque && is_value_decl(decl->tag)) {
         log_error(parser->lexer->log, &opaque_loc, "cannot use '{$}opaque{$}' here",
             (FormatArg[]) { { .style = keyword_style }, { .style = reset_style } });

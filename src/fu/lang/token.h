@@ -65,6 +65,7 @@
     f(CONTINUE, "continue") \
     f(FUN, "fun") \
     f(VAR, "var") \
+    f(VAL, "val") \
     f(CONST, "const") \
     f(TYPE, "type") \
     f(NAT, "nat") \

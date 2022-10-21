@@ -30,6 +30,7 @@ test('fail-empty-sig',          fu, suite: 'parser', workdir: root, should_fail:
 test('fail-anon-sig',           fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/anon_sig.fu'])
 test('fail-missing-const-init', fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/missing_const_init.fu'])
 test('fail-unbound-type',       fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/unbound_type.fu'])
+test('fail-invalid-mod',        fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/invalid_mod.fu'])
 
 # Typechecker tests
 test('pass-structs',             fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/structs.fu'])
@@ -45,6 +46,7 @@ test('pass-parametric-mods',     fu, suite: 'typechecker', workdir: root, args: 
 test('pass-polymorphic-fun',     fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/polymorphic_fun.fu'])
 test('pass-polymorphic-mod-fun', fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/polymorphic_mod_fun.fu'])
 test('pass-applied-mod-struct',  fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/applied_mod_struct.fu'])
+test('pass-dependent-sig',       fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/dependent_sig.fu'])
 
 test('fail-recursive-fun',       fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/recursive_fun.fu'])
 test('fail-type-access-enum',    fu, suite: 'typechecker', workdir: root, should_fail: true, args: ['--print-ast', 'test/typechecker/fail/type_access_enum.fu'])

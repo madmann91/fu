@@ -30,7 +30,8 @@ test('fail-empty-sig',          fu, suite: 'parser', workdir: root, should_fail:
 test('fail-anon-sig',           fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/anon_sig.fu'])
 test('fail-missing-const-init', fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/missing_const_init.fu'])
 test('fail-unbound-type',       fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/unbound_type.fu'])
-test('fail-invalid-mod',        fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/invalid_mod.fu'])
+test('fail-unbound-mod',        fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/unbound_mod.fu'])
+test('fail-val-in-mod',         fu, suite: 'parser', workdir: root, should_fail: true, args: ['--no-type-check', '--print-ast', 'test/parser/fail/val_in_mod.fu'])
 
 # Typechecker tests
 test('pass-structs',             fu, suite: 'typechecker', workdir: root, args: ['--print-ast', 'test/typechecker/pass/structs.fu'])

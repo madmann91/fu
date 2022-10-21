@@ -16,7 +16,7 @@ typedef struct {
 static inline AstNode* parse_struct_decl(Parser*, bool, bool);
 static inline AstNode* parse_enum_decl(Parser*, bool, bool);
 static inline AstNode* parse_type_decl(Parser*, bool, bool, bool);
-static inline AstNode* parse_mod_decl(Parser*, bool);
+static inline AstNode* parse_mod_decl(Parser*, bool, bool);
 static inline AstNode* parse_sig_decl(Parser*, bool);
 
 static inline void add_ast_node_to_list(AstNodeList* list, AstNode* node) {
@@ -1041,7 +1041,7 @@ static inline AstNode* parse_val_decl(Parser* parser) {
 
 static AstNode* parse_sig_member(Parser* parser) {
     switch (parser->ahead->tag) {
-        case TOKEN_MOD:  return parse_mod_decl(parser, false);
+        case TOKEN_MOD:  return parse_mod_decl(parser, false, false);
         case TOKEN_TYPE: return parse_type_decl(parser, false, false, true);
         case TOKEN_VAL:  return parse_val_decl(parser);
         default:
@@ -1070,22 +1070,26 @@ static inline AstNode* parse_sig_decl(Parser* parser, bool needs_name) {
     });
 }
 
-static inline AstNode* parse_mod_decl(Parser* parser, bool is_public) {
+static inline AstNode* parse_mod_decl(Parser* parser, bool is_public, bool has_body) {
     FilePos begin = parser->ahead->file_loc.begin;
     eat_token(parser, TOKEN_MOD);
     const char* name = parse_ident(parser);
     AstNode* type_params = parse_type_params(parser);
     AstNode* signature = NULL;
-    if (accept_token(parser, TOKEN_COLON))
+    if (!has_body)
+        expect_token(parser, TOKEN_COLON);
+    if (!has_body || accept_token(parser, TOKEN_COLON))
         signature = parse_type(parser);
     AstNode* aliased_mod = NULL;
     AstNode* members = NULL;
-    if (accept_token(parser, TOKEN_L_BRACE)) {
+    if (has_body && accept_token(parser, TOKEN_L_BRACE)) {
         members = parse_many_at_least_one(parser, "modules", TOKEN_R_BRACE, TOKEN_ERROR, parse_decl);
         expect_token(parser, TOKEN_R_BRACE);
     } else {
-        if (accept_token(parser, TOKEN_EQUAL))
+        if (has_body) {
+            expect_token(parser, TOKEN_EQUAL);
             aliased_mod = parse_type(parser);
+        }
         expect_token(parser, TOKEN_SEMICOLON);
     }
     return make_ast_node(parser, &begin, &(AstNode) {
@@ -1200,7 +1204,7 @@ static inline AstNode* parse_decl_without_attr_list(Parser* parser, bool is_publ
     switch (parser->ahead->tag) {
         case TOKEN_STRUCT: return parse_struct_decl(parser, is_public, is_opaque);
         case TOKEN_ENUM:   return parse_enum_decl(parser, is_public, is_opaque);
-        case TOKEN_MOD:    return parse_mod_decl(parser, is_public);
+        case TOKEN_MOD:    return parse_mod_decl(parser, is_public, true);
         case TOKEN_SIG:    return parse_sig_decl(parser, true);
         case TOKEN_USING:  return parse_using_decl(parser);
         case TOKEN_TYPE:   return parse_type_decl(parser, is_public, is_opaque, false);

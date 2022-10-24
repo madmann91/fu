@@ -346,7 +346,7 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             break;
         case AST_VAL_DECL:
             print_keyword(state, "val");
-            format(state, "{s} : ", (FormatArg[]) { { .s = ast_node->val_decl.name } });
+            format(state, " {s} : ", (FormatArg[]) { { .s = ast_node->val_decl.name } });
             print_ast(state, ast_node->val_decl.type);
             format(state, ";", NULL);
             break;
@@ -388,7 +388,8 @@ void print_ast(FormatState* state, const AstNode* ast_node) {
             print_ast(state, ast_node->where_clause.type);
             break;
         case AST_WHERE_TYPE:
-            print_ast_with_delim(state, "", " ", ast_node->where_type.path);
+            print_ast(state, ast_node->where_type.signature);
+            format(state, " ", NULL);
             print_keyword(state, "where");
             format(state, " ", NULL);
             print_many_asts_inside_block(state, ", ", ast_node->where_type.clauses, false);
@@ -558,6 +559,7 @@ bool is_value_decl(AstNodeTag tag) {
         case AST_CONST_DECL:
         case AST_VAR_DECL:
         case AST_MOD_DECL:
+        case AST_VAL_DECL:
             return true;
         default:
             return false;

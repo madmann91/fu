@@ -591,9 +591,6 @@ static const Type* check_tuple(
 
 const Type* infer_kind(TypingContext* context, AstNode* kind) {
     switch (kind->tag) {
-        default:
-            assert(false && "invalid kind");
-            // fallthrough
         case AST_KIND_STAR:
             return make_star_kind(context->type_table);
         case AST_KIND_ARROW: {
@@ -606,22 +603,20 @@ const Type* infer_kind(TypingContext* context, AstNode* kind) {
             free(kind_params);
             return arrow;
         }
-        case AST_PATH:
-            return infer_path(context, kind, NULL, true);
+        default:
+            return infer_type(context, kind);
     }
 }
 
 static const Type* check_where_clause(TypingContext* context, AstNode* where_clause, const Type* signature) {
     const Type** var_ptr = find_signature_var(signature, where_clause->where_clause.name);
-    if (!var_ptr)
-    {
+    if (!var_ptr) {
         report_missing_member(context,
             where_clause->where_clause.name, signature, &where_clause->file_loc);
         return make_error_type(context->type_table);
     }
     Type* var = (Type*)*var_ptr;
-    if (var->var.value)
-    {
+    if (var->var.value) {
         log_error(context->log, &where_clause->file_loc,
             "'{s}' is already bound to '{t}'",
             (FormatArg[]) { { .s = var->var.name }, { .t = resolve_type(var->var.value) } });
@@ -632,8 +627,8 @@ static const Type* check_where_clause(TypingContext* context, AstNode* where_cla
 }
 
 static const Type* infer_where_type(TypingContext* context, AstNode* where_type) {
-    const Type* source_signature = infer_path(context, where_type->where_type.path, NULL, true);
-    if (!expect_type_with_tag(context, source_signature, TYPE_SIGNATURE, "signature", &where_type->where_type.path->file_loc))
+    const Type* source_signature = infer_type(context, where_type->where_type.signature);
+    if (!expect_type_with_tag(context, source_signature, TYPE_SIGNATURE, "signature", &where_type->where_type.signature->file_loc))
         return make_error_type(context->type_table);
 
     // Create a new signature type to hold the modified signature with new bindings from the clauses
@@ -931,9 +926,9 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
             if (expected_type->tag == TYPE_UNKNOWN)
                 return infer_tuple(context, expr, infer_expr);
             const Type* resolved_type = resolve_type(expected_type);
-            if (resolved_type->tag == TYPE_TUPLE)
-                return check_tuple(context, expr, resolved_type, check_expr);
-            return expr->type = report_type_mismatch(context, "tuple expression", expected_type, &expr->file_loc);
+            if (!expect_type_with_tag(context, resolved_type, TYPE_TUPLE, "tuple", &expr->file_loc))
+                return expr->type = make_error_type(context->type_table);
+            return check_tuple(context, expr, resolved_type, check_expr);
         }
         case AST_IF_EXPR:
             return check_if_expr(context, expr, expected_type);
@@ -951,11 +946,11 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
         }
         case AST_FUN_EXPR: {
             if (expected_type->tag == TYPE_UNKNOWN)
-            return check_fun_expr(context, expr,
-                make_unknown_type(context->type_table),
-                make_unknown_type(context->type_table));
-            if (expected_type->tag != TYPE_FUN)
-                return expr->type = report_type_mismatch(context, "function expression", expected_type, &expr->file_loc);
+                return check_fun_expr(context, expr,
+                    make_unknown_type(context->type_table),
+                    make_unknown_type(context->type_table));
+            if (!expect_type_with_tag(context, expected_type, TYPE_FUN, "function", &expr->file_loc))
+                return expr->type = make_error_type(context->type_table);
             return check_fun_expr(context, expr, expected_type->fun.dom, expected_type->fun.codom);
         }
         case AST_BREAK_EXPR:
@@ -1009,12 +1004,14 @@ const Type* check_pattern(TypingContext* context, AstNode* pattern, const Type* 
             return pattern->type = expect_type(context,
                 make_unsized_array_type(context->type_table, make_prim_type(context->type_table, TYPE_U8)),
                 expected_type, false, &pattern->file_loc);
-        case AST_TUPLE_PATTERN:
+        case AST_TUPLE_PATTERN: {
             if (expected_type->tag == TYPE_UNKNOWN)
                 return pattern->type = infer_tuple(context, pattern, infer_pattern);
-            if (expected_type->tag == TYPE_TUPLE)
-                return check_tuple(context, pattern, expected_type, check_pattern);
-            return report_type_mismatch(context, "tuple pattern", expected_type, &pattern->file_loc);
+            const Type* resolved_type = resolve_type(expected_type);
+            if (!expect_type_with_tag(context, resolved_type, TYPE_TUPLE, "tuple", &pattern->file_loc))
+                return pattern->type = make_error_type(context->type_table);
+            return check_tuple(context, pattern, resolved_type, check_pattern);
+        }
         case AST_TYPED_PATTERN:
             pattern->type = check_pattern(context, pattern->typed_pattern.left, infer_type(context, pattern->typed_pattern.type));
             return pattern->type = expect_type(context, pattern->type, expected_type, false, &pattern->file_loc);

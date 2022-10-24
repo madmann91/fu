@@ -385,6 +385,7 @@ void bind_decl(Env* env, AstNode* decl) {
             pop_scope(env);
             break;
         case AST_VAL_DECL:
+            bind_type(env, decl->val_decl.type);
             break;
         default:
             assert(false && "invalid declaration");
@@ -499,11 +500,8 @@ void bind_kind(Env* env, AstNode* kind) {
             bind_many(env, kind->arrow_kind.dom_kinds, bind_kind);
             bind_kind(env, kind->arrow_kind.codom_kind);
             break;
-        case AST_PATH:
-            bind_path(env, kind);
-            break;
         default:
-            assert(false && "invalid kind");
+            bind_type(env, kind);
             break;
     }
 }
@@ -537,7 +535,7 @@ void bind_type(Env* env, AstNode* type) {
             bind_type(env, type->ptr_type.pointed_type);
             break;
         case AST_WHERE_TYPE:
-            bind_type(env, type->where_type.path);
+            bind_type(env, type->where_type.signature);
             bind_many(env, type->where_type.clauses, bind_where_clause);
             break;
         case AST_SIG_DECL:

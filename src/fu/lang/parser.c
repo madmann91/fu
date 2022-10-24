@@ -342,7 +342,7 @@ static AstNode* parse_primary_kind(Parser* parser) {
     FilePos begin = parser->ahead->file_loc.begin;
     if (accept_token(parser, TOKEN_STAR))
         return make_ast_node(parser, &begin, &(AstNode) { .tag = AST_KIND_STAR });
-    return parse_path(parser);
+    return parse_type(parser);
 }
 
 static AstNode* parse_kind(Parser* parser) {
@@ -434,7 +434,7 @@ static inline AstNode* parse_where_clause(Parser* parser) {
     });
 }
 
-static inline AstNode* parse_where_type(Parser* parser, AstNode* path) {
+static inline AstNode* parse_where_type(Parser* parser, AstNode* signature) {
     eat_token(parser, TOKEN_WHERE);
     AstNode* clauses = NULL;
     if (accept_token(parser, TOKEN_L_BRACE)) {
@@ -442,23 +442,18 @@ static inline AstNode* parse_where_type(Parser* parser, AstNode* path) {
         expect_token(parser, TOKEN_R_BRACE);
     } else
         clauses = parse_where_clause(parser);
-    return make_ast_node(parser, &path->file_loc.begin, &(AstNode) {
+    return make_ast_node(parser, &signature->file_loc.begin, &(AstNode) {
         .tag = AST_WHERE_TYPE,
-        .where_type = { .path = path, .clauses = clauses }
+        .where_type = { .signature = signature, .clauses = clauses }
     });
 }
 
-AstNode* parse_type(Parser* parser) {
+static AstNode* parse_prefix_type(Parser* parser) {
     switch (parser->ahead->tag) {
 #define f(name, ...) case TOKEN_##name: return parse_basic_type(parser, AST_TYPE_##name);
         PRIM_TYPE_LIST(f)
 #undef f
-        case TOKEN_IDENT: {
-            AstNode* path = parse_path(parser);
-            if (parser->ahead->tag == TOKEN_WHERE)
-                return parse_where_type(parser, path);
-            return path;
-        }
+        case TOKEN_IDENT:     return parse_path(parser);
         case TOKEN_L_PAREN:   return parse_tuple_type(parser);
         case TOKEN_L_BRACKET: return parse_array_type(parser);
         case TOKEN_FUN:       return parse_fun_type(parser);
@@ -468,6 +463,13 @@ AstNode* parse_type(Parser* parser) {
         default:
             return parse_error(parser, "type");
     }
+}
+
+AstNode* parse_type(Parser* parser) {
+    AstNode* type = parse_prefix_type(parser);
+    if (parser->ahead->tag == TOKEN_WHERE)
+        return parse_where_type(parser, type);
+    return type;
 }
 
 static AstNode* parse_struct(

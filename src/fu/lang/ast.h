@@ -195,7 +195,7 @@ struct AstNode {
             AstNode* pointed_type;
         } ptr_type;
         struct {
-            AstNode* path;
+            AstNode* signature;
             AstNode* clauses;
         } where_type;
         struct {

@@ -147,6 +147,15 @@ FormatState new_format_state(const char* tab, bool ignore_style) {
     };
 }
 
+void reset_format_state(FormatState* state) {
+    FormatBuf* buf = state->first_buf;
+    while (buf) {
+        buf->size = 0;
+        buf = buf->next;
+    }
+    state->cur_buf = state->first_buf;
+}
+
 void free_format_state(FormatState* state) {
     FormatBuf* next = NULL;
     for (FormatBuf* buf = state->first_buf; buf; buf = next) {

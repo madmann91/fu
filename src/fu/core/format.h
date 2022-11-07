@@ -72,6 +72,7 @@ static const FormatStyle ellipsis_style = { STYLE_NORMAL, COLOR_WHITE };
 static const FormatStyle loc_style      = { STYLE_BOLD,   COLOR_WHITE };
 
 FormatState new_format_state(const char* tab, bool ignore_style);
+void reset_format_state(FormatState*);
 void free_format_state(FormatState*);
 
 void format(FormatState*, const char* format_str, const FormatArg* args);

@@ -1226,7 +1226,7 @@ AstNode* parse_decl(Parser* parser) {
     FileLoc opaque_loc = parser->ahead->file_loc;
     bool is_opaque = is_public && accept_token(parser, TOKEN_OPAQUE);
     AstNode* decl = parse_decl_without_attr_list(parser, is_public, is_opaque);
-    if (is_opaque && is_value_decl(decl->tag)) {
+    if (is_opaque && is_value_decl_tag(decl->tag)) {
         log_error(parser->lexer->log, &opaque_loc, "cannot use '{$}opaque{$}' here",
             (FormatArg[]) { { .style = keyword_style }, { .style = reset_style } });
     }

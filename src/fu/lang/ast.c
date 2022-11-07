@@ -5,6 +5,246 @@
 #include <limits.h>
 #include <assert.h>
 
+bool needs_semicolon(AstNodeTag tag) {
+    switch (tag) {
+        case AST_CONST_DECL:
+        case AST_VAR_DECL:
+        case AST_FUN_DECL:
+        case AST_STRUCT_DECL:
+        case AST_ENUM_DECL:
+        case AST_TYPE_DECL:
+        case AST_IF_EXPR:
+        case AST_MATCH_EXPR:
+        case AST_BLOCK_EXPR:
+        case AST_WHILE_LOOP:
+        case AST_FOR_LOOP:
+            return false;
+        default:
+            return true;
+    }
+}
+
+bool is_tuple_ast_tag(AstNodeTag tag) {
+    return
+        tag == AST_TUPLE_TYPE ||
+        tag == AST_TUPLE_PATTERN ||
+        tag == AST_TUPLE_EXPR;
+}
+
+bool is_binary_expr_tag(AstNodeTag tag) {
+    switch (tag) {
+#define f(name, ...) case AST_##name##_EXPR:
+    AST_BINARY_EXPR_LIST(f)
+#undef f
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool is_assign_expr_tag(AstNodeTag tag) {
+    switch (tag) {
+#define f(name, ...) case AST_##name##_ASSIGN_EXPR:
+    AST_ASSIGN_EXPR_LIST(f)
+#undef f
+        case AST_ASSIGN_EXPR:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool is_value_decl_tag(AstNodeTag tag) {
+    switch (tag) {
+        case AST_FUN_DECL:
+        case AST_CONST_DECL:
+        case AST_VAR_DECL:
+        case AST_MOD_DECL:
+        case AST_VAL_DECL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool is_assignable_expr(const AstNode* expr) {
+    assert(expr->type && "expression must have been type-checked first");
+    if (expr->tag == AST_DEREF_EXPR)
+        return is_non_const_ptr_type(expr->unary_expr.operand->type);
+    else if (expr->tag == AST_MEMBER_EXPR)
+        return is_assignable_expr(expr->member_expr.left);
+    else if (expr->tag == AST_PATH) {
+        return
+            expr->path.decl_site->tag == AST_IDENT_PATTERN &&
+            !expr->path.decl_site->ident_pattern.is_const;
+    }
+    return false;
+}
+
+bool is_public_decl(const AstNode* decl) {
+    switch (decl->tag) {
+        case AST_CONST_DECL:  return decl->const_decl.is_public;
+        case AST_VAR_DECL:    return decl->var_decl.is_public;
+        case AST_FUN_DECL:    return decl->fun_decl.is_public;
+        case AST_TYPE_DECL:   return decl->type_decl.is_public;
+        case AST_STRUCT_DECL: return decl->struct_decl.is_public;
+        case AST_ENUM_DECL:   return decl->enum_decl.is_public;
+        case AST_SIG_DECL:    return decl->sig_decl.is_public;
+        case AST_MOD_DECL:    return decl->mod_decl.is_public;
+        default:
+            return false;
+    }
+}
+
+bool is_opaque_decl(const AstNode* decl) {
+    switch (decl->tag) {
+        case AST_TYPE_DECL:   return decl->type_decl.is_opaque;
+        case AST_STRUCT_DECL: return decl->struct_decl.is_opaque;
+        case AST_ENUM_DECL:   return decl->enum_decl.is_opaque;
+        default:
+            return false;
+    }
+}
+
+size_t count_ast_nodes(const AstNode* node) {
+    size_t len = 0;
+    while (node)
+        node = node->next, len++;
+    return len;
+}
+
+const AstNode* get_last_ast_node(const AstNode* node) {
+    const AstNode* prev = node;
+    for (; node; prev = node, node = node->next);
+    return prev;
+}
+
+const AstNode* get_parent_scope_with_tag(const AstNode* ast_node, AstNodeTag tag) {
+    AstNode* parent_scope = ast_node->parent_scope;
+    while (parent_scope && parent_scope->tag != tag)
+        parent_scope = parent_scope->parent_scope;
+    return parent_scope;
+}
+
+const AstNode* get_parent_mod_decl(const AstNode* ast_node) {
+    return get_parent_scope_with_tag(ast_node, AST_MOD_DECL);
+}
+
+AstNodeTag assign_expr_to_binary_expr(AstNodeTag tag) {
+    switch (tag) {
+#define f(name, ...) case AST_##name##_ASSIGN_EXPR: return AST_##name##_EXPR;
+        AST_ASSIGN_EXPR_LIST(f)
+#undef f
+        default:
+            return tag;
+    }
+}
+
+const char* get_prim_type_name(AstNodeTag tag) {
+    switch (tag) {
+#define f(name, str) case AST_TYPE_##name: return str;
+        PRIM_TYPE_LIST(f)
+#undef f
+        default:
+            assert(false && "invalid primitive type");
+            return "";
+    }
+}
+
+const char* get_binary_expr_op(AstNodeTag tag) {
+    switch (tag) {
+#define f(name, prec, tok, str, ...) case AST_##name##_EXPR: return str;
+        AST_BINARY_EXPR_LIST(f)
+#undef f
+        default:
+            assert(false && "invalid binary expression");
+            return "";
+    }
+}
+
+const char* get_unary_expr_op(AstNodeTag tag) {
+    switch (tag) {
+#define f(name, tok, str) case AST_##name##_EXPR: return str;
+        AST_UNARY_EXPR_LIST(f)
+#undef f
+        default:
+            assert(false && "invalid unary expression");
+            return "";
+    }
+}
+
+const char* get_assign_expr_op(AstNodeTag tag) {
+    switch (tag) {
+        case AST_ASSIGN_EXPR: return "=";
+#define f(name, prec, tok, str, ...) case AST_##name##_ASSIGN_EXPR: return str"=";
+        AST_ASSIGN_EXPR_LIST(f)
+#undef f
+        default:
+            assert(false && "invalid assignment expression");
+            return "";
+    }
+}
+
+const char* get_binary_expr_fun_name(AstNodeTag tag) {
+    switch (tag) {
+#define f(name, prec, tok, str, op_name) case AST_##name##_EXPR: return op_name;
+        AST_BINARY_EXPR_LIST(f)
+#undef f
+        default:
+            assert(false && "invalid binary expression");
+            return NULL;
+    }
+}
+
+const char* get_decl_keyword(AstNodeTag tag) {
+    switch (tag) {
+        case AST_FUN_DECL:    return "fun";
+        case AST_TYPE_DECL:   return "type";
+        case AST_STRUCT_DECL: return "struct";
+        case AST_ENUM_DECL:   return "enum";
+        case AST_MOD_DECL:    return "mod";
+        case AST_SIG_DECL:    return "sig";
+        case AST_VAR_DECL:    return "var";
+        case AST_CONST_DECL:  return "const";
+        case AST_VAL_DECL:    return "val";
+        default:
+            assert(false && "invalid declaration");
+            return NULL;
+    }
+}
+
+const char* get_decl_name(const AstNode* decl) {
+    switch (decl->tag) {
+        case AST_FUN_DECL:    return decl->fun_decl.name;
+        case AST_TYPE_DECL:   return decl->type_decl.name;
+        case AST_VAL_DECL:    return decl->val_decl.name;
+        case AST_STRUCT_DECL: return decl->struct_decl.name;
+        case AST_ENUM_DECL:   return decl->enum_decl.name;
+        case AST_SIG_DECL:    return decl->sig_decl.name;
+        case AST_MOD_DECL:    return decl->mod_decl.name;
+        default:
+            return NULL;
+    }
+}
+
+int get_max_binary_expr_precedence() {
+    int max = 0;
+#define f(name, prec, ...) max = max < prec ? prec : max;
+    AST_BINARY_EXPR_LIST(f)
+#undef f
+    return max;
+}
+
+int get_binary_expr_precedence(AstNodeTag tag) {
+    switch (tag) {
+#define f(name, prec, ...) case AST_##name##_EXPR: return prec;
+    AST_BINARY_EXPR_LIST(f)
+#undef f
+        default:
+            return INT_MAX;
+    }
+}
+
 static inline void print_many_asts(FormatState* state, const char* sep, const AstNode* elems) {
     for (; elems; elems = elems->next) {
         print_ast(state, elems);
@@ -51,7 +291,7 @@ static inline void print_many_asts_inside_block(
 }
 
 static inline void print_with_parens(FormatState* state, const AstNode* ast_node) {
-    if (is_tuple(ast_node->tag))
+    if (is_tuple_ast_tag(ast_node->tag))
         print_ast(state, ast_node);
     else
         print_ast_with_delim(state, "(", ")", ast_node);
@@ -62,7 +302,7 @@ static inline void print_prim_type(FormatState* state, AstNodeTag tag) {
 }
 
 static inline void print_operand(FormatState* state, const AstNode* ast_node, int prec) {
-    if (is_binary_expr(ast_node->tag) && get_binary_expr_precedence(ast_node->tag) > prec)
+    if (is_binary_expr_tag(ast_node->tag) && get_binary_expr_precedence(ast_node->tag) > prec)
         print_ast_with_delim(state, "(", ")", ast_node);
     else
         print_ast(state, ast_node);
@@ -503,243 +743,3 @@ void dump_ast(const AstNode* ast_node) {
     printf("\n");
 }
 #endif // GCOV_EXCL_STOP
-
-bool needs_semicolon(AstNodeTag tag) {
-    switch (tag) {
-        case AST_CONST_DECL:
-        case AST_VAR_DECL:
-        case AST_FUN_DECL:
-        case AST_STRUCT_DECL:
-        case AST_ENUM_DECL:
-        case AST_TYPE_DECL:
-        case AST_IF_EXPR:
-        case AST_MATCH_EXPR:
-        case AST_BLOCK_EXPR:
-        case AST_WHILE_LOOP:
-        case AST_FOR_LOOP:
-            return false;
-        default:
-            return true;
-    }
-}
-
-bool is_tuple(AstNodeTag tag) {
-    return
-        tag == AST_TUPLE_TYPE ||
-        tag == AST_TUPLE_PATTERN ||
-        tag == AST_TUPLE_EXPR;
-}
-
-bool is_binary_expr(AstNodeTag tag) {
-    switch (tag) {
-#define f(name, ...) case AST_##name##_EXPR:
-    AST_BINARY_EXPR_LIST(f)
-#undef f
-            return true;
-        default:
-            return false;
-    }
-}
-
-bool is_assign_expr(AstNodeTag tag) {
-    switch (tag) {
-#define f(name, ...) case AST_##name##_ASSIGN_EXPR:
-    AST_ASSIGN_EXPR_LIST(f)
-#undef f
-        case AST_ASSIGN_EXPR:
-            return true;
-        default:
-            return false;
-    }
-}
-
-bool is_value_decl(AstNodeTag tag) {
-    switch (tag) {
-        case AST_FUN_DECL:
-        case AST_CONST_DECL:
-        case AST_VAR_DECL:
-        case AST_MOD_DECL:
-        case AST_VAL_DECL:
-            return true;
-        default:
-            return false;
-    }
-}
-
-bool is_assignable_expr(const AstNode* expr) {
-    assert(expr->type && "expression must have been type-checked first");
-    if (expr->tag == AST_DEREF_EXPR)
-        return is_non_const_ptr_type(expr->unary_expr.operand->type);
-    else if (expr->tag == AST_MEMBER_EXPR)
-        return is_assignable_expr(expr->member_expr.left);
-    else if (expr->tag == AST_PATH) {
-        return
-            expr->path.decl_site->tag == AST_IDENT_PATTERN &&
-            !expr->path.decl_site->ident_pattern.is_const;
-    }
-    return false;
-}
-
-bool is_public_decl(const AstNode* decl) {
-    switch (decl->tag) {
-        case AST_CONST_DECL:  return decl->const_decl.is_public;
-        case AST_VAR_DECL:    return decl->var_decl.is_public;
-        case AST_FUN_DECL:    return decl->fun_decl.is_public;
-        case AST_TYPE_DECL:   return decl->type_decl.is_public;
-        case AST_STRUCT_DECL: return decl->struct_decl.is_public;
-        case AST_ENUM_DECL:   return decl->enum_decl.is_public;
-        case AST_SIG_DECL:    return decl->sig_decl.is_public;
-        case AST_MOD_DECL:    return decl->mod_decl.is_public;
-        default:
-            return false;
-    }
-}
-
-bool is_opaque_decl(const AstNode* decl) {
-    switch (decl->tag) {
-        case AST_TYPE_DECL:   return decl->type_decl.is_opaque;
-        case AST_STRUCT_DECL: return decl->struct_decl.is_opaque;
-        case AST_ENUM_DECL:   return decl->enum_decl.is_opaque;
-        default:
-            return false;
-    }
-}
-
-size_t count_ast_nodes(const AstNode* node) {
-    size_t len = 0;
-    while (node)
-        node = node->next, len++;
-    return len;
-}
-
-const AstNode* get_last_ast_node(const AstNode* node) {
-    const AstNode* prev = node;
-    for (; node; prev = node, node = node->next);
-    return prev;
-}
-
-const AstNode* get_parent_scope_with_tag(const AstNode* ast_node, AstNodeTag tag) {
-    AstNode* parent_scope = ast_node->parent_scope;
-    while (parent_scope && parent_scope->tag != tag)
-        parent_scope = parent_scope->parent_scope;
-    return parent_scope;
-}
-
-const AstNode* get_parent_mod_decl(const AstNode* ast_node) {
-    return get_parent_scope_with_tag(ast_node, AST_MOD_DECL);
-}
-
-AstNodeTag assign_expr_to_binary_expr(AstNodeTag tag) {
-    switch (tag) {
-#define f(name, ...) case AST_##name##_ASSIGN_EXPR: return AST_##name##_EXPR;
-        AST_ASSIGN_EXPR_LIST(f)
-#undef f
-        default:
-            return tag;
-    }
-}
-
-const char* get_prim_type_name(AstNodeTag tag) {
-    switch (tag) {
-#define f(name, str) case AST_TYPE_##name: return str;
-        PRIM_TYPE_LIST(f)
-#undef f
-        default:
-            assert(false && "invalid primitive type");
-            return "";
-    }
-}
-
-const char* get_binary_expr_op(AstNodeTag tag) {
-    switch (tag) {
-#define f(name, prec, tok, str, ...) case AST_##name##_EXPR: return str;
-        AST_BINARY_EXPR_LIST(f)
-#undef f
-        default:
-            assert(false && "invalid binary expression");
-            return "";
-    }
-}
-
-const char* get_unary_expr_op(AstNodeTag tag) {
-    switch (tag) {
-#define f(name, tok, str) case AST_##name##_EXPR: return str;
-        AST_UNARY_EXPR_LIST(f)
-#undef f
-        default:
-            assert(false && "invalid unary expression");
-            return "";
-    }
-}
-
-const char* get_assign_expr_op(AstNodeTag tag) {
-    switch (tag) {
-        case AST_ASSIGN_EXPR: return "=";
-#define f(name, prec, tok, str, ...) case AST_##name##_ASSIGN_EXPR: return str"=";
-        AST_ASSIGN_EXPR_LIST(f)
-#undef f
-        default:
-            assert(false && "invalid assignment expression");
-            return "";
-    }
-}
-
-const char* get_binary_expr_fun_name(AstNodeTag tag) {
-    switch (tag) {
-#define f(name, prec, tok, str, op_name) case AST_##name##_EXPR: return op_name;
-        AST_BINARY_EXPR_LIST(f)
-#undef f
-        default:
-            assert(false && "invalid binary expression");
-            return NULL;
-    }
-}
-
-const char* get_decl_keyword(AstNodeTag tag) {
-    switch (tag) {
-        case AST_FUN_DECL:    return "fun";
-        case AST_TYPE_DECL:   return "type";
-        case AST_STRUCT_DECL: return "struct";
-        case AST_ENUM_DECL:   return "enum";
-        case AST_MOD_DECL:    return "mod";
-        case AST_SIG_DECL:    return "sig";
-        case AST_VAR_DECL:    return "var";
-        case AST_CONST_DECL:  return "const";
-        case AST_VAL_DECL:    return "val";
-        default:
-            assert(false && "invalid declaration");
-            return NULL;
-    }
-}
-
-const char* get_decl_name(const AstNode* decl) {
-    switch (decl->tag) {
-        case AST_FUN_DECL:    return decl->fun_decl.name;
-        case AST_TYPE_DECL:   return decl->type_decl.name;
-        case AST_VAL_DECL:    return decl->val_decl.name;
-        case AST_STRUCT_DECL: return decl->struct_decl.name;
-        case AST_ENUM_DECL:   return decl->enum_decl.name;
-        case AST_SIG_DECL:    return decl->sig_decl.name;
-        case AST_MOD_DECL:    return decl->mod_decl.name;
-        default:
-            return NULL;
-    }
-}
-
-int get_max_binary_expr_precedence() {
-    int max = 0;
-#define f(name, prec, ...) max = max < prec ? prec : max;
-    AST_BINARY_EXPR_LIST(f)
-#undef f
-    return max;
-}
-
-int get_binary_expr_precedence(AstNodeTag tag) {
-    switch (tag) {
-#define f(name, prec, ...) case AST_##name##_EXPR: return prec;
-    AST_BINARY_EXPR_LIST(f)
-#undef f
-        default:
-            return INT_MAX;
-    }
-}

@@ -81,7 +81,7 @@ static inline const Type* add_decl_to_parent_sig_or_mod(
     return add_to_parent_sig_or_mod(
         type_table, ast_node, type,
         get_decl_name(ast_node),
-        is_value_decl(ast_node->tag));
+        is_value_decl_tag(ast_node->tag));
 }
 
 static inline void add_idents_to_parent_mod(TypeTable* type_table, AstNode* pattern) {
@@ -793,7 +793,7 @@ static const Type* check_float_literal(TypingContext* context, AstNode* literal,
 static const Type* check_binary_expr(TypingContext* context, AstNode* binary_expr, const Type* expected_type) {
     infer_expr(context, binary_expr->binary_expr.left);
     infer_expr(context, binary_expr->binary_expr.right);
-    if (is_assign_expr(binary_expr->tag))
+    if (is_assign_expr_tag(binary_expr->tag))
         expect_assignable(context, binary_expr->binary_expr.left);
     // TODO
     return NULL;

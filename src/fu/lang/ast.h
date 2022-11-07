@@ -368,17 +368,11 @@ struct AstNode {
     };
 };
 
-void print_ast(FormatState*, const AstNode*);
-
-#ifndef NDEBUG
-void dump_ast(const AstNode*);
-#endif
-
 bool needs_semicolon(AstNodeTag);
-bool is_tuple(AstNodeTag);
-bool is_binary_expr(AstNodeTag);
-bool is_assign_expr(AstNodeTag);
-bool is_value_decl(AstNodeTag);
+bool is_tuple_ast_tag(AstNodeTag);
+bool is_binary_expr_tag(AstNodeTag);
+bool is_assign_expr_tag(AstNodeTag);
+bool is_value_decl_tag(AstNodeTag);
 bool is_assignable_expr(const AstNode*);
 bool is_public_decl(const AstNode*);
 bool is_opaque_decl(const AstNode*);
@@ -399,5 +393,10 @@ const char* get_decl_name(const AstNode*);
 
 int get_max_binary_expr_precedence();
 int get_binary_expr_precedence(AstNodeTag);
+
+void print_ast(FormatState*, const AstNode*);
+#ifndef NDEBUG
+void dump_ast(const AstNode*);
+#endif
 
 #endif

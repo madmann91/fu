@@ -6,46 +6,24 @@
 
 #include "fu/core/log.h"
 
-#define KIND_LIST(f) \
-    f(STAR,   0, "star") \
-    f(SINGLE, 1, "single") \
-    f(ARROW,  2, "arrow")
-
-#define TYPE_LIST(f) \
-    f(INT,        1, "int") \
-    f(FLOAT,      1, "float") \
-    f(NAT,        0, "nat") \
-    f(NORET,      0, "noret") \
-    f(ERR,        0, "err") \
-    f(MEM,        0, "mem") \
-    f(PTR,        0, "ptr") \
-    f(SAFE_PTR,   1, "safe-ptr") \
-    f(ARRAY_TYPE, 1, "array-type") \
-    f(SIGMA,      N, "sigma") \
-    f(PI,         2, "pi")
-
-#define VALUE_LIST(f) \
-    f(PARAM,    1, "param") \
-    f(ARRAY,    N, "array") \
-    f(CONST,    0, "const") \
-    f(TUPLE,    N, "tuple") \
-    f(LAMBDA,   1, "lambda") \
-    f(INSERT,   3, "insert") \
-    f(EXTRACT,  2, "extract") \
-    f(APP,      2, "app") \
-    f(BITCAST,  1, "bitcast") \
-    f(ZERO_EXT, 1, "zero-ext") \
-    f(SIGN_EXT, 1, "sign-ext") \
-    f(START,    1, "start")
-
 #define NODE_LIST(f) \
-    f(FREE_PARAMS, N, "free-params") \
-    f(UNIVERSE,    0, "universe") \
-    f(BOTTOM,      1, "bottom") \
-    f(TOP,         1, "top") \
-    KIND_LIST(f) \
-    TYPE_LIST(f) \
-    VALUE_LIST(f)
+    f(FREE_PARAMS,  N, "free-params") \
+    f(MERGE_PARAMS, 2, "merge-params") \
+    f(UNIVERSE,     0, "universe") \
+    f(STAR,         1, "star") \
+    f(SINGLETON,    1, "singleton") \
+    f(NAT,          0, "nat") \
+    f(INT,          1, "int") \
+    f(FLOAT,        1, "float") \
+    f(CONST,        0, "const") \
+    f(SIGMA,        N, "sigma") \
+    f(PI,           2, "pi") \
+    f(APP,          2, "app") \
+    f(PROJ,         2, "proj") \
+    f(LAMBDA,       1, "lambda") \
+    f(TUPLE,        N, "tuple") \
+    f(PARAM,        1, "param") \
+    f(AXIOM,        0, "axiom")
 
 typedef struct Node Node;
 typedef struct Module Module;
@@ -70,6 +48,7 @@ typedef enum NodeTag {
 
 typedef double FloatVal;
 typedef uintmax_t IntVal;
+typedef size_t Uid;
 
 typedef enum FloatMode {
     FLOAT_MODE_EXACT_INVERSES  = 0x1,
@@ -88,37 +67,41 @@ typedef enum FloatMode {
         FLOAT_MODE_FINITE_ONLY
 } FloatMode;
 
-struct Node {
-    NodeTag tag;
-    bool is_nominal : 1;
-    const Node* free_params;
-    union {
-        FloatMode float_mode;
-        struct{
-            union {
-                IntVal int_val;
-                FloatVal float_val;
-            };
-        } const_;
-        struct {
-            Module* module;
-        } universe;
-    };
-    uint64_t id;
-    const Node* type;
-    const Debug* debug;
-    const User* users;
+#define NODE_CONTENTS \
+    NodeTag tag; \
+    bool is_nominal : 1; \
+    bool is_dead : 1; \
+    unsigned level : 3; \
+    const Node* free_params; \
+    union { \
+        FloatMode float_mode; \
+        struct{ \
+            union { \
+                IntVal int_val; \
+                FloatVal float_val; \
+            }; \
+        } const_; \
+        struct { \
+            Module* module; \
+        } universe; \
+    }; \
+    Uid id; \
+    const Node* type; \
+    const Debug* debug; \
+    const User* users; \
     size_t op_count;
+
+struct Node {
+    NODE_CONTENTS
     const Node* ops[];
 };
 
 Module* get_module(const Node*);
 Node* cast_nominal_node(const Node*);
 
+size_t get_max_op_count(NodeTag);
+size_t get_min_op_count(NodeTag);
 const char* get_node_tag_name(NodeTag);
-bool is_kind_node_tag(NodeTag);
-bool is_type_node_tag(NodeTag);
-bool is_value_node_tag(NodeTag);
 
 bool is_int_const(const Node*);
 bool is_nat_const(const Node*);
@@ -127,15 +110,10 @@ bool is_float_const(const Node*);
 FloatVal get_float_const_value(const Node*);
 IntVal get_int_or_nat_const_value(const Node*);
 
-const Node* get_array_type_or_sigma_elem(const Node*, size_t);
-const Node* get_tuple_or_array_elem(const Node*, size_t);
-
 const Node* get_pi_dom(const Node*);
 const Node* get_pi_codom(const Node*);
-
-const Node* get_insert_or_extract_value(const Node*);
-const Node* get_insert_or_extract_index(const Node*);
-const Node* get_insert_elem(const Node*);
+const Node* get_proj_type(const Node* sigma, size_t);
+const Node* get_app_type(const Node* pi, const Node* arg);
 
 void print_node(FormatState*, const Node*);
 

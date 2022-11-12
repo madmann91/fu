@@ -15,6 +15,42 @@ Node* cast_nominal_node(const Node* node) {
     return (Node*)node;
 }
 
+size_t get_type_level(const Node* node) {
+    size_t level = 3;
+    while (node->type) {
+        assert(level > 0);
+        node = node->type;
+        level--;
+    }
+    return level;
+}
+
+size_t get_min_op_count(NodeTag tag) {
+    switch (tag) {
+#define N 0
+#define node(name, n, str) case NODE_##name: return n;
+        NODE_LIST(node)
+#undef node
+#undef N
+        default:
+            assert(false && "invalid node tag");
+            return 0;
+    }
+}
+
+size_t get_max_op_count(NodeTag tag) {
+    switch (tag) {
+#define N SIZE_MAX
+#define node(name, n, str) case NODE_##name: return n;
+        NODE_LIST(node)
+#undef node
+#undef N
+        default:
+            assert(false && "invalid node tag");
+            return SIZE_MAX;
+    }
+}
+
 const char* get_op_name(NodeTag tag) {
     switch (tag) {
 #define node(name, n, str) case NODE_##name: return str;
@@ -29,24 +65,6 @@ const char* get_op_name(NodeTag tag) {
 bool is_nominal_node(const Node* node) {
     return node->is_nominal;
 }
-
-#define node(name, ...) case NODE_##name:
-#define MAKE_PREDICATE(predicate, list) \
-    bool predicate(NodeTag tag) { \
-        switch (tag) { \
-            list(node) \
-                return true; \
-            default: \
-                return false; \
-        } \
-    }
-
-MAKE_PREDICATE(is_kind_node_tag, KIND_LIST)
-MAKE_PREDICATE(is_type_node_tag, TYPE_LIST)
-MAKE_PREDICATE(is_value_node_tag, VALUE_LIST)
-
-#undef MAKE_PREDICATE
-#undef node
 
 bool is_int_const(const Node* node) {
     return node->tag == NODE_CONST && node->type->tag == NODE_INT;
@@ -74,16 +92,6 @@ IntVal get_int_or_nat_const_value(const Node* node) {
     return node->const_.int_val;
 }
 
-const Node* get_array_type_or_sigma_elem(const Node* node, size_t i) {
-    assert(node->tag == NODE_ARRAY_TYPE || node->tag == NODE_SIGMA);
-    return node->ops[node->tag == NODE_ARRAY_TYPE ? 0 : i];
-}
-
-const Node* get_array_or_tuple_elem(const Node* node, size_t i) {
-    assert(node->tag == NODE_ARRAY || node->tag == NODE_TUPLE);
-    return node->ops[i];
-}
-
 const Node* get_pi_dom(const Node* node) {
     assert(node->tag == NODE_PI);
     return node->ops[0];
@@ -94,19 +102,21 @@ const Node* get_pi_codom(const Node* node) {
     return node->ops[1];
 }
 
-const Node* get_insert_or_extract_value(const Node* node) {
-    assert(node->tag == NODE_INSERT || node->tag == NODE_EXTRACT);
-    return node->ops[0];
+const Node* get_proj_type(const Node* sigma, size_t index) {
+    assert(sigma->type->tag == NODE_SIGMA);
+    assert(index < sigma->op_count);
+    if (!sigma->is_nominal)
+        return sigma->ops[index];
+    assert(false && "todo"); // TODO
+    return NULL;
 }
 
-const Node* get_insert_or_extract_index(const Node* node) {
-    assert(node->tag == NODE_INSERT || node->tag == NODE_EXTRACT);
-    return node->ops[1];
-}
-
-const Node* get_insert_elem(const Node* node) {
-    assert(node->tag == NODE_INSERT);
-    return node->ops[2];
+const Node* get_app_type(const Node* pi, const Node* arg) {
+    assert(arg->type == get_pi_dom(pi));
+    if (!pi->is_nominal)
+        return get_pi_codom(pi);
+    assert(false && "todo"); // TODO
+    return NULL;
 }
 
 static void print_unique_node_name(FormatState* state, const Node* node) {

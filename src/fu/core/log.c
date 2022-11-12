@@ -20,6 +20,20 @@ typedef struct {
     FILE* file;
 } FileEntry;
 
+HashCode hash_file_pos(HashCode hash, const FilePos* file_pos) {
+    hash = hash_uint64(hash, file_pos->row);
+    hash = hash_uint64(hash, file_pos->col);
+    hash = hash_uint64(hash, file_pos->byte_offset);
+    return hash;
+}
+
+HashCode hash_file_loc(HashCode hash, const FileLoc* file_loc) {
+    hash = hash_str(hash, file_loc->file_name);
+    hash = hash_file_pos(hash, &file_loc->begin);
+    hash = hash_file_pos(hash, &file_loc->end);
+    return hash;
+}
+
 Log new_log(FormatState* state) {
     return (Log) {
         .file_cache = new_hash_table(sizeof(FileEntry)),

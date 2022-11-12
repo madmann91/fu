@@ -1,6 +1,7 @@
 #include "fu/ir/module.h"
 #include "fu/core/hash_table.h"
 #include "fu/core/mem_pool.h"
+#include "fu/core/str_pool.h"
 #include "fu/core/alloc.h"
 
 #include <assert.h>
@@ -17,6 +18,9 @@ static_assert(
 
 struct Module {
     HashTable nodes;
+    HashTable debug_info;
+    MemPool mem_pool;
+    StrPool str_pool;
     size_t node_count;
     const Node* universe;
     const Node* star;
@@ -41,6 +45,13 @@ static void free_node(Module* module, const Node* node) {
     free((void*)node);
 }
 
+static inline HashCode hash_debug_info(HashCode hash, const DebugInfo* debug_info) {
+    hash = hash_ptr(hash, debug_info->user_data);
+    hash = hash_ptr(hash, debug_info->name);
+    hash = hash_file_loc(hash, &debug_info->file_loc);
+    return hash;
+}
+
 static inline HashCode hash_node(HashCode hash, const Node* node) {
     hash = hash_uint16(hash, node->tag);
     hash = hash_uint64(hash, node->op_count);
@@ -48,6 +59,10 @@ static inline HashCode hash_node(HashCode hash, const Node* node) {
     for (size_t i = 0; i < node->op_count; ++i)
         hash = hash_uint64(hash, node->ops[i]->id);
     return hash;
+}
+
+static inline bool compare_debug_info(const void* left, const void* right) {
+    return !memcmp(left, right, sizeof(DebugInfo));
 }
 
 static bool compare_node_pairs(const void* left, const void* right) {
@@ -70,11 +85,16 @@ static const Node* get_or_insert_node(Module* module, const Node* node) {
     for (size_t i = 0; i < node->op_count; ++i)
         assert(get_module(node->ops[i]) == module);
 #endif
+    // Perform hash consing: return an existing node if there is one, otherwise create a new one
     HashCode hash = hash_node(hash_init(), node); 
     const NodePair* found_pair = find_in_hash_table(
         &module->nodes, &(NodePair) { .from = node }, hash, sizeof(NodePair), compare_node_pairs);
-    if (found_pair)
+    if (found_pair) {
+        // Add the debug information if the existing node does not have one
+        if (node->debug_info && !found_pair->to->debug_info)
+            ((Node*)found_pair->to)->debug_info = node->debug_info;
         return found_pair->to;
+    }
 
     Node* new_node = alloc_node(module, node->op_count);
     memcpy(new_node, node, sizeof(Node) + node->op_count * sizeof(Node*));
@@ -98,7 +118,7 @@ static const Node* get_or_insert_node_from_args(
     const Node* type,
     size_t op_count,
     const Node** ops,
-    const Debug* debug)
+    const DebugInfo* debug_info)
 {
     SmallNode small_node;
     bool use_alloc = op_count > SMALL_NODE_SIZE;
@@ -109,7 +129,7 @@ static const Node* get_or_insert_node_from_args(
         .tag = node_tag,
         .type = type,
         .op_count = op_count,
-        .debug = debug
+        .debug_info = debug_info
     };
     memcpy(node->ops, ops, sizeof(Node*) * op_count);
     const Node* inserted_node = get_or_insert_node(module, node);
@@ -121,8 +141,12 @@ static const Node* get_or_insert_node_from_args(
 Module* new_module() {
     Module* module = malloc_or_die(sizeof(Module));
     module->nodes = new_hash_table(sizeof(NodePair));
+    module->debug_info = new_hash_table(sizeof(DebugInfo));
+    module->mem_pool = new_mem_pool();
+    module->str_pool = new_str_pool(&module->mem_pool);
     module->universe = get_or_insert_node(module, &(Node) { .tag = NODE_UNIVERSE, .universe.module = module });
     module->star = get_or_insert_node(module, &(Node) { .tag = NODE_STAR, .type = module->universe });
+    module->empty_params = get_or_insert_node(module, &(Node) { .tag = NODE_FREE_PARAMS, .type = module->universe });
     return module;
 }
 
@@ -135,9 +159,49 @@ static void free_nodes(Module* module) {
 }
 
 void free_module(Module* module) {
+    free_str_pool(&module->str_pool);
+    free_mem_pool(&module->mem_pool);
     free_nodes(module);
     free_hash_table(&module->nodes);
     free(module);
+}
+
+static const DebugInfo* get_or_insert_debug_info(Module* module, const DebugInfo* debug_info) {
+    HashCode hash = hash_debug_info(hash_init(), debug_info); 
+    const DebugInfo* found_debug_info = find_in_hash_table(
+        &module->debug_info, debug_info, hash, sizeof(DebugInfo), compare_debug_info);
+    if (found_debug_info)
+        return found_debug_info;
+
+    DebugInfo* new_debug_info = alloc_from_mem_pool(&module->mem_pool, sizeof(DebugInfo));
+    memcpy(new_debug_info, debug_info, sizeof(DebugInfo));
+    bool status = insert_in_hash_table(&module->debug_info, debug_info,
+        hash, sizeof(DebugInfo), compare_debug_info);
+    if (!status)
+    {
+        assert(false &&
+            "error inserting debug information in the module"
+            "hash function or comparison function might be incorrect");
+    }
+    return new_debug_info;
+}
+
+const DebugInfo* make_debug_info(
+    Module* module,
+    const char* name,
+    void* user_data,
+    const FileLoc* file_loc)
+{
+    return get_or_insert_debug_info(module, &(DebugInfo) {
+        .name = make_str(&module->str_pool, name),
+        .user_data = user_data,
+        .file_loc = {
+            .file_name = file_loc->file_name
+                ? make_str(&module->str_pool, file_loc->file_name) : NULL,
+            .begin = file_loc->begin,
+            .end = file_loc->end
+        }
+    });
 }
 
 const Node* make_empty_free_params(Module* module) {
@@ -171,6 +235,9 @@ const Node* make_free_params(Module* module, const Node** params, size_t param_c
 }
 
 const Node* merge_free_params(const Node* left, const Node* right) {
+    // Note: Thanks to the design of the module, this operation is memoized. This means that if the
+    // merge is requested a second time, the result is already available by in the module, and
+    // nothing is recomputed. The actual merging operation is implemented as a simplification rule.
     assert(left->tag  == NODE_FREE_PARAMS);
     assert(right->tag == NODE_FREE_PARAMS);
     Module* module = get_module(left);
@@ -203,18 +270,23 @@ Node* make_lambda(const Node* type) {
     return make_nominal_node(NODE_LAMBDA, type, 1);
 }
 
-const Node* make_param(Node* node, const Debug* debug) {
+const Node* make_param(Node* node, const DebugInfo* debug_info) {
     assert(node->is_nominal);
     const Node* type =
         node->tag == NODE_PI    ? get_pi_dom(node) :
         node->tag == NODE_SIGMA ? node :
         get_pi_dom(node->type);
     return get_or_insert_node_from_args(get_module(node),
-        NODE_PARAM, type, 1, (const Node*[]) { node }, debug);
+        NODE_PARAM, type, 1, (const Node*[]) { node }, debug_info);
 }
 
 const Node* make_star (Module* module) {
     return module->star;
+}
+
+const Node* make_singleton(const Node* node) {
+    return get_or_insert_node_from_args(get_module(node), NODE_SINGLETON,
+        node->type, 1, &node, NULL);
 }
 
 const Node* make_nat_const(Module* module, IntVal int_val) {
@@ -253,25 +325,29 @@ const Node* make_float(Module* module, size_t bitwidth) {
         make_star(module), 1, (const Node*[]) { make_nat_const(module, bitwidth) }, NULL);
 }
 
-const Node* make_proj(const Node* tuple, size_t index, const Debug* debug) {
+const Node* make_proj(const Node* tuple, size_t index, const DebugInfo* debug_info) {
     Module* module = get_module(tuple);
     return get_or_insert_node_from_args(module, NODE_PROJ,
         get_proj_type(tuple->type, index), 2,
-        (const Node*[]) { tuple, make_nat_const(module, index) }, debug);
+        (const Node*[]) { tuple, make_nat_const(module, index) }, debug_info);
 }
 
-const Node* make_app(const Node* applied, const Node* arg, const Debug* debug) {
+const Node* make_app(const Node* applied, const Node* arg, const DebugInfo* debug_info) {
     return get_or_insert_node_from_args(get_module(applied), NODE_APP,
         get_app_type(applied->type, arg), 2,
-        (const Node*[]) { applied, arg }, debug);
+        (const Node*[]) { applied, arg }, debug_info);
 }
 
-const Node* make_pi(const Node* dom, const Node* codom, const Debug* debug) {
+const Node* make_pi(const Node* dom, const Node* codom, const DebugInfo* debug_info) {
     return get_or_insert_node_from_args(get_module(dom), NODE_PI,
-        codom->type, 2, (const Node*[]) { dom, codom }, debug);
+        codom->type, 2, (const Node*[]) { dom, codom }, debug_info);
 }
 
-const Node* make_sigma(const Node** elems, size_t elem_count, const Debug* debug) {
+const Node* make_empty_sigma(Module* module, const Node* type, const DebugInfo* debug_info) {
+    return get_or_insert_node_from_args(module, NODE_SIGMA, type, 0, NULL, debug_info);
+}
+
+const Node* make_sigma(const Node** elems, size_t elem_count, const DebugInfo* debug_info) {
     assert(elem_count > 0);
     const Node* type = elems[0]->type;
     for (size_t i = 1; i < elem_count; ++i) {
@@ -279,5 +355,11 @@ const Node* make_sigma(const Node** elems, size_t elem_count, const Debug* debug
             type = elems[i]->type;
     }
     return get_or_insert_node_from_args(get_module(elems[0]), NODE_SIGMA,
-        type, elem_count, elems, debug);
+        type, elem_count, elems, debug_info);
+}
+
+const Node* make_tuple(const Node* type, const Node** elems, size_t elem_count, const DebugInfo* debug_info) {
+    assert(type->tag == NODE_SIGMA);
+    return get_or_insert_node_from_args(get_module(type), NODE_TUPLE,
+        type, elem_count, elems, debug_info);
 }

@@ -28,11 +28,11 @@
 typedef struct Node Node;
 typedef struct Module Module;
 
-typedef struct Debug {
+typedef struct DebugInfo {
     const char* name;
-    void* meta_data;
+    void* user_data;
     FileLoc file_loc;
-} Debug;
+} DebugInfo;
 
 typedef struct User {
     const Node* node;
@@ -87,7 +87,7 @@ typedef enum FloatMode {
     }; \
     Uid id; \
     const Node* type; \
-    const Debug* debug; \
+    const DebugInfo* debug_info; \
     const User* users; \
     size_t op_count;
 

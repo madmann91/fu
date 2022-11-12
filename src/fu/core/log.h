@@ -30,6 +30,9 @@ typedef struct Log {
     bool show_diagnostics;
 } Log;
 
+HashCode hash_file_pos(HashCode, const FilePos*);
+HashCode hash_file_loc(HashCode, const FileLoc*);
+
 Log new_log(FormatState*);
 void free_log(Log*);
 

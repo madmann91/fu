@@ -1,13 +1,15 @@
 #include "fu/ir/node.h"
 #include "fu/ir/module.h"
+#include "fu/core/utils.h"
 
 #include <assert.h>
+#include <string.h>
 
 Module* get_module(const Node* node) {
     while (node->type)
         node = node->type;
     assert(node->tag == NODE_UNIVERSE);
-    return node->universe.module;
+    return node->data.module;
 }
 
 Node* cast_nominal_node(const Node* node) {
@@ -84,12 +86,25 @@ bool is_float_const(const Node* node) {
 
 FloatVal get_float_const_value(const Node* node) {
     assert(is_float_const(node));
-    return node->const_.float_val;
+    return node->data.float_val;
 }
 
 IntVal get_int_or_nat_const_value(const Node* node) {
     assert(is_int_or_nat_const(node));
-    return node->const_.int_val;
+    return node->data.int_val;
+}
+
+const char* get_label_name(const Node* node) {
+    assert(node->tag == NODE_LABEL);
+    return node->data.label;
+}
+
+size_t find_label(const Node** labels, size_t count, const char* label) {
+    for (size_t i = 0; i < count; ++i) {
+        if (!strcmp(label, get_label_name(labels[i])))
+            return i;
+    }
+    return SIZE_MAX;
 }
 
 const Node* get_pi_dom(const Node* node) {
@@ -121,7 +136,7 @@ const Node* get_app_type(const Node* pi, const Node* arg) {
 
 static void print_unique_node_name(FormatState* state, const Node* node) {
     format(state, "{s}~{u64}", (FormatArg[]) {
-        { .s = get_node_tag_name(node->tag) },
+        { .s = get_op_name(node->tag) },
         { .u64 = node->id }
     });
 }
@@ -134,7 +149,7 @@ void print_node(FormatState* state, const Node* node) {
             format(state, "{u64}", (FormatArg[]) { { .u64 = get_int_or_nat_const_value(node) } });
         else
             format(state, "{f64}", (FormatArg[]) { { .f64 = get_float_const_value(node) } });
-    } else {
+    } else if (node->op_count > 0) {
         format(state, "(", NULL);
         for (size_t i = 0, n = node->op_count; i < n; ++i) {
             print_unique_node_name(state, node->ops[i]);

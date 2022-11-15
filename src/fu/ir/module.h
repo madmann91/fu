@@ -26,6 +26,7 @@ Node* make_lambda(const Node*);
 //================================ STRUCTURAL NODES =====================================
 
 const Node* make_param(Node*, const DebugInfo*);
+const Node* make_label(const Node*, const char*, const DebugInfo*);
 
 const Node* make_star(Module*);
 const Node* make_singleton(const Node*);

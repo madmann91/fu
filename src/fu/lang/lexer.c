@@ -2,6 +2,7 @@
 #include "fu/lang/token.h"
 #include "fu/core/hash.h"
 #include "fu/core/utils.h"
+#include "fu/core/log.h"
 
 #include <assert.h>
 #include <ctype.h>

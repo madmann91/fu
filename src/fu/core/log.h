@@ -11,16 +11,6 @@
  * It also caches source files, so as to print error diagnostics efficiently.
  */
 
-typedef struct {
-    uint32_t row, col;
-    size_t byte_offset;
-} FilePos;
-
-typedef struct {
-    const char* file_name;
-    FilePos begin, end;
-} FileLoc;
-
 typedef struct Log {
     HashTable file_cache;
     FormatState* state;
@@ -30,8 +20,7 @@ typedef struct Log {
     bool show_diagnostics;
 } Log;
 
-HashCode hash_file_pos(HashCode, const FilePos*);
-HashCode hash_file_loc(HashCode, const FileLoc*);
+typedef struct FileLoc FileLoc;
 
 Log new_log(FormatState*);
 void free_log(Log*);

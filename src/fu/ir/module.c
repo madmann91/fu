@@ -3,6 +3,7 @@
 #include "fu/core/mem_pool.h"
 #include "fu/core/str_pool.h"
 #include "fu/core/alloc.h"
+#include "fu/core/file_loc.h"
 
 #include <assert.h>
 #include <string.h>
@@ -21,9 +22,9 @@ struct Module {
     HashTable debug_info;
     MemPool mem_pool;
     StrPool str_pool;
-    size_t node_count;
     const Node* universe;
     const Node* star;
+    const Node* nat;
     const Node* empty_params;
 };
 
@@ -47,31 +48,67 @@ static void free_node(Module* module, const Node* node) {
 
 static inline HashCode hash_debug_info(HashCode hash, const DebugInfo* debug_info) {
     hash = hash_ptr(hash, debug_info->user_data);
-    hash = hash_ptr(hash, debug_info->name);
+    hash = hash_str(hash, debug_info->name);
     hash = hash_file_loc(hash, &debug_info->file_loc);
+    return hash;
+}
+
+static inline bool hash_node_data(HashCode hash, const Node* node) {
+    if (is_int_or_nat_const(node))
+        return hash_raw_bytes(hash, &node->data.int_val, sizeof(IntVal));
+    else if (is_float_const(node))
+        return hash_raw_bytes(hash, &node->data.float_val, sizeof(FloatVal));
+    else if (node->tag == NODE_LABEL)
+        return hash_str(hash, node->data.label);
     return hash;
 }
 
 static inline HashCode hash_node(HashCode hash, const Node* node) {
     hash = hash_uint16(hash, node->tag);
     hash = hash_uint64(hash, node->op_count);
-    hash = hash_uint64(hash, node->type->id);
+    if (node->type)
+        hash = hash_uint64(hash, node->type->id);
+    hash = hash_node_data(hash, node);
     for (size_t i = 0; i < node->op_count; ++i)
         hash = hash_uint64(hash, node->ops[i]->id);
     return hash;
 }
 
+static inline HashCode hash_nominal_node(HashCode hash, const Node* node) {
+    hash = hash_uint16(hash, node->tag);
+    hash = hash_uint64(hash, node->id);
+    return hash;
+}
+
 static inline bool compare_debug_info(const void* left, const void* right) {
-    return !memcmp(left, right, sizeof(DebugInfo));
+    const DebugInfo* left_debug_info  = left;
+    const DebugInfo* right_debug_info = right;
+    return
+        left_debug_info->name      == right_debug_info->name &&
+        left_debug_info->user_data == right_debug_info->user_data &&
+        compare_file_loc(&left_debug_info->file_loc, &right_debug_info->file_loc);
+}
+
+static inline bool compare_node_data(const Node* node, const NodeData* left, const NodeData* right) {
+    if (is_int_or_nat_const(node))
+        return left->int_val == right->int_val;
+    else if (is_float_const(node))
+        return left->float_val == right->float_val;
+    else if (node->tag == NODE_LABEL)
+        return left->label == right->label;
+    return true;
 }
 
 static bool compare_node_pairs(const void* left, const void* right) {
-    const Node* left_node  = left;
-    const Node* right_node = right;
+    const Node* left_node  = ((const NodePair*)left)->from;
+    const Node* right_node = ((const NodePair*)right)->from;
+    if (left_node->is_nominal || right_node->is_nominal)
+        return left == right;
     return
         left_node->tag      == right_node->tag &&
         left_node->op_count == right_node->op_count &&
         left_node->type     == right_node->type &&
+        compare_node_data(left_node, &left_node->data, &right_node->data) &&
         !memcmp(left_node->ops, right_node->ops, left_node->op_count * sizeof(Node*));
 }
 
@@ -98,18 +135,18 @@ static const Node* get_or_insert_node(Module* module, const Node* node) {
 
     Node* new_node = alloc_node(module, node->op_count);
     memcpy(new_node, node, sizeof(Node) + node->op_count * sizeof(Node*));
-    new_node->id = module->node_count++;
+    new_node->id = module->nodes.size;
     new_node->level = node->type ? node->type->level - 1 : MAX_NODE_LEVEL;
+    const Node* simplified_node = simplify_node(new_node);
     bool status = insert_in_hash_table(&module->nodes,
-        &(NodePair) { .from = new_node, .to = simplify_node(new_node) },
+        &(NodePair) { .from = new_node, .to = simplified_node },
         hash, sizeof(NodePair), compare_node_pairs);
-    if (!status)
-    {
+    if (!status) {
         assert(false &&
             "error inserting node in the module"
             "hash function or comparison function might be incorrect");
     }
-    return new_node;
+    return simplified_node;
 }
 
 static const Node* get_or_insert_node_from_args(
@@ -144,8 +181,9 @@ Module* new_module() {
     module->debug_info = new_hash_table(sizeof(DebugInfo));
     module->mem_pool = new_mem_pool();
     module->str_pool = new_str_pool(&module->mem_pool);
-    module->universe = get_or_insert_node(module, &(Node) { .tag = NODE_UNIVERSE, .universe.module = module });
+    module->universe = get_or_insert_node(module, &(Node) { .tag = NODE_UNIVERSE, .data.module = module });
     module->star = get_or_insert_node(module, &(Node) { .tag = NODE_STAR, .type = module->universe });
+    module->nat = get_or_insert_node(module, &(Node) { .tag = NODE_NAT, .type = module->star });
     module->empty_params = get_or_insert_node(module, &(Node) { .tag = NODE_FREE_PARAMS, .type = module->universe });
     return module;
 }
@@ -159,9 +197,10 @@ static void free_nodes(Module* module) {
 }
 
 void free_module(Module* module) {
+    free_nodes(module);
     free_str_pool(&module->str_pool);
     free_mem_pool(&module->mem_pool);
-    free_nodes(module);
+    free_hash_table(&module->debug_info);
     free_hash_table(&module->nodes);
     free(module);
 }
@@ -177,8 +216,7 @@ static const DebugInfo* get_or_insert_debug_info(Module* module, const DebugInfo
     memcpy(new_debug_info, debug_info, sizeof(DebugInfo));
     bool status = insert_in_hash_table(&module->debug_info, debug_info,
         hash, sizeof(DebugInfo), compare_debug_info);
-    if (!status)
-    {
+    if (!status) {
         assert(false &&
             "error inserting debug information in the module"
             "hash function or comparison function might be incorrect");
@@ -241,6 +279,13 @@ const Node* merge_free_params(const Node* left, const Node* right) {
     assert(left->tag  == NODE_FREE_PARAMS);
     assert(right->tag == NODE_FREE_PARAMS);
     Module* module = get_module(left);
+    // Merging is symmetric, so we can normalize arguments in order to have a unique
+    // representative for `merge(a,b)` and `merge(b,a)`.
+    if (left->id > right->id) {
+        const Node* tmp = right;
+        right = left;
+        left = tmp;
+    }
     return get_or_insert_node_from_args(module, NODE_MERGE_PARAMS,
         module->universe, 2, (const Node*[]) { left, right }, NULL);
 }
@@ -249,11 +294,21 @@ static Node* make_nominal_node(NodeTag tag, const Node* type, size_t op_count) {
     Module* module = get_module(type);
     Node* node = alloc_node(module, op_count);
     node->tag = tag;
+    node->type = type;
     node->is_nominal = true;
     node->level = type->level - 1;
-    node->id = module->node_count++;
+    node->id = module->nodes.size;
     node->op_count = op_count;
     memset(node->ops, 0, sizeof(Node*) * op_count);
+    bool status = insert_in_hash_table(&module->nodes,
+        &(NodePair) { .from = node, .to = node },
+        hash_nominal_node(hash_init(), node),
+        sizeof(NodePair), compare_node_pairs);
+    if (!status) {
+        assert(false &&
+            "error inserting nominal node in the module"
+            "hash function or comparison function might be incorrect");
+    }
     return node;
 }
 
@@ -280,8 +335,22 @@ const Node* make_param(Node* node, const DebugInfo* debug_info) {
         NODE_PARAM, type, 1, (const Node*[]) { node }, debug_info);
 }
 
-const Node* make_star (Module* module) {
+const Node* make_label(const Node* type, const char* label, const DebugInfo* debug_info) {
+    Module* module = get_module(type);
+    return get_or_insert_node(module, &(Node) {
+        .tag = NODE_LABEL,
+        .type = type,
+        .data.label = make_str(&module->str_pool, label),
+        .debug_info = debug_info
+    });
+}
+
+const Node* make_star(Module* module) {
     return module->star;
+}
+
+const Node* make_nat(Module* module) {
+    return module->nat;
 }
 
 const Node* make_singleton(const Node* node) {
@@ -293,7 +362,7 @@ const Node* make_nat_const(Module* module, IntVal int_val) {
     return get_or_insert_node(module, &(Node) {
         .tag = NODE_CONST,
         .type = make_nat(module),
-        .const_.int_val = int_val
+        .data.int_val = int_val
     });
 }
 
@@ -302,7 +371,7 @@ const Node* make_int_const(const Node* type, IntVal int_val) {
     return get_or_insert_node(get_module(type), &(Node) {
         .tag = NODE_CONST,
         .type = type,
-        .const_.int_val = int_val
+        .data.int_val = int_val
     });
 }
 
@@ -311,7 +380,7 @@ const Node* make_float_const(const Node* type, FloatVal float_val) {
     return get_or_insert_node(get_module(type), &(Node) {
         .tag = NODE_CONST,
         .type = type,
-        .const_.float_val = float_val
+        .data.float_val = float_val
     });
 }
 

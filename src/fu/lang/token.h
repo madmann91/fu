@@ -1,7 +1,7 @@
 #ifndef FU_LANG_TOKEN_H
 #define FU_LANG_TOKEN_H
 
-#include "fu/core/log.h"
+#include "fu/core/file_loc.h"
 #include "fu/lang/types.h"
 
 #define SYMBOL_LIST(f) \

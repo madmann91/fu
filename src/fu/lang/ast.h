@@ -2,7 +2,7 @@
 #define FU_LANG_AST_H
 
 #include "fu/core/format.h"
-#include "fu/core/log.h"
+#include "fu/core/file_loc.h"
 #include "fu/lang/types.h"
 
 #define AST_ARITH_EXPR_LIST(f) \

@@ -4,13 +4,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "fu/core/log.h"
+#include "fu/core/file_loc.h"
+#include "fu/core/format.h"
 
 #define NODE_LIST(f) \
     f(FREE_PARAMS,  N, "free-params") \
     f(MERGE_PARAMS, 2, "merge-params") \
+    f(LABEL,        0, "label") \
     f(UNIVERSE,     0, "universe") \
-    f(STAR,         1, "star") \
+    f(STAR,         0, "star") \
     f(SINGLETON,    1, "singleton") \
     f(NAT,          0, "nat") \
     f(INT,          1, "int") \
@@ -67,24 +69,21 @@ typedef enum FloatMode {
         FLOAT_MODE_FINITE_ONLY
 } FloatMode;
 
+typedef union {
+    FloatMode float_mode;
+    const char* label;
+    IntVal int_val;
+    FloatVal float_val;
+    Module* module;
+} NodeData;
+
 #define NODE_CONTENTS \
     NodeTag tag; \
     bool is_nominal : 1; \
     bool is_dead : 1; \
     unsigned level : 3; \
     const Node* free_params; \
-    union { \
-        FloatMode float_mode; \
-        struct{ \
-            union { \
-                IntVal int_val; \
-                FloatVal float_val; \
-            }; \
-        } const_; \
-        struct { \
-            Module* module; \
-        } universe; \
-    }; \
+    NodeData data; \
     Uid id; \
     const Node* type; \
     const DebugInfo* debug_info; \
@@ -101,7 +100,7 @@ Node* cast_nominal_node(const Node*);
 
 size_t get_max_op_count(NodeTag);
 size_t get_min_op_count(NodeTag);
-const char* get_node_tag_name(NodeTag);
+const char* get_op_name(NodeTag);
 
 bool is_int_const(const Node*);
 bool is_nat_const(const Node*);
@@ -109,6 +108,9 @@ bool is_int_or_nat_const(const Node*);
 bool is_float_const(const Node*);
 FloatVal get_float_const_value(const Node*);
 IntVal get_int_or_nat_const_value(const Node*);
+const char* get_label_name(const Node*);
+
+size_t find_label(const Node**, size_t, const char*);
 
 const Node* get_pi_dom(const Node*);
 const Node* get_pi_codom(const Node*);

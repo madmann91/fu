@@ -5,6 +5,7 @@
 #include "fu/core/mem_pool.h"
 #include "fu/core/dyn_array.h"
 #include "fu/core/utils.h"
+#include "fu/core/log.h"
 
 #include <assert.h>
 #include <stdlib.h>

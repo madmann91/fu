@@ -21,6 +21,7 @@ const Node* merge_free_params(const Node*, const Node*);
 
 Node* make_nominal_pi(const Node*);
 Node* make_nominal_sigma(const Node*, size_t);
+Node* make_nominal_variant(const Node*, size_t);
 Node* make_lambda(const Node*);
 
 //================================ STRUCTURAL NODES =====================================
@@ -42,8 +43,9 @@ const Node* make_proj(const Node*, size_t, const DebugInfo*);
 const Node* make_app(const Node*, const Node*, const DebugInfo*);
 
 const Node* make_pi(const Node* dom, const Node* codom, const DebugInfo*);
-const Node* make_empty_sigma(Module*, const Node*, const DebugInfo*);
+const Node* make_empty_sigma(const Node*, const DebugInfo*);
 const Node* make_sigma(const Node**, size_t, const DebugInfo*);
+const Node* make_variant(const Node**, size_t, const DebugInfo*);
 
 const Node* make_tuple(const Node*, const Node**, size_t, const DebugInfo*);
 

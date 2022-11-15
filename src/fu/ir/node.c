@@ -17,16 +17,6 @@ Node* cast_nominal_node(const Node* node) {
     return (Node*)node;
 }
 
-size_t get_type_level(const Node* node) {
-    size_t level = 3;
-    while (node->type) {
-        assert(level > 0);
-        node = node->type;
-        level--;
-    }
-    return level;
-}
-
 size_t get_min_op_count(NodeTag tag) {
     switch (tag) {
 #define N 0
@@ -99,7 +89,7 @@ const char* get_label_name(const Node* node) {
     return node->data.label;
 }
 
-size_t find_label(const Node** labels, size_t count, const char* label) {
+size_t find_label_index(const Node** labels, size_t count, const char* label) {
     for (size_t i = 0; i < count; ++i) {
         if (!strcmp(label, get_label_name(labels[i])))
             return i;

@@ -19,6 +19,7 @@
     f(FLOAT,        1, "float") \
     f(CONST,        0, "const") \
     f(SIGMA,        N, "sigma") \
+    f(VARIANT,      N, "variant") \
     f(PI,           2, "pi") \
     f(APP,          2, "app") \
     f(PROJ,         2, "proj") \
@@ -110,7 +111,7 @@ FloatVal get_float_const_value(const Node*);
 IntVal get_int_or_nat_const_value(const Node*);
 const char* get_label_name(const Node*);
 
-size_t find_label(const Node**, size_t, const char*);
+size_t find_label_index(const Node**, size_t, const char*);
 
 const Node* get_pi_dom(const Node*);
 const Node* get_pi_codom(const Node*);

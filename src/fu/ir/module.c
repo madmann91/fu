@@ -320,6 +320,10 @@ Node* make_nominal_sigma(const Node* type, size_t op_count) {
     return make_nominal_node(NODE_SIGMA, type, op_count);
 }
 
+Node* make_nominal_variant(const Node* type, size_t op_count) {
+    return make_nominal_node(NODE_VARIANT, type, op_count);
+}
+
 Node* make_lambda(const Node* type) {
     assert(type->tag == NODE_PI);
     return make_nominal_node(NODE_LAMBDA, type, 1);
@@ -412,19 +416,32 @@ const Node* make_pi(const Node* dom, const Node* codom, const DebugInfo* debug_i
         codom->type, 2, (const Node*[]) { dom, codom }, debug_info);
 }
 
-const Node* make_empty_sigma(Module* module, const Node* type, const DebugInfo* debug_info) {
-    return get_or_insert_node_from_args(module, NODE_SIGMA, type, 0, NULL, debug_info);
+const Node* make_empty_sigma(const Node* type, const DebugInfo* debug_info) {
+    return get_or_insert_node_from_args(get_module(type), NODE_SIGMA, type, 0, NULL, debug_info);
 }
 
-const Node* make_sigma(const Node** elems, size_t elem_count, const DebugInfo* debug_info) {
+static const Node* make_sigma_or_variant(
+    NodeTag node_tag,
+    const Node** elems,
+    size_t elem_count,
+    const DebugInfo* debug_info)
+{
     assert(elem_count > 0);
     const Node* type = elems[0]->type;
     for (size_t i = 1; i < elem_count; ++i) {
         if (type->level < elems[i]->type->level)
             type = elems[i]->type;
     }
-    return get_or_insert_node_from_args(get_module(elems[0]), NODE_SIGMA,
+    return get_or_insert_node_from_args(get_module(elems[0]), node_tag,
         type, elem_count, elems, debug_info);
+}
+
+const Node* make_sigma(const Node** elems, size_t elem_count, const DebugInfo* debug_info) {
+    return make_sigma_or_variant(NODE_SIGMA, elems, elem_count, debug_info);
+}
+
+const Node* make_variant(const Node** options, size_t option_count, const DebugInfo* debug_info) {
+    return make_sigma_or_variant(NODE_VARIANT, options, option_count, debug_info);
 }
 
 const Node* make_tuple(const Node* type, const Node** elems, size_t elem_count, const DebugInfo* debug_info) {

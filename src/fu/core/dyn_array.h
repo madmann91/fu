@@ -24,6 +24,7 @@ DynArray new_dyn_array(size_t elem_size);
 DynArray new_dyn_array_with_size(size_t elem_size, size_t size);
 DynArray new_dyn_array_from_data_explicit(void*, size_t, size_t);
 void push_on_dyn_array_explicit(DynArray*, const void*, size_t);
+const void* pop_from_dyn_array(DynArray*);
 void resize_dyn_array(DynArray*, size_t);
 void clear_dyn_array(DynArray*);
 void free_dyn_array(DynArray*);

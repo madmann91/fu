@@ -45,7 +45,12 @@ void push_on_dyn_array_explicit(DynArray* array, const void* elem, size_t elem_s
     array->size++;
 }
 
-void resize_dyn_array_explicit(DynArray* array, size_t size) {
+const void* pop_from_dyn_array(DynArray* array) {
+    assert(array->size > 0);
+    return (char*)array->elems + array->elem_size * --array->size;
+}
+
+void resize_dyn_array(DynArray* array, size_t size) {
     if (size > array->capacity)
         grow_dyn_array(array, size);
     array->size = size;

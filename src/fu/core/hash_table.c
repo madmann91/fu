@@ -78,19 +78,24 @@ static inline void rehash_table(HashTable* hash_table, size_t elem_size) {
     hash_table->capacity = new_capacity;
 }
 
-bool insert_in_hash_table(
+static bool insert_or_replace_in_hash_table(
     HashTable* hash_table,
     const void* elem,
     HashCode hash,
     size_t elem_size,
-    bool (*compare)(const void*, const void*))
+    CompareFn compare_fn,
+    bool should_replace)
 {
     hash |= OCCUPIED_MASK;
     size_t index = mod_prime(hash, hash_table->capacity);
     while (is_bucket_occupied(hash_table, index)) {
         if (hash_table->hashes[index] == hash &&
-            compare(elem_at(hash_table->elems, elem_size, index), elem))
+            compare_fn(elem_at(hash_table->elems, elem_size, index), elem))
+        {
+            if (should_replace)
+                memcpy(elem_at(hash_table->elems, elem_size, index), elem, elem_size);
             return false;
+        }
         index = increment_wrap(hash_table->capacity, index);
     }
     memcpy(elem_at(hash_table->elems, elem_size, index), elem, elem_size);
@@ -101,18 +106,38 @@ bool insert_in_hash_table(
     return true;
 }
 
+bool insert_in_hash_table(
+    HashTable* hash_table,
+    const void* elem,
+    HashCode hash,
+    size_t elem_size,
+    CompareFn compare_fn)
+{
+    return insert_or_replace_in_hash_table(hash_table, elem, hash, elem_size, compare_fn, false);
+}
+
+bool replace_in_hash_table(
+    HashTable* hash_table,
+    const void* elem,
+    HashCode hash,
+    size_t elem_size,
+    CompareFn compare_fn)
+{
+    return insert_or_replace_in_hash_table(hash_table, elem, hash, elem_size, compare_fn, true);
+}
+
 void* find_in_hash_table(
     const HashTable* hash_table,
     const void* elem,
     HashCode hash,
     size_t elem_size,
-    bool (*compare)(const void*, const void*))
+    CompareFn compare_fn)
 {
     hash |= OCCUPIED_MASK;
     size_t index = mod_prime(hash, hash_table->capacity);
     while (is_bucket_occupied(hash_table, index)) {
         void* target_elem = elem_at(hash_table->elems, elem_size, index);
-        if (hash_table->hashes[index] == hash && compare(target_elem, elem))
+        if (hash_table->hashes[index] == hash && compare_fn(target_elem, elem))
             return target_elem;
         index = increment_wrap(hash_table->capacity, index);
     }

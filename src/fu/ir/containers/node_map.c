@@ -1,4 +1,4 @@
-#include "fu/ir/node_map.h"
+#include "fu/ir/containers/node_map.h"
 #include "fu/ir/node.h"
 
 typedef struct {

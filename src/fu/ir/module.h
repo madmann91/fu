@@ -8,7 +8,17 @@ typedef struct Module Module;
 Module* new_module();
 void free_module(Module*);
 
+const Node* rebuild_node(
+    NodeTag,
+    const Node*,
+    const Node*const*, size_t,
+    const NodeData*,
+    const DebugInfo*);
+
+//==================================== DEBUG INFO =======================================
+
 const DebugInfo* make_debug_info(Module*, const char*, void*, const FileLoc*);
+const DebugInfo* import_debug_info(Module*, const DebugInfo*);
 
 //=================================== FREE PARAMS =======================================
 
@@ -16,6 +26,7 @@ const Node* make_empty_free_params(Module*);
 const Node* make_single_free_param(const Node*);
 const Node* make_free_params(Module*, const Node**, size_t);
 const Node* merge_free_params(const Node*, const Node*);
+bool contains_free_param(const Node*, const Node*);
 
 //================================== NOMINAL NODES ======================================
 

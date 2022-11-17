@@ -112,6 +112,17 @@ static bool compare_node_pairs(const void* left, const void* right) {
         !memcmp(left_node->ops, right_node->ops, left_node->op_count * sizeof(Node*));
 }
 
+static const Node* compute_free_params(const Node* node) {
+    if (node->tag == NODE_PARAM)
+        return make_single_free_param(node);
+    const Node* free_params = node->type
+        ? node->type->free_params
+        : make_empty_free_params(get_module(node));
+    for (size_t i = 0; i < node->op_count; ++i)
+        free_params = merge_free_params(free_params, node->ops[i]->free_params);
+    return free_params;
+}
+
 static const Node* get_or_insert_node(Module* module, const Node* node) {
     assert(!node->is_nominal);
     assert(!node->type || get_module(node->type) == module);
@@ -138,6 +149,11 @@ static const Node* get_or_insert_node(Module* module, const Node* node) {
     new_node->id = module->nodes.size;
     new_node->level = node->type ? node->type->level - 1 : MAX_NODE_LEVEL;
     const Node* simplified_node = simplify_node(new_node);
+
+    // Only compute expensive properties if the node is done being simplified.
+    if (new_node == simplified_node)
+        new_node->free_params = compute_free_params(new_node);
+
     bool status = insert_in_hash_table(&module->nodes,
         &(NodePair) { .from = new_node, .to = simplified_node },
         hash, sizeof(NodePair), compare_node_pairs);
@@ -153,8 +169,9 @@ static const Node* get_or_insert_node_from_args(
     Module* module,
     NodeTag node_tag,
     const Node* type,
+    const Node*const* ops,
     size_t op_count,
-    const Node** ops,
+    const NodeData* node_data,
     const DebugInfo* debug_info)
 {
     SmallNode small_node;
@@ -168,6 +185,8 @@ static const Node* get_or_insert_node_from_args(
         .op_count = op_count,
         .debug_info = debug_info
     };
+    if (node_data)
+        node->data = *node_data;
     memcpy(node->ops, ops, sizeof(Node*) * op_count);
     const Node* inserted_node = get_or_insert_node(module, node);
     if (use_alloc)
@@ -203,6 +222,17 @@ void free_module(Module* module) {
     free_hash_table(&module->debug_info);
     free_hash_table(&module->nodes);
     free(module);
+}
+
+const Node* rebuild_node(
+    NodeTag node_tag,
+    const Node* type,
+    const Node*const* ops, size_t op_count,
+    const NodeData* node_data,
+    const DebugInfo* debug_info)
+{
+    Module* module = get_module(type);
+    return get_or_insert_node_from_args(module, node_tag, type, ops, op_count, node_data, debug_info);
 }
 
 static const DebugInfo* get_or_insert_debug_info(Module* module, const DebugInfo* debug_info) {
@@ -242,6 +272,10 @@ const DebugInfo* make_debug_info(
     });
 }
 
+const DebugInfo* import_debug_info(Module* module, const DebugInfo* debug_info) {
+    return make_debug_info(module, debug_info->name, debug_info->user_data, &debug_info->file_loc);
+}
+
 const Node* make_empty_free_params(Module* module) {
     return module->empty_params;
 }
@@ -269,7 +303,7 @@ const Node* make_free_params(Module* module, const Node** params, size_t param_c
         assert(params[i - 1] != params[i]);
 #endif
     return get_or_insert_node_from_args(module, NODE_FREE_PARAMS,
-        module->universe, param_count, params, NULL);
+        module->universe, params, param_count, NULL, NULL);
 }
 
 const Node* merge_free_params(const Node* left, const Node* right) {
@@ -287,7 +321,13 @@ const Node* merge_free_params(const Node* left, const Node* right) {
         left = tmp;
     }
     return get_or_insert_node_from_args(module, NODE_MERGE_PARAMS,
-        module->universe, 2, (const Node*[]) { left, right }, NULL);
+        module->universe, (const Node*[]) { left, right }, 2, NULL, NULL);
+}
+
+bool contains_free_param(const Node* free_params, const Node* param) {
+    assert(free_params->tag == NODE_FREE_PARAMS);
+    assert(param->tag == NODE_PARAM);
+    return bsearch(&param, free_params->ops, free_params->op_count, sizeof(const Node*), compare_params) != NULL;
 }
 
 static Node* make_nominal_node(NodeTag tag, const Node* type, size_t op_count) {
@@ -336,7 +376,7 @@ const Node* make_param(Node* node, const DebugInfo* debug_info) {
         node->tag == NODE_SIGMA ? node :
         get_pi_dom(node->type);
     return get_or_insert_node_from_args(get_module(node),
-        NODE_PARAM, type, 1, (const Node*[]) { node }, debug_info);
+        NODE_PARAM, type, (const Node*[]) { node }, 1, NULL, debug_info);
 }
 
 const Node* make_label(const Node* type, const char* label, const DebugInfo* debug_info) {
@@ -359,7 +399,7 @@ const Node* make_nat(Module* module) {
 
 const Node* make_singleton(const Node* node) {
     return get_or_insert_node_from_args(get_module(node), NODE_SINGLETON,
-        node->type, 1, &node, NULL);
+        node->type, &node, 1, NULL, NULL);
 }
 
 const Node* make_nat_const(Module* module, IntVal int_val) {
@@ -390,34 +430,36 @@ const Node* make_float_const(const Node* type, FloatVal float_val) {
 
 const Node* make_int(Module* module, size_t bitwidth) {
     return get_or_insert_node_from_args(module, NODE_INT,
-        make_star(module), 1, (const Node*[]) { make_nat_const(module, bitwidth) }, NULL);
+        make_star(module), (const Node*[]) { make_nat_const(module, bitwidth) }, 1, NULL, NULL);
 }
 
 const Node* make_float(Module* module, size_t bitwidth) {
     return get_or_insert_node_from_args(module, NODE_FLOAT,
-        make_star(module), 1, (const Node*[]) { make_nat_const(module, bitwidth) }, NULL);
+        make_star(module), (const Node*[]) { make_nat_const(module, bitwidth) }, 1, NULL, NULL);
 }
 
 const Node* make_proj(const Node* tuple, size_t index, const DebugInfo* debug_info) {
     Module* module = get_module(tuple);
     return get_or_insert_node_from_args(module, NODE_PROJ,
-        get_proj_type(tuple->type, index), 2,
-        (const Node*[]) { tuple, make_nat_const(module, index) }, debug_info);
+        get_proj_type(tuple->type, index),
+        (const Node*[]) { tuple, make_nat_const(module, index) }, 2,
+        NULL, debug_info);
 }
 
 const Node* make_app(const Node* applied, const Node* arg, const DebugInfo* debug_info) {
     return get_or_insert_node_from_args(get_module(applied), NODE_APP,
-        get_app_type(applied->type, arg), 2,
-        (const Node*[]) { applied, arg }, debug_info);
+        get_app_type(applied->type, arg),
+        (const Node*[]) { applied, arg }, 2,
+        NULL, debug_info);
 }
 
 const Node* make_pi(const Node* dom, const Node* codom, const DebugInfo* debug_info) {
     return get_or_insert_node_from_args(get_module(dom), NODE_PI,
-        codom->type, 2, (const Node*[]) { dom, codom }, debug_info);
+        codom->type, (const Node*[]) { dom, codom }, 2, NULL, debug_info);
 }
 
 const Node* make_empty_sigma(const Node* type, const DebugInfo* debug_info) {
-    return get_or_insert_node_from_args(get_module(type), NODE_SIGMA, type, 0, NULL, debug_info);
+    return get_or_insert_node_from_args(get_module(type), NODE_SIGMA, type, NULL, 0, NULL, debug_info);
 }
 
 static const Node* make_sigma_or_variant(
@@ -433,7 +475,7 @@ static const Node* make_sigma_or_variant(
             type = elems[i]->type;
     }
     return get_or_insert_node_from_args(get_module(elems[0]), node_tag,
-        type, elem_count, elems, debug_info);
+        type, elems, elem_count, NULL, debug_info);
 }
 
 const Node* make_sigma(const Node** elems, size_t elem_count, const DebugInfo* debug_info) {
@@ -447,5 +489,5 @@ const Node* make_variant(const Node** options, size_t option_count, const DebugI
 const Node* make_tuple(const Node* type, const Node** elems, size_t elem_count, const DebugInfo* debug_info) {
     assert(type->tag == NODE_SIGMA);
     return get_or_insert_node_from_args(get_module(type), NODE_TUPLE,
-        type, elem_count, elems, debug_info);
+        type, elems, elem_count, NULL, debug_info);
 }

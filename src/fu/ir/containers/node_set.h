@@ -1,5 +1,5 @@
-#ifndef FU_IR_NODE_MAP_H
-#define FU_IR_NODE_MAP_H
+#ifndef FU_IR_CONTAINERS_NODE_MAP_H
+#define FU_IR_CONTAINERS_NODE_MAP_H
 
 #include "fu/core/hash_table.h"
 

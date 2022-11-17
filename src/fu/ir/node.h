@@ -107,6 +107,7 @@ bool is_int_const(const Node*);
 bool is_nat_const(const Node*);
 bool is_int_or_nat_const(const Node*);
 bool is_float_const(const Node*);
+bool has_node_data(const Node*);
 FloatVal get_float_const_value(const Node*);
 IntVal get_int_or_nat_const_value(const Node*);
 const char* get_label_name(const Node*);

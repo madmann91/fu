@@ -1,4 +1,4 @@
-#include "fu/ir/node_set.h"
+#include "fu/ir/containers/node_set.h"
 #include "fu/ir/node.h"
 
 NodeSet new_node_set() {

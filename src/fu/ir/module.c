@@ -369,7 +369,7 @@ Node* make_lambda(const Node* type) {
     return make_nominal_node(NODE_LAMBDA, type, 1);
 }
 
-const Node* make_param(Node* node, const DebugInfo* debug_info) {
+const Node* make_param(const Node* node, const DebugInfo* debug_info) {
     assert(node->is_nominal);
     const Node* type =
         node->tag == NODE_PI    ? get_pi_dom(node) :
@@ -441,7 +441,7 @@ const Node* make_float(Module* module, size_t bitwidth) {
 const Node* make_proj(const Node* tuple, size_t index, const DebugInfo* debug_info) {
     Module* module = get_module(tuple);
     return get_or_insert_node_from_args(module, NODE_PROJ,
-        get_proj_type(tuple->type, index),
+        get_proj_type(tuple->type, tuple, index),
         (const Node*[]) { tuple, make_nat_const(module, index) }, 2,
         NULL, debug_info);
 }

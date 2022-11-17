@@ -116,7 +116,7 @@ size_t find_label_index(const Node**, size_t, const char*);
 
 const Node* get_pi_dom(const Node*);
 const Node* get_pi_codom(const Node*);
-const Node* get_proj_type(const Node* sigma, size_t);
+const Node* get_proj_type(const Node* sigma, const Node* value, size_t);
 const Node* get_app_type(const Node* pi, const Node* arg);
 
 void print_node(FormatState*, const Node*);

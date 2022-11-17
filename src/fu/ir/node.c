@@ -1,5 +1,6 @@
 #include "fu/ir/node.h"
 #include "fu/ir/module.h"
+#include "fu/ir/import.h"
 #include "fu/core/utils.h"
 
 #include <assert.h>
@@ -107,21 +108,19 @@ const Node* get_pi_codom(const Node* node) {
     return node->ops[1];
 }
 
-const Node* get_proj_type(const Node* sigma, size_t index) {
+const Node* get_proj_type(const Node* sigma, const Node* value, size_t index) {
     assert(sigma->type->tag == NODE_SIGMA);
     assert(index < sigma->op_count);
     if (!sigma->is_nominal)
         return sigma->ops[index];
-    assert(false && "todo"); // TODO
-    return NULL;
+    return replace_param(sigma->ops[index], make_param(sigma, NULL), value);
 }
 
 const Node* get_app_type(const Node* pi, const Node* arg) {
     assert(arg->type == get_pi_dom(pi));
     if (!pi->is_nominal)
         return get_pi_codom(pi);
-    assert(false && "todo"); // TODO
-    return NULL;
+    return replace_param(get_pi_codom(pi), make_param(pi, NULL), arg);
 }
 
 static void print_unique_node_name(FormatState* state, const Node* node) {

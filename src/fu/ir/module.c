@@ -123,6 +123,18 @@ static const Node* compute_free_params(const Node* node) {
     return free_params;
 }
 
+static bool contains_error(const Node* node) {
+    if (node->tag == NODE_ERROR)
+        return true;
+    if (node->type && node->type->contains_error)
+        return true;
+    for (size_t i = 0; i < node->op_count; ++i) {
+        if (node->ops[i]->contains_error)
+            return true;
+    }
+    return false;
+}
+
 static const Node* get_or_insert_node(Module* module, const Node* node) {
     assert(!node->is_nominal);
     assert(!node->type || get_module(node->type) == module);
@@ -151,8 +163,10 @@ static const Node* get_or_insert_node(Module* module, const Node* node) {
     const Node* simplified_node = simplify_node(new_node);
 
     // Only compute expensive properties if the node is done being simplified.
-    if (new_node == simplified_node)
+    if (new_node == simplified_node) {
         new_node->free_params = compute_free_params(new_node);
+        new_node->contains_error = contains_error(new_node);
+    }
 
     bool status = insert_in_hash_table(&module->nodes,
         &(NodePair) { .from = new_node, .to = simplified_node },
@@ -391,6 +405,13 @@ const Node* make_label(const Node* type, const char* label, const DebugInfo* deb
 
 const Node* make_star(Module* module) {
     return module->star;
+}
+
+const Node* make_error(const Node* type) {
+    return get_or_insert_node(get_module(type), &(Node) {
+        .tag = NODE_ERROR,
+        .type = type
+    });
 }
 
 const Node* make_nat(Module* module) {

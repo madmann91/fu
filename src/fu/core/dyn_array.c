@@ -56,6 +56,10 @@ void resize_dyn_array(DynArray* array, size_t size) {
     array->size = size;
 }
 
+void clear_dyn_array(DynArray* array) {
+    array->size = 0;
+}
+
 void free_dyn_array(DynArray* array) {
     free(array->elems);
     memset(array, 0, sizeof(DynArray));

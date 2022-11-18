@@ -1,6 +1,6 @@
 #include "fu/ir/node.h"
 #include "fu/ir/module.h"
-#include "fu/ir/import.h"
+#include "fu/ir/rewrite.h"
 #include "fu/core/utils.h"
 
 #include <assert.h>
@@ -55,10 +55,6 @@ const char* get_op_name(NodeTag tag) {
     }
 }
 
-bool is_nominal_node(const Node* node) {
-    return node->is_nominal;
-}
-
 bool is_int_const(const Node* node) {
     return node->tag == NODE_CONST && node->type->tag == NODE_INT;
 }
@@ -96,6 +92,11 @@ size_t find_label_index(const Node** labels, size_t count, const char* label) {
             return i;
     }
     return SIZE_MAX;
+}
+
+const Node* get_singleton_value(const Node* node) {
+    assert(node->tag == NODE_SINGLETON);
+    return node->ops[0];
 }
 
 const Node* get_pi_dom(const Node* node) {

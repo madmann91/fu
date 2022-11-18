@@ -41,6 +41,7 @@ const Node* make_param(const Node*, const DebugInfo*);
 const Node* make_label(const Node*, const char*, const DebugInfo*);
 
 const Node* make_star(Module*);
+const Node* make_error(const Node*);
 const Node* make_singleton(const Node*);
 const Node* make_nat(Module*);
 const Node* make_int(Module*, size_t);

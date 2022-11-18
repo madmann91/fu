@@ -8,6 +8,7 @@
 #include "fu/core/format.h"
 
 #define NODE_LIST(f) \
+    f(ERROR,        0, "error") \
     f(FREE_PARAMS,  N, "free-params") \
     f(MERGE_PARAMS, 2, "merge-params") \
     f(LABEL,        0, "label") \
@@ -82,6 +83,7 @@ typedef union {
     NodeTag tag; \
     bool is_nominal : 1; \
     bool is_dead : 1; \
+    bool contains_error : 1; \
     unsigned level : 3; \
     const Node* free_params; \
     NodeData data; \
@@ -114,6 +116,7 @@ const char* get_label_name(const Node*);
 
 size_t find_label_index(const Node**, size_t, const char*);
 
+const Node* get_singleton_value(const Node*);
 const Node* get_pi_dom(const Node*);
 const Node* get_pi_codom(const Node*);
 const Node* get_proj_type(const Node* sigma, const Node* value, size_t);

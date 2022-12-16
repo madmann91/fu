@@ -22,6 +22,7 @@ struct Module {
     HashTable debug_info;
     MemPool mem_pool;
     StrPool str_pool;
+    User* free_users;
     const Node* universe;
     const Node* star;
     const Node* nat;
@@ -44,6 +45,41 @@ static Node* alloc_node(Module* module, size_t op_count) {
 static void free_node(Module* module, const Node* node) {
     (void)module;
     free((void*)node);
+}
+
+static User* alloc_user(Module* module) {
+    if (module->free_users) {
+        User* user = module->free_users;
+        module->free_users = (User*)user->next;
+        return user;
+    }
+    return malloc_or_die(sizeof(User));
+}
+
+void record_user(Module* module, const Node* used, size_t index, const Node* node) {
+    User* user = alloc_user(module);
+    user->index = index;
+    user->node = node;
+    user->next = used->users;
+    ((Node*)used)->users = user;
+}
+
+static User** find_prev_user(const Node* used, size_t index, const Node* node) {
+    User** prev = (User**)&used->users;
+    for (const User* user = (User*)used->users; user; prev = (User**)&user->next, user = user->next) {
+        if (user->index == index && user->node == node)
+            return prev;
+    }
+    return NULL;
+}
+
+void forget_user(Module* module, const Node* used, size_t index, const Node* node) {
+    User** prev = find_prev_user(used, index, node);
+    assert(prev);
+    User* user = *prev;
+    *prev = (User*)user->next;
+    user->next = module->free_users;
+    module->free_users = user;
 }
 
 static inline HashCode hash_debug_info(HashCode hash, const DebugInfo* debug_info) {
@@ -112,17 +148,6 @@ static bool compare_node_pairs(const void* left, const void* right) {
         !memcmp(left_node->ops, right_node->ops, left_node->op_count * sizeof(Node*));
 }
 
-static const Node* compute_free_params(const Node* node) {
-    if (node->tag == NODE_PARAM)
-        return make_single_free_param(node);
-    const Node* free_params = node->type
-        ? node->type->free_params
-        : make_empty_free_params(get_module(node));
-    for (size_t i = 0; i < node->op_count; ++i)
-        free_params = merge_free_params(free_params, node->ops[i]->free_params);
-    return free_params;
-}
-
 static bool contains_error(const Node* node) {
     if (node->tag == NODE_ERROR)
         return true;
@@ -133,6 +158,12 @@ static bool contains_error(const Node* node) {
             return true;
     }
     return false;
+}
+
+static void mark_users(const Node* node) {
+    Module* module = get_module(node);
+    for (size_t i = 0; i < node->op_count; ++i)
+        record_user(module, node->ops[i], i, node);
 }
 
 static const Node* get_or_insert_node(Module* module, const Node* node) {
@@ -164,8 +195,8 @@ static const Node* get_or_insert_node(Module* module, const Node* node) {
 
     // Only compute expensive properties if the node is done being simplified.
     if (new_node == simplified_node) {
-        new_node->free_params = compute_free_params(new_node);
         new_node->contains_error = contains_error(new_node);
+        mark_users(new_node);
     }
 
     bool status = insert_in_hash_table(&module->nodes,
@@ -217,7 +248,7 @@ Module* new_module() {
     module->universe = get_or_insert_node(module, &(Node) { .tag = NODE_UNIVERSE, .data.module = module });
     module->star = get_or_insert_node(module, &(Node) { .tag = NODE_STAR, .type = module->universe });
     module->nat = get_or_insert_node(module, &(Node) { .tag = NODE_NAT, .type = module->star });
-    module->empty_params = get_or_insert_node(module, &(Node) { .tag = NODE_FREE_PARAMS, .type = module->universe });
+    module->free_users = NULL;
     return module;
 }
 
@@ -229,7 +260,16 @@ static void free_nodes(Module* module) {
     }
 }
 
+static void free_users(Module* module) {
+    for (User* user = module->free_users; user;) {
+        User* next = (User*)user->next;
+        free(user);
+        user = next;
+    }
+}
+
 void free_module(Module* module) {
+    free_users(module);
     free_nodes(module);
     free_str_pool(&module->str_pool);
     free_mem_pool(&module->mem_pool);
@@ -290,60 +330,6 @@ const DebugInfo* import_debug_info(Module* module, const DebugInfo* debug_info) 
     return make_debug_info(module, debug_info->name, debug_info->user_data, &debug_info->file_loc);
 }
 
-const Node* make_empty_free_params(Module* module) {
-    return module->empty_params;
-}
-
-const Node* make_single_free_param(const Node* param) {
-    return make_free_params(get_module(param), &param, 1);
-}
-
-static int compare_params(const void* left, const void* right) {
-    Uid left_id  = (*(const Node**)left)->id;
-    Uid right_id = (*(const Node**)right)->id;
-    return left_id < right_id ? -1 : left_id > right_id ? 1 : 0;
-}
-
-const Node* make_free_params(Module* module, const Node** params, size_t param_count) {
-#ifndef NDEBUG
-    for (size_t i = 0; i < param_count; ++i)
-         assert(params[i]->tag == NODE_PARAM);
-#endif
-    // Sort parameters so that a free param set always compares identical to another if the elements
-    // are the same, regardless of the order.
-    qsort(params, param_count, sizeof(const Node*), compare_params);
-#ifndef NDEBUG
-    for (size_t i = 1; i < param_count; ++i)
-        assert(params[i - 1] != params[i]);
-#endif
-    return get_or_insert_node_from_args(module, NODE_FREE_PARAMS,
-        module->universe, params, param_count, NULL, NULL);
-}
-
-const Node* merge_free_params(const Node* left, const Node* right) {
-    // Note: Thanks to the design of the module, this operation is memoized. This means that if the
-    // merge is requested a second time, the result is already available by in the module, and
-    // nothing is recomputed. The actual merging operation is implemented as a simplification rule.
-    assert(left->tag  == NODE_FREE_PARAMS);
-    assert(right->tag == NODE_FREE_PARAMS);
-    Module* module = get_module(left);
-    // Merging is symmetric, so we can normalize arguments in order to have a unique
-    // representative for `merge(a,b)` and `merge(b,a)`.
-    if (left->id > right->id) {
-        const Node* tmp = right;
-        right = left;
-        left = tmp;
-    }
-    return get_or_insert_node_from_args(module, NODE_MERGE_PARAMS,
-        module->universe, (const Node*[]) { left, right }, 2, NULL, NULL);
-}
-
-bool contains_free_param(const Node* free_params, const Node* param) {
-    assert(free_params->tag == NODE_FREE_PARAMS);
-    assert(param->tag == NODE_PARAM);
-    return bsearch(&param, free_params->ops, free_params->op_count, sizeof(const Node*), compare_params) != NULL;
-}
-
 static Node* make_nominal_node(NodeTag tag, const Node* type, size_t op_count) {
     Module* module = get_module(type);
     Node* node = alloc_node(module, op_count);
@@ -381,6 +367,10 @@ Node* make_nominal_variant(const Node* type, size_t op_count) {
 Node* make_lambda(const Node* type) {
     assert(type->tag == NODE_PI);
     return make_nominal_node(NODE_LAMBDA, type, 1);
+}
+
+Node* make_axiom(const Node* type) {
+    return make_nominal_node(NODE_AXIOM, type, 0);
 }
 
 const Node* make_param(const Node* node, const DebugInfo* debug_info) {

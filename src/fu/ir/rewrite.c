@@ -1,4 +1,5 @@
 #include "fu/ir/rewrite.h"
+#include "fu/ir/scope.h"
 #include "fu/ir/module.h"
 #include "fu/ir/node.h"
 #include "fu/core/alloc.h"
@@ -9,6 +10,7 @@ typedef struct {
     Rewriter rewriter;
     DynArray op_buf;
     const Node* param;
+    const NodeSet* scope;
 } ParamReplacer;
 
 Rewriter new_rewriter(NodeMap* node_map, RewriteFn rewrite_fn) {
@@ -67,7 +69,7 @@ bool find_rewritten_nodes(
 
 static const Node* find_node_with_replaced_param(Rewriter* rewriter, const Node* node) {
     ParamReplacer* param_replacer = (ParamReplacer*)rewriter;
-    if (!contains_free_param(node->free_params, param_replacer->param))
+    if (!find_in_node_set(param_replacer->scope, node))
         return node;
     const Node** replaced_node = find_in_node_map(param_replacer->rewriter.rewritten_nodes, node);
     return replaced_node ? *replaced_node : NULL;
@@ -89,14 +91,17 @@ static const Node* rewrite_param(Rewriter* rewriter, const Node* node) {
 const Node* replace_param(const Node* node, const Node* from, const Node* to) {
     assert(from->tag == NODE_PARAM);
     NodeMap node_map = new_node_map();
+    NodeSet scope = compute_scope(from);
     insert_in_node_map(&node_map, from, (void*)to);
     ParamReplacer param_replacer = {
         .rewriter = new_rewriter(&node_map, rewrite_param),
+        .scope = &scope,
         .param = from
     };
     const Node* replaced_node = rewrite_node(&param_replacer.rewriter, node);
     free_rewriter(&param_replacer.rewriter);
     free_node_map(&node_map);
+    free_node_set(&scope);
     return replaced_node;
 }
 

@@ -9,8 +9,6 @@
 
 #define NODE_LIST(f) \
     f(ERROR,        0, "error") \
-    f(FREE_PARAMS,  N, "free-params") \
-    f(MERGE_PARAMS, 2, "merge-params") \
     f(LABEL,        0, "label") \
     f(UNIVERSE,     0, "universe") \
     f(STAR,         0, "star") \
@@ -85,7 +83,6 @@ typedef union {
     bool is_dead : 1; \
     bool contains_error : 1; \
     unsigned level : 3; \
-    const Node* free_params; \
     NodeData data; \
     Uid id; \
     const Node* type; \
@@ -99,7 +96,7 @@ struct Node {
 };
 
 Module* get_module(const Node*);
-Node* cast_nominal_node(const Node*);
+Node* nominal_cast(const Node*);
 
 size_t get_max_op_count(NodeTag);
 size_t get_min_op_count(NodeTag);
@@ -116,11 +113,15 @@ const char* get_label_name(const Node*);
 
 size_t find_label_index(const Node**, size_t, const char*);
 
+void unset_op(Node*, size_t);
+void set_op(Node*, size_t, const Node*);
+
 const Node* get_singleton_value(const Node*);
 const Node* get_pi_dom(const Node*);
 const Node* get_pi_codom(const Node*);
 const Node* get_proj_type(const Node* sigma, const Node* value, size_t);
 const Node* get_app_type(const Node* pi, const Node* arg);
+Node* get_param_nominal(const Node*);
 
 void print_node(FormatState*, const Node*);
 

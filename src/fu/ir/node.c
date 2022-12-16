@@ -13,7 +13,7 @@ Module* get_module(const Node* node) {
     return node->data.module;
 }
 
-Node* cast_nominal_node(const Node* node) {
+Node* nominal_cast(const Node* node) {
     assert(node->is_nominal);
     return (Node*)node;
 }
@@ -94,6 +94,22 @@ size_t find_label_index(const Node** labels, size_t count, const char* label) {
     return SIZE_MAX;
 }
 
+// Defined in module.c
+void record_user(Module*, const Node*, size_t, const Node*);
+void forget_user(Module*, const Node*, size_t, const Node*);
+
+void unset_op(Node* node, size_t index) {
+    assert(node->ops[index]);
+    forget_user(get_module(node), node->ops[index], index, node);
+    node->ops[index] = NULL;
+}
+
+void set_op(Node* node, size_t index, const Node* op) {
+    assert(!node->ops[index]);
+    record_user(get_module(node), op, index, node);
+    node->ops[index] = op;
+}
+
 const Node* get_singleton_value(const Node* node) {
     assert(node->tag == NODE_SINGLETON);
     return node->ops[0];
@@ -122,6 +138,11 @@ const Node* get_app_type(const Node* pi, const Node* arg) {
     if (!pi->is_nominal)
         return get_pi_codom(pi);
     return replace_param(get_pi_codom(pi), make_param(pi, NULL), arg);
+}
+
+Node* get_param_nominal(const Node* param) {
+    assert(param->tag == NODE_PARAM);
+    return nominal_cast(param->ops[0]);
 }
 
 static void print_unique_node_name(FormatState* state, const Node* node) {

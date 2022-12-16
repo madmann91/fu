@@ -20,20 +20,13 @@ const Node* rebuild_node(
 const DebugInfo* make_debug_info(Module*, const char*, void*, const FileLoc*);
 const DebugInfo* import_debug_info(Module*, const DebugInfo*);
 
-//=================================== FREE PARAMS =======================================
-
-const Node* make_empty_free_params(Module*);
-const Node* make_single_free_param(const Node*);
-const Node* make_free_params(Module*, const Node**, size_t);
-const Node* merge_free_params(const Node*, const Node*);
-bool contains_free_param(const Node*, const Node*);
-
 //================================== NOMINAL NODES ======================================
 
 Node* make_nominal_pi(const Node*);
 Node* make_nominal_sigma(const Node*, size_t);
 Node* make_nominal_variant(const Node*, size_t);
 Node* make_lambda(const Node*);
+Node* make_axiom(const Node*);
 
 //================================ STRUCTURAL NODES =====================================
 

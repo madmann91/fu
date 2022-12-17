@@ -8,7 +8,6 @@
 
 typedef struct {
     Rewriter rewriter;
-    DynArray op_buf;
     const Node* param;
     const NodeSet* scope;
 } ParamReplacer;
@@ -48,18 +47,22 @@ const Node* rewrite_node(Rewriter* rewriter, const Node* first_node) {
 }
 
 const Node* find_rewritten_node(Rewriter* rewriter, const Node* node) {
-    return find_in_node_map(rewriter->rewritten_nodes, node);
+    const Node* rewritten_node = find_in_node_map(rewriter->rewritten_nodes, node);
+    if (!rewritten_node) {
+        push_on_dyn_array(&rewriter->rewrite_stack, node);
+        return NULL;
+    }
+    return rewritten_node;
 }
 
 bool find_rewritten_nodes(
     Rewriter* rewriter,
     const Node*const* nodes,
-    size_t node_count,
-    RewriteFn rewrite_fn)
+    size_t node_count)
 {
     clear_dyn_array(&rewriter->op_buf);
     for (size_t i = 0; i < node_count; ++i) {
-        const Node* rewritten_node = rewrite_fn(rewriter, nodes[i]);
+        const Node* rewritten_node = find_rewritten_node(rewriter, nodes[i]);
         if (!rewritten_node)
             return false;
         push_on_dyn_array(&rewriter->op_buf, rewritten_node);
@@ -67,22 +70,17 @@ bool find_rewritten_nodes(
     return true;
 }
 
-static const Node* find_node_with_replaced_param(Rewriter* rewriter, const Node* node) {
+static const Node* rewrite_param(Rewriter* rewriter, const Node* node) {
     ParamReplacer* param_replacer = (ParamReplacer*)rewriter;
     if (!find_in_node_set(param_replacer->scope, node))
         return node;
-    const Node** replaced_node = find_in_node_map(param_replacer->rewriter.rewritten_nodes, node);
-    return replaced_node ? *replaced_node : NULL;
-}
-
-static const Node* rewrite_param(Rewriter* rewriter, const Node* node) {
     const Node* replaced_type = NULL;
     if (node->type) {
-        replaced_type = find_node_with_replaced_param(rewriter, node->type);
+        replaced_type = find_rewritten_node(rewriter, node->type);
         if (!replaced_type)
             return NULL;
     }
-    if (!find_rewritten_nodes(rewriter, node->ops, node->op_count, find_node_with_replaced_param))
+    if (!find_rewritten_nodes(rewriter, node->ops, node->op_count))
         return NULL;
     return rebuild_node(node->tag,
         replaced_type, rewriter->op_buf.elems, node->op_count, &node->data, node->debug_info);
@@ -109,7 +107,7 @@ static const Node* manifest_node(Rewriter* rewriter, const Node* node) {
     if (node->tag == NODE_SINGLETON)
         return get_singleton_value(node);
     if (node->tag == NODE_SIGMA) {
-        if (!find_rewritten_nodes(rewriter, node->ops, node->op_count, find_rewritten_node))
+        if (!find_rewritten_nodes(rewriter, node->ops, node->op_count))
             return NULL;
         return make_tuple(node, rewriter->op_buf.elems, node->op_count, NULL);
     }

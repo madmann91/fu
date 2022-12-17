@@ -26,7 +26,7 @@ void free_rewriter(Rewriter*);
 
 const Node* rewrite_node(Rewriter*, const Node*);
 const Node* find_rewritten_node(Rewriter*, const Node*);
-bool find_rewritten_nodes(Rewriter*, const Node*const*, size_t, RewriteFn);
+bool find_rewritten_nodes(Rewriter*, const Node*const*, size_t);
 
 /// Replaces every occurence of the given parameter `from` in `node` to `to`.
 /// Nominal nodes are re-created in the process, except for axioms which are kept the same.

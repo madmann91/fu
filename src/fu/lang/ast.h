@@ -147,7 +147,7 @@ typedef struct SignatureVars SignatureVars;// Internal, used during type-checkin
 struct AstNode {
     AstNodeTag tag;
     FileLoc file_loc;
-    const Type* type;
+    Type type;
     AstNode* parent_scope;
     AstNode* next;
     AstNode* attrs;

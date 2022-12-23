@@ -6,15 +6,10 @@
 
 #include <assert.h>
 
-typedef struct {
-    Rewriter rewriter;
-    const Node* param;
-    const NodeSet* scope;
-} ParamReplacer;
-
-Rewriter new_rewriter(NodeMap* node_map, RewriteFn rewrite_fn) {
+Rewriter new_rewriter(NodeMap* node_map, NodeSet* scope, RewriteFn rewrite_fn) {
     return (Rewriter) {
         .rewritten_nodes = node_map,
+        .scope = scope,
         .rewrite_stack = new_dyn_array(sizeof(const Node*)),
         .op_buf = new_dyn_array(sizeof(const Node*)),
         .rewrite_fn = rewrite_fn
@@ -37,7 +32,8 @@ const Node* rewrite_node(Rewriter* rewriter, const Node* first_node) {
             pop_from_dyn_array(&rewriter->rewrite_stack);
             continue;
         }
-        const Node* rewritten_node = rewriter->rewrite_fn(rewriter, node);
+        const Node* rewritten_node = !rewriter->scope || find_in_node_set(rewriter->scope, node)
+            ? rewriter->rewrite_fn(rewriter, node) : node;
         if (!rewritten_node)
             goto restart;
         pop_from_dyn_array(&rewriter->rewrite_stack);
@@ -70,10 +66,7 @@ bool find_rewritten_nodes(
     return true;
 }
 
-static const Node* rewrite_param(Rewriter* rewriter, const Node* node) {
-    ParamReplacer* param_replacer = (ParamReplacer*)rewriter;
-    if (!find_in_node_set(param_replacer->scope, node))
-        return node;
+static const Node* replace_node(Rewriter* rewriter, const Node* node) {
     const Node* replaced_type = NULL;
     if (node->type) {
         replaced_type = find_rewritten_node(rewriter, node->type);
@@ -86,39 +79,9 @@ static const Node* rewrite_param(Rewriter* rewriter, const Node* node) {
         replaced_type, rewriter->op_buf.elems, node->op_count, &node->data, node->debug_info);
 }
 
-const Node* replace_param(const Node* node, const Node* from, const Node* to) {
-    assert(from->tag == NODE_PARAM);
-    NodeMap node_map = new_node_map();
-    NodeSet scope = compute_scope(from);
-    insert_in_node_map(&node_map, from, (void*)to);
-    ParamReplacer param_replacer = {
-        .rewriter = new_rewriter(&node_map, rewrite_param),
-        .scope = &scope,
-        .param = from
-    };
-    const Node* replaced_node = rewrite_node(&param_replacer.rewriter, node);
-    free_rewriter(&param_replacer.rewriter);
-    free_node_map(&node_map);
-    free_node_set(&scope);
-    return replaced_node;
-}
-
-static const Node* manifest_node(Rewriter* rewriter, const Node* node) {
-    if (node->tag == NODE_SINGLETON)
-        return get_singleton_value(node);
-    if (node->tag == NODE_SIGMA) {
-        if (!find_rewritten_nodes(rewriter, node->ops, node->op_count))
-            return NULL;
-        return make_tuple(node, rewriter->op_buf.elems, node->op_count, NULL);
-    }
-    return make_error(node);
-}
-
-const Node* manifest_singletons(const Node* type) {
-    NodeMap node_map = new_node_map();
-    Rewriter rewriter = new_rewriter(&node_map, manifest_node);
-    const Node* manifested_node = rewrite_node(&rewriter, type);
-    free_node_map(&node_map);
+const Node* replace_nodes(const Node* node, NodeMap* node_map, NodeSet* scope) {
+    Rewriter rewriter = new_rewriter(node_map, scope, replace_node);
+    const Node* replaced_node = rewrite_node(&rewriter, node);
     free_rewriter(&rewriter);
-    return manifested_node;
+    return replaced_node;
 }

@@ -24,6 +24,7 @@ struct Module {
     StrPool str_pool;
     User* free_users;
     const Node* universe;
+    const Node* noret;
     const Node* star;
     const Node* nat;
     const Node* empty_params;
@@ -246,8 +247,9 @@ Module* new_module() {
     module->mem_pool = new_mem_pool();
     module->str_pool = new_str_pool(&module->mem_pool);
     module->universe = get_or_insert_node(module, &(Node) { .tag = NODE_UNIVERSE, .data.module = module });
-    module->star = get_or_insert_node(module, &(Node) { .tag = NODE_STAR, .type = module->universe });
-    module->nat = get_or_insert_node(module, &(Node) { .tag = NODE_NAT, .type = module->star });
+    module->star  = get_or_insert_node(module, &(Node) { .tag = NODE_STAR,  .type = module->universe });
+    module->noret = get_or_insert_node(module, &(Node) { .tag = NODE_NORET, .type = module->star });
+    module->nat   = get_or_insert_node(module, &(Node) { .tag = NODE_NAT,   .type = module->star });
     module->free_users = NULL;
     return module;
 }
@@ -383,23 +385,37 @@ const Node* make_param(const Node* node, const DebugInfo* debug_info) {
         NODE_PARAM, type, (const Node*[]) { node }, 1, NULL, debug_info);
 }
 
-const Node* make_label(const Node* type, const char* label, const DebugInfo* debug_info) {
-    Module* module = get_module(type);
-    return get_or_insert_node(module, &(Node) {
-        .tag = NODE_LABEL,
-        .type = type,
-        .data.label = make_str(&module->str_pool, label),
-        .debug_info = debug_info
-    });
+const Node* make_label(const Node* value, const char* label, const DebugInfo* debug_info) {
+    Module* module = get_module(value);
+    return get_or_insert_node_from_args(module, NODE_LABEL, value->type, &value, 1,
+        &(NodeData) { .label = make_str(&module->str_pool, label) }, debug_info);
 }
 
 const Node* make_star(Module* module) {
     return module->star;
 }
 
+const Node* make_noret(Module* module) {
+    return module->noret;
+}
+
 const Node* make_error(const Node* type) {
     return get_or_insert_node(get_module(type), &(Node) {
         .tag = NODE_ERROR,
+        .type = type
+    });
+}
+
+const Node* make_top(const Node* type) {
+    return get_or_insert_node(get_module(type), &(Node) {
+        .tag = NODE_TOP,
+        .type = type
+    });
+}
+
+const Node* make_bottom(const Node* type) {
+    return get_or_insert_node(get_module(type), &(Node) {
+        .tag = NODE_BOTTOM,
         .type = type
     });
 }

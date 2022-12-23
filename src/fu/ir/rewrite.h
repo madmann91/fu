@@ -1,7 +1,7 @@
-#ifndef FU_IR_IMPORT_H
-#define FU_IR_IMPORT_H
+#ifndef FU_IR_REWRITE_H
+#define FU_IR_REWRITE_H
 
-#include "fu/ir/containers/node_map.h"
+#include "fu/ir/containers.h"
 #include "fu/core/dyn_array.h"
 
 /*
@@ -19,21 +19,18 @@ struct Rewriter {
     DynArray rewrite_stack;
     DynArray op_buf;
     NodeMap* rewritten_nodes;
+    NodeSet* scope;
 };
 
-Rewriter new_rewriter(NodeMap*, RewriteFn);
+Rewriter new_rewriter(NodeMap*, NodeSet*, RewriteFn);
 void free_rewriter(Rewriter*);
 
 const Node* rewrite_node(Rewriter*, const Node*);
 const Node* find_rewritten_node(Rewriter*, const Node*);
 bool find_rewritten_nodes(Rewriter*, const Node*const*, size_t);
 
-/// Replaces every occurence of the given parameter `from` in `node` to `to`.
-/// Nominal nodes are re-created in the process, except for axioms which are kept the same.
-const Node* replace_param(const Node* node, const Node* from, const Node* to);
-
-/// From a type that may contain singletons, manifest a value. Parts of the type for which no value
-/// exists get replaced with error values of the corresponding type.
-const Node* manifest_singletons(const Node* type);
+/// General replacement method that replaces nodes in the map with their associated value.
+/// If `scope` is not null, rewritting is restricted to the nodes that are inside that set.
+const Node* replace_nodes(const Node* node, NodeMap* node_map, NodeSet* scope);
 
 #endif

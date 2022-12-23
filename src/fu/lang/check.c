@@ -6,6 +6,7 @@
 #include "fu/core/dyn_array.h"
 #include "fu/core/utils.h"
 #include "fu/core/log.h"
+#include "fu/ir/scope.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -53,63 +54,35 @@ static bool should_add_to_parent_sig_or_mod(const AstNode* ast_node) {
         (ast_node->parent_scope && ast_node->parent_scope->tag == AST_SIG_DECL);
 }
 
-static const Type* add_to_parent_sig_or_mod(
+static inline void collect_ident_patterns(
     TypeTable* type_table,
-    AstNode* ast_node,
-    const Type* type_or_kind,
-    const char* name,
-    bool is_kind)
+    AstNode* pattern,
+    DynArray* ident_patterns)
 {
-    assert(
-        ast_node->parent_scope->tag == AST_MOD_DECL ||
-        ast_node->parent_scope->tag == AST_SIG_DECL);
-    SignatureVars* vars = ast_node->parent_scope->tag == AST_MOD_DECL
-        ? ast_node->parent_scope->mod_decl.vars
-        : ast_node->parent_scope->sig_decl.vars;
-    assert(vars);
-    const Type* var = is_kind
-        ? make_var_type_with_kind(type_table, name, type_or_kind)
-        : make_var_type_with_value(type_table, name, type_or_kind);
-    push_on_dyn_array(&vars->vars, &var);
-    return var;
-}
-
-static inline const Type* add_decl_to_parent_sig_or_mod(
-    TypeTable* type_table,
-    AstNode* ast_node,
-    const Type* type)
-{
-    return add_to_parent_sig_or_mod(
-        type_table, ast_node, type,
-        get_decl_name(ast_node),
-        is_value_decl_tag(ast_node->tag));
-}
-
-static inline void add_idents_to_parent_mod(TypeTable* type_table, AstNode* pattern) {
     switch (pattern->tag) {
         case AST_IDENT_PATTERN:
-            add_to_parent_sig_or_mod(type_table, pattern, pattern->type, pattern->ident_pattern.name, true);
+            push_on_dyn_array(ident_patterns, &pattern);
             break;
         case AST_FIELD_PATTERN:
-            add_idents_to_parent_mod(type_table, pattern->field_pattern.val);
+            collect_ident_patterns(type_table, pattern->field_pattern.val, ident_patterns);
             break;
         case AST_STRUCT_PATTERN:
             for (AstNode* field = pattern->struct_pattern.fields; field; field = field->next)
-                add_idents_to_parent_mod(type_table, field);
+                collect_ident_patterns(type_table, field, ident_patterns);
             break;
         case AST_CTOR_PATTERN:
-            add_idents_to_parent_mod(type_table, pattern->ctor_pattern.arg);
+            collect_ident_patterns(type_table, pattern->ctor_pattern.arg, ident_patterns);
             break;
         case AST_TUPLE_PATTERN:
             for (AstNode* arg = pattern->tuple_pattern.args; arg; arg = arg->next)
-                add_idents_to_parent_mod(type_table, arg);
+                collect_ident_patterns(type_table, arg, ident_patterns);
             break;
         case AST_TYPED_PATTERN:
-            add_idents_to_parent_mod(type_table, pattern->typed_pattern.left);
+            collect_ident_patterns(type_table, pattern->typed_pattern.left, ident_patterns);
             break;
         case AST_ARRAY_PATTERN:
             for (AstNode* elem = pattern->array_pattern.elems; elem; elem = elem->next)
-                add_idents_to_parent_mod(type_table, elem);
+                collect_ident_patterns(type_table, elem, ident_patterns);
             break;
         default:
             assert(false && "invalid pattern");
@@ -117,70 +90,36 @@ static inline void add_idents_to_parent_mod(TypeTable* type_table, AstNode* patt
     }
 }
 
-static void show_resolved_types(TypingContext* context, const Type** types, size_t count) {
-    for (size_t i = 0, j = 0; i < count; ++i) {
-        const Type* resolved_type = resolve_type(types[i]);
-        if (types[i] != resolved_type) {
-            if (j++ == 0)
-                log_note(context->log, NULL, "where", NULL);
-            log_note(context->log, NULL, " '{t}' is '{t}'",
-                (FormatArg[]) { { .t = types[i] }, { .t = resolved_type } });
-        }
-    }
-}
-
-static const Type* expect_type(
+static Type expect_type(
     TypingContext* context,
-    const Type* type,
-    const Type* expected_type,
+    Type type,
+    Type expected_type,
     bool is_upper_bound,
     const FileLoc* file_loc)
 {
-    bool matches_type = is_sub_type(context->type_table,
+    bool matches_type = is_sub_type(
         is_upper_bound ? type : expected_type,
         is_upper_bound ? expected_type : type);
-    const char* kind_or_type = is_kind_level_type(type) ? "kind" : "type";
     if (!matches_type) {
-        if (!expected_type->contains_error && !type->contains_error) {
-            log_error(context->log, file_loc, "expected {s} {s} '{t}', but got {s} '{t}'",
+        if (is_valid_type(expected_type) && is_valid_type(type)) {
+            log_error(context->log, file_loc, "expected {s} type '{t}', but got type '{t}'",
                 (FormatArg[]) {
                     { .s = is_upper_bound ? "at most" : "at least" },
-                    { .s = kind_or_type },
-                    { .t = expected_type },
-                    { .s = kind_or_type },
-                    { .t = type }
+                    { .p = expected_type },
+                    { .p = type }
                 });
-            show_resolved_types(context, (const Type*[]) { type, expected_type }, 2);
         }
         return make_error_type(context->type_table);
     }
     return type;
 }
 
-static bool expect_type_with_tag(
-    TypingContext* context,
-    const Type* type,
-    TypeTag tag,
-    const char* msg,
-    const FileLoc* file_loc)
-{
-    if (resolve_type(type)->tag != tag) {
-        if (!type->contains_error) {
-            log_error(context->log, file_loc,
-                "expected {s} type, but got '{t}'",
-                (FormatArg[]) { { .s = msg }, { .t = type } });
-        }
-        return false;
-    }
-    return true;
-}
-
-static const Type* expect_assignable(TypingContext* context, AstNode* expr) {
+static Type expect_assignable(TypingContext* context, AstNode* expr) {
     if (!is_assignable_expr(expr)) {
-        if (!expr->type->contains_error) {
+        if (is_valid_type(expr->type)) {
             log_error(context->log, &expr->file_loc,
                 "expression cannot be written to",
-                (FormatArg[]) { { .t = expr->type } });
+                (FormatArg[]) { { .p = &expr->type } });
             if (expr->tag == AST_PATH &&
                 expr->path.decl_site &&
                 expr->path.decl_site->tag == AST_IDENT_PATTERN &&
@@ -196,56 +135,59 @@ static const Type* expect_assignable(TypingContext* context, AstNode* expr) {
     return expr->type;
 }
 
-static const Type* report_type_mismatch(
+static Type report_type_mismatch(
     TypingContext* context,
     const char* msg,
-    const Type* type,
+    Type type,
+    bool is_inverted,
     const FileLoc* file_loc)
 {
-    if (!type->contains_error) {
+    if (is_valid_type(type)) {
         log_error(context->log, file_loc,
-            "expected type '{t}', but got {s}",
-            (FormatArg[]) { { .t = type }, { .s = msg } });
+            is_inverted
+                ? "expected type '{t}', but got {s}"
+                : "expected {1:s} type, but got type {0:t}",
+            (FormatArg[]) { { .p = type }, { .s = msg } });
     }
     return make_error_type(context->type_table);
 }
 
-static const Type* report_cannot_infer(TypingContext* context, const char* msg, const FileLoc* file_loc) {
+static Type report_cannot_infer(TypingContext* context, const char* msg, const FileLoc* file_loc) {
     log_error(context->log, file_loc, "cannot infer type for {s}", (FormatArg[]) { { .s = msg } });
     return make_error_type(context->type_table);
 }
 
-static const Type* report_missing_member(TypingContext* context, const char* name, const Type* type, const FileLoc* file_loc) {
-    if (!type->contains_error)
-        log_error(context->log, file_loc, "no member '{s}' in '{t}'", (FormatArg[]) { { .s = name }, { .t = type } });
+static Type report_missing_member(TypingContext* context, const char* name, Type type, const FileLoc* file_loc) {
+    if (is_valid_type(type))
+        log_error(context->log, file_loc, "no member '{s}' in '{t}'", (FormatArg[]) { { .s = name }, { .p = type } });
     return make_error_type(context->type_table);
 }
 
-static const Type* report_type_expected(TypingContext* context, const Type* type, const FileLoc* file_loc) {
-    if (!type->contains_error)
-        log_error(context->log, file_loc, "expected type, but got value with type '{t}'", (FormatArg[]) { { .t = type } });
+static Type report_type_expected(TypingContext* context, Type type, const FileLoc* file_loc) {
+    if (is_valid_type(type))
+        log_error(context->log, file_loc, "expected type, but got value with type '{t}'", (FormatArg[]) { { .p = type } });
     return make_error_type(context->type_table);
 }
 
-static const Type* report_value_expected(TypingContext* context, const Type* type, const FileLoc* file_loc) {
-    if (!type->contains_error)
-        log_error(context->log, file_loc, "expected value, but got type '{t}'", (FormatArg[]) { { .t = type } });
+static Type report_value_expected(TypingContext* context, Type type, const FileLoc* file_loc) {
+    if (!is_valid_type(type))
+        log_error(context->log, file_loc, "expected value, but got type '{t}'", (FormatArg[]) { { .p = type } });
     return make_error_type(context->type_table);
 }
 
-static const Type* report_redeclared_inherited_member(
+static Type report_redeclared_inherited_member(
     TypingContext* context,
     const char* member,
-    const Type* parent_type,
+    Type parent_type,
     const FileLoc* file_loc)
 {
     log_error(context->log, file_loc,
         "member '{s}' is already inherited from type '{t}'",
-        (FormatArg[]) { { .s = member }, { .t = parent_type } });
+        (FormatArg[]) { { .s = member }, { .p = parent_type } });
     return make_error_type(context->type_table);
 }
 
-static const Type* infer_decl_site(TypingContext* context, AstNode* decl_site) {
+static Type infer_decl_site(TypingContext* context, AstNode* decl_site) {
     if (!decl_site->type) {
         if (!push_decl(context, decl_site)) {
             log_error(context->log, &decl_site->file_loc, "cannot infer type for recursive declaration", NULL);
@@ -261,40 +203,43 @@ static const Type* infer_decl_site(TypingContext* context, AstNode* decl_site) {
 
 static bool check_type_var_bounds(
     TypingContext* context,
+    Type fun_type,
     TypeMap* type_map,
-    const Type* fun_type,
+    const TypeVariance* type_variance,
     const TypeBounds* type_bounds,
     const FileLoc* file_loc)
 {
-    // Fill the map from type parameters to their their actual inferred lower/upper bound depending on the
-    // variance of the type parameter.
+    // Fill the map from type parameters to their their actual inferred lower/upper bound depending
+    // on the variance of the type parameter.
     bool has_errors = false;
-    for (size_t i = 0; i < fun_type->fun.type_param_count; ++i) {
-        const Type* type_arg = fun_type->fun.type_params[i]->var.variance == TYPE_CONTRAVARIANT
+    size_t type_param_count = get_type_param_count(fun_type);
+    for (size_t i = 0; i < type_param_count; ++i) {
+        Type type_param = get_type_param(fun_type, i);
+        Type type_arg = type_variance[i] == TYPE_CONTRAVARIANT
             ? type_bounds[i].upper : type_bounds[i].lower;
-        insert_in_type_map(type_map, fun_type->fun.type_params[i], (void*)type_arg);
+        insert_in_type_map(type_map, type_param, (void*)type_arg);
         has_errors |=
-            type_arg->tag == TYPE_BOTTOM ||
-            type_arg->tag == TYPE_TOP ||
-            !is_sub_type(context->type_table, type_bounds[i].lower, type_bounds[i].upper);
+            !is_valid_type(type_arg) ||
+            !is_sub_type(type_bounds[i].lower, type_bounds[i].upper);
     }
 
     if (has_errors) {
         log_error(context->log, file_loc, "cannot infer type arguments", NULL);
-        for (size_t i = 0; i < fun_type->fun.type_param_count; ++i) {
-            const Type* type_arg = find_in_type_map(type_map, fun_type->fun.type_params[i]);
-            if (!is_sub_type(context->type_table, type_bounds[i].lower, type_bounds[i].upper)) {
+        for (size_t i = 0; i < type_param_count; ++i) {
+            Type type_param = get_type_param(fun_type, i);
+            Type type_arg = find_in_type_map(type_map, type_param);
+            if (!is_sub_type(type_bounds[i].lower, type_bounds[i].upper)) {
                 log_note(context->log, NULL,
                     "cannot satisfy type bounds '{t}' <: '{t}' <: '{t}'",
                     (FormatArg[]) {
-                        { .t = type_bounds[i].lower },
-                        { .t = fun_type->fun.type_params[i] },
-                        { .t = type_bounds[i].upper }
+                        { .p = type_bounds[i].lower },
+                        { .p = type_param },
+                        { .p = type_bounds[i].upper }
                     });
-            } else if (type_arg->tag == TYPE_BOTTOM || type_arg->tag == TYPE_TOP) {
+            } else if (!is_valid_type(type_arg)) {
                 log_note(context->log, NULL,
                     "cannot infer type for type parameter '{t}'",
-                    (FormatArg[]) { { .t = fun_type->fun.type_params[i] } });
+                    (FormatArg[]) { { .p = type_param } });
             }
         }
     }
@@ -302,11 +247,22 @@ static bool check_type_var_bounds(
     return !has_errors;
 }
 
-static const Type* infer_type_args(
+static const TypeVariance* find_type_param_variance(TypingContext* context, Type fun_type) {
+    TypeVariance* type_variance = find_in_type_map(&context->fun_type_variance, fun_type);
+    if (type_variance)
+        return type_variance;
+    type_variance = compute_type_param_variance(fun_type);
+    bool status = insert_in_type_map(&context->fun_type_variance, fun_type, type_variance);
+    if (!status)
+        assert(false && "cannot insert type variance in cached variance set.");
+    return type_variance;
+}
+
+static Type infer_type_args(
     TypingContext* context,
-    const Type* fun_type,
-    const Type** type_args,
+    Type fun_type,
     AstNode* call_arg,
+    const Type* type_args,
     const FileLoc* file_loc)
 {
     if (!call_arg) {
@@ -316,31 +272,26 @@ static const Type* infer_type_args(
 
     // Replace type parameters with unknown types and infer the argument to the function call.
     TypeMap type_map = new_type_map();
-    for (size_t i = 0; i < fun_type->fun.type_param_count; ++i)
-        insert_in_type_map(&type_map, fun_type->fun.type_params[i], (void*)type_args[i]);
-    const Type* arg_type = check_expr(context, call_arg,
-        replace_types_with_map(context->type_table, fun_type->fun.dom, &type_map));
+    size_t type_param_count = get_type_param_count(fun_type);
+    for (size_t i = 0; i < type_param_count; ++i)
+        insert_in_type_map(&type_map, get_type_param(fun_type, i), (void*)type_args[i]);
+    Type arg_type = check_expr(context, call_arg,
+        replace_types(get_fun_type_dom(fun_type), &type_map, NULL));
     clear_type_map(&type_map);
 
-    // Get the type bounds for each type parameter of the function type
-    TypeBounds* type_bounds = malloc_or_die(sizeof(TypeBounds) * fun_type->fun.type_param_count);
-    for (size_t i = 0; i < fun_type->fun.type_param_count; ++i) {
-        bool is_known = type_args[i]->tag != TYPE_UNKNOWN;
-        type_bounds[i] = (TypeBounds) {
-            .lower = is_known ? type_args[i] : make_bottom_type(context->type_table),
-            .upper = is_known ? type_args[i] : make_top_type(context->type_table)
-        };
-        insert_in_type_map(&type_map, fun_type->fun.type_params[i], &type_bounds[i]);
-    }
-    get_type_vars_bounds(fun_type->fun.dom, arg_type, TYPE_CONTRAVARIANT, &type_map);
-    clear_type_map(&type_map);
+    // Get the type bounds for each type parameter of the function type and the corresponding type
+    // parameter variance.
+    TypeBounds* type_bounds = compute_type_param_bounds(fun_type, arg_type);
+    const TypeVariance* type_variance = find_type_param_variance(context, fun_type);
 
     // Deduce monomorphic function type from type bounds
-    const Type* result_type = make_error_type(context->type_table);
-    if (check_type_var_bounds(context, &type_map, fun_type, type_bounds, file_loc)) {
+    Type result_type = make_error_type(context->type_table);
+    if (check_type_var_bounds(context, fun_type, &type_map, type_variance, type_bounds, file_loc)) {
+        NodeSet scope = compute_scope(fun_type);
         result_type = make_fun_type(context->type_table,
-            replace_types_with_map(context->type_table, fun_type->fun.dom, &type_map),
-            replace_types_with_map(context->type_table, fun_type->fun.codom, &type_map));
+            replace_types(get_fun_type_dom(fun_type), &type_map, &scope),
+            replace_types(get_fun_type_codom(fun_type), &type_map, &scope));
+        free_node_set(&scope);
     }
 
     free_type_map(&type_map);
@@ -348,27 +299,26 @@ static const Type* infer_type_args(
     return result_type;
 }
 
-static const Type* check_type_args(
+static Type check_type_args(
     TypingContext* context,
-    const Type* type,
+    Type type,
     AstNode* type_args,
     AstNode* call_arg,
     const FileLoc* file_loc)
 {
-    size_t type_param_count = type->kind->tag == TYPE_SIGNATURE
-        ? type->kind->signature.type_param_count : get_type_param_count(type);
+    size_t type_param_count = get_type_param_count(type);
 
     if (!type_args) {
         if (type_param_count == 0)
             return type;
-        if (type->tag != TYPE_FUN && type_param_count != 0) {
+        if (is_fun_type(type) && type_param_count != 0) {
             log_error(context->log, file_loc,
-                "missing type arguments for type '{t}'", (FormatArg[]) { { .t = type } });
+                "missing type arguments for type '{t}'", (FormatArg[]) { { .p = type } });
             return make_error_type(context->type_table);
         }
     } else if (type_param_count == 0) {
         log_error(context->log, file_loc,
-            "type arguments are not allowed on type '{t}'", (FormatArg[]) { { .t = type } });
+            "type arguments are not allowed on type '{t}'", (FormatArg[]) { { .p = type } });
         return make_error_type(context->type_table);
     }
 
@@ -377,87 +327,82 @@ static const Type* check_type_args(
     // applications.
     size_t type_arg_count = count_ast_nodes(type_args);
     if (type_arg_count > type_param_count ||
-        (type->tag != TYPE_FUN && type_arg_count != type_param_count))
+        (is_fun_type(type) && type_arg_count != type_param_count))
     {
         log_error(context->log, file_loc,
             "expected {s} {u} type argument(s), but got {u}",
             (FormatArg[]) {
-                { .s = type->tag == TYPE_FUN ? "at most" : "" },
+                { .s = is_fun_type(type) ? "at most" : "" },
                 { .u = type_param_count },
                 { .u = count_ast_nodes(type_args) }
             });
         return make_error_type(context->type_table);
     }
 
-    const Type** type_params = type->kind->tag == TYPE_SIGNATURE
-        ? type->kind->signature.type_params : get_type_params(type);
-
     // Create type arguments for the call by inferring them and padding whatever remains with
     // unknown types, so that the type inference algorithm can infer partially-specified polymorphic
     // function applications.
     DynArray args = new_dyn_array(sizeof(Type*));
     for (AstNode* type_arg = type_args; type_arg; type_arg = type_arg->next) {
-        const Type* arg = infer_type(context, type_arg);
-        expect_type(context, arg->kind, type_params[args.size]->kind, true, &type_arg->file_loc);
+        Type arg = infer_type(context, type_arg);
+        expect_type(context, arg->type, get_type_param(type, args.size)->type, true, &type_arg->file_loc);
         push_on_dyn_array(&args, &arg);
     }
-    const Type* unknown_type = make_unknown_type(context->type_table);
+    Type unknown_type = make_unknown_type(context->type_table);
     for (size_t i = args.size; i < type_param_count; ++i)
         push_on_dyn_array(&args, &unknown_type);
 
-    const Type* applied_type = type->tag == TYPE_FUN
-        ? infer_type_args(context, type, args.elems, call_arg, file_loc)
+    Type applied_type = is_fun_type(type)
+        ? infer_type_args(context, type, call_arg, args.elems, file_loc)
         : make_app_type(context->type_table, type, args.elems, type_param_count);
     free_dyn_array(&args);
     return applied_type;
 }
 
-static const Type* make_enum_ctor_type(TypeTable* type_table, const Type* enum_type, const Type* param_type) {
+static Type make_enum_ctor_type(TypeTable* type_table, Type enum_type, Type param_type) {
     return !is_unit_type(param_type) ? make_fun_type(type_table, param_type, enum_type) : enum_type;
 }
 
-static const Type* infer_next_path_elem(TypingContext* context, AstNode* prev_elem, AstNode* call_arg) {
+static Type infer_next_path_elem(TypingContext* context, AstNode* prev_elem, AstNode* call_arg) {
     assert(prev_elem->type && prev_elem->next);
 
     bool is_type_expected = false;
     AstNode* next_elem = prev_elem->next;
-    const Type* applied_type = get_applied_type(prev_elem->type);
-    if (applied_type->tag == TYPE_STRUCT) {
-        const StructField* field = find_struct_field(applied_type, next_elem->path_elem.name);
-        if (!field)
+    Type applied_type = get_applied_type(prev_elem->type);
+    if (is_struct_type(applied_type)) {
+        size_t index = find_struct_field(applied_type, next_elem->path_elem.name);
+        if (index == SIZE_MAX)
             goto missing_member;
 
-        next_elem->path_elem.index = field - applied_type->struct_.fields;
+        next_elem->path_elem.index = index;
         next_elem->path_elem.is_type = false;
-        next_elem->type = get_struct_field_type(
-            context->type_table, prev_elem->type, next_elem->path_elem.index);
-    } else if (applied_type->tag == TYPE_ENUM) {
-        const EnumOption* option = find_enum_option(applied_type, next_elem->path_elem.name);
-        if (!option)
+        next_elem->type = get_struct_field_type(prev_elem->type, index);
+    } else if (is_enum_type(applied_type)) {
+        size_t index = find_enum_option(applied_type, next_elem->path_elem.name);
+        if (index == SIZE_MAX)
             goto missing_member;
 
-        bool is_struct_like = is_struct_like_option(option);
-        next_elem->path_elem.index = option - applied_type->enum_.options;
+        bool is_struct_like = is_struct_like_option(applied_type, index);
+        next_elem->path_elem.index = index;
         next_elem->path_elem.is_type = is_struct_like;
-        const Type* param_type = get_enum_option_param_type(
-            context->type_table, prev_elem->type, next_elem->path_elem.index);
+        Type param_type = get_enum_option_type(prev_elem->type, next_elem->path_elem.index);
         next_elem->type = is_struct_like
             ? param_type : make_enum_ctor_type(context->type_table, prev_elem->type, param_type);
         is_type_expected = true;
-    } else if (prev_elem->type->kind->tag == TYPE_SIGNATURE) {
-        const Type* signature = prev_elem->type->kind;
-        const Type** var = find_signature_var(signature, next_elem->path_elem.name);
-        if (!var)
+    } else if (is_signature_type(prev_elem->type->type)) {
+        Type signature = prev_elem->type->type;
+        size_t index = find_signature_member(signature, next_elem->path_elem.name);
+        if (index == SIZE_MAX)
             goto missing_member;
 
-        next_elem->path_elem.index = var - signature->signature.vars;
-        if (is_kind_level_type((*var)->kind)) {
+        next_elem->path_elem.index = index;
+        Type member_type = get_signature_member_type(signature, index);
+        if (get_type_level(member_type) == LEVEL_TYPE) {
             next_elem->path_elem.is_type = true;
-            next_elem->type = make_proj_type(
-                context->type_table, prev_elem->type, next_elem->path_elem.index);
+            next_elem->type = make_proj_type(context->type_table, prev_elem->type, index);
         } else {
             next_elem->path_elem.is_type = false;
-            next_elem->type = (*var)->kind;
+            next_elem->type = get_signature_member_type(signature, index);
         }
     }
     else
@@ -482,24 +427,25 @@ missing_member:
         context, next_elem->path_elem.name, prev_elem->type, &next_elem->file_loc);
 }
 
-static const Type* make_tuple_like_struct_ctor(TypeTable* type_table, const Type* type) {
-    const Type* struct_type = get_applied_type(type);
+static Type make_tuple_like_struct_ctor(TypeTable* type_table, Type type) {
+    Type struct_type = get_applied_type(type);
     assert(is_tuple_like_struct_type(struct_type));
 
     // Using the tuple-like name as a value results produces a constructor that
     // types as a function (only for tuple-like structures with parameters).
-    if (struct_type->struct_.field_count > 0) {
-        const Type** arg_types = malloc_or_die(sizeof(Type*) * struct_type->struct_.field_count);
-        for (size_t i = 0, n = struct_type->struct_.field_count; i < n; ++i)
-            arg_types[i] = get_struct_field_type(type_table, type, i);
-        const Type* param_type = make_tuple_type(type_table, arg_types, struct_type->struct_.field_count);
+    size_t field_count = get_struct_type_field_count(struct_type);
+    if (field_count > 0) {
+        Type* arg_types = malloc_or_die(sizeof(Type) * field_count);
+        for (size_t i = 0; i < field_count; ++i)
+            arg_types[i] = get_struct_field_type(type, i);
+        Type param_type = make_tuple_type(type_table, arg_types, field_count);
         free(arg_types);
         return make_fun_type(type_table, param_type, type);
     }
     return type;
 }
 
-static const Type* infer_path_elems(TypingContext* context, AstNode* path_elem, AstNode* call_arg, bool is_type_expected) {
+static Type infer_path_elems(TypingContext* context, AstNode* path_elem, AstNode* call_arg, bool is_type_expected) {
     while (path_elem->next) {
         infer_next_path_elem(context, path_elem, call_arg);
         path_elem = path_elem->next;
@@ -523,7 +469,7 @@ static const Type* infer_path_elems(TypingContext* context, AstNode* path_elem, 
     return path_elem->type;
 }
 
-static const Type* infer_path(
+static Type infer_path(
     TypingContext* context,
     AstNode* path,
     AstNode* call_arg,
@@ -542,7 +488,7 @@ static const Type* infer_path(
         path->path.decl_site->tag == AST_ENUM_DECL ||
         path->path.decl_site->tag == AST_TYPE_DECL ||
         path->path.decl_site->tag == AST_SIG_DECL ||
-        (path->path.decl_site->tag == AST_TYPE_PARAM && is_kind_level_type(path_elem->type->kind));
+        (path->path.decl_site->tag == AST_TYPE_PARAM && get_type_level(path_elem->type) == LEVEL_TYPE);
     path_elem->type = check_type_args(context,
         path_elem->type,
         path_elem->path_elem.type_args,
@@ -552,13 +498,13 @@ static const Type* infer_path(
     return path->type = infer_path_elems(context, path_elem, call_arg, is_type_expected);
 }
 
-static const Type* infer_tuple(
+static Type infer_tuple(
     TypingContext* context,
     AstNode* tuple,
-    const Type* (*infer_arg)(TypingContext*, AstNode*))
+    Type (*infer_arg)(TypingContext*, AstNode*))
 {
     size_t i = 0, arg_count = count_ast_nodes(tuple->tuple_expr.args);
-    const Type** arg_types = malloc_or_die(sizeof(Type*) * arg_count);
+    Type* arg_types = malloc_or_die(sizeof(Type) * arg_count);
     for (AstNode* arg = tuple->tuple_expr.args; arg; arg = arg->next, i++)
         arg_types[i] = infer_arg(context, arg);
     tuple->type = make_tuple_type(context->type_table, arg_types, arg_count);
@@ -566,41 +512,41 @@ static const Type* infer_tuple(
     return tuple->type;
 }
 
-static const Type* check_tuple(
+static Type check_tuple(
     TypingContext* context,
     AstNode* tuple,
-    const Type* expected_type,
-    const Type* (*check_arg)(TypingContext*, AstNode*, const Type*))
+    Type expected_type,
+    Type (*check_arg)(TypingContext*, AstNode*, Type))
 {
-    assert(expected_type->tag == TYPE_TUPLE);
+    assert(is_tuple_type(expected_type));
 
     size_t i = 0, arg_count = count_ast_nodes(tuple->tuple_expr.args);
-    if (expected_type->tuple.arg_count != arg_count) {
+    if (get_tuple_type_arg_count(expected_type) != arg_count) {
         log_error(context->log, &tuple->file_loc,
             "expected tuple with {u} argument(s), but got {u}",
-            (FormatArg[]) { { .u = expected_type->tuple.arg_count }, { .u = arg_count } });
+            (FormatArg[]) { { .u = get_tuple_type_arg_count(expected_type) }, { .u = arg_count } });
         return make_error_type(context->type_table);
     }
 
-    const Type** arg_types = malloc_or_die(sizeof(Type*) * arg_count);
+    Type* arg_types = malloc_or_die(sizeof(Type) * arg_count);
     for (AstNode* arg = tuple->tuple_expr.args; arg; arg = arg->next, i++)
-        arg_types[i] = check_arg(context, arg, expected_type->tuple.args[i]);
+        arg_types[i] = check_arg(context, arg, get_tuple_type_arg(expected_type, i));
     tuple->type = make_tuple_type(context->type_table, arg_types, arg_count);
     free(arg_types);
     return tuple->type;
 }
 
-const Type* infer_kind(TypingContext* context, AstNode* kind) {
+Type infer_kind(TypingContext* context, AstNode* kind) {
     switch (kind->tag) {
         case AST_KIND_STAR:
             return make_star_kind(context->type_table);
         case AST_KIND_ARROW: {
             size_t i = 0, kind_param_count = count_ast_nodes(kind->arrow_kind.dom_kinds);
-            const Type** kind_params = malloc_or_die(sizeof(Type*) * kind_param_count);
+            Type* kind_params = malloc_or_die(sizeof(Type) * kind_param_count);
             for (AstNode* dom_kind = kind->arrow_kind.dom_kinds; dom_kind; dom_kind = dom_kind->next, i++)
                 kind_params[i] = infer_kind(context, dom_kind);
-            const Type* body = infer_kind(context, kind->arrow_kind.codom_kind);
-            const Type* arrow = make_arrow_kind(context->type_table, kind_params, kind_param_count, body);
+            Type body = infer_kind(context, kind->arrow_kind.codom_kind);
+            Type arrow = make_arrow_kind(context->type_table, kind_params, kind_param_count, body);
             free(kind_params);
             return arrow;
         }
@@ -609,60 +555,58 @@ const Type* infer_kind(TypingContext* context, AstNode* kind) {
     }
 }
 
-static const Type* check_where_clause(TypingContext* context, AstNode* where_clause, const Type* signature) {
-    const Type** var_ptr = find_signature_var(signature, where_clause->where_clause.name);
-    if (!var_ptr) {
+static Type check_where_clause(TypingContext* context, AstNode* where_clause, Type signature) {
+    const char* name = where_clause->where_clause.name;
+    size_t index = find_signature_member(signature, name);
+    if (index == SIZE_MAX) {
         report_missing_member(context,
             where_clause->where_clause.name, signature, &where_clause->file_loc);
         return make_error_type(context->type_table);
     }
-    Type* var = (Type*)*var_ptr;
-    if (var->var.value) {
+    Type member = get_signature_member_type(signature, index);
+    if (is_singleton_kind(member->type)) {
         log_error(context->log, &where_clause->file_loc,
             "'{s}' is already bound to '{t}'",
-            (FormatArg[]) { { .s = var->var.name }, { .t = resolve_type(var->var.value) } });
+            (FormatArg[]) { { .s = get_type_name(member) }, { .p = member } });
         return make_error_type(context->type_table);
     }
-    ((Type*)var)->var.value = infer_type(context, where_clause->where_clause.type);
-    return var;
+    member = make_singleton_kind(context->type_table, infer_type(context, where_clause->where_clause.type));
+    set_signature_member_type(signature, index, name, member);
+    return member;
 }
 
-static const Type* infer_where_type(TypingContext* context, AstNode* where_type) {
-    const Type* source_signature = infer_type(context, where_type->where_type.signature);
-    if (!expect_type_with_tag(context, source_signature, TYPE_SIGNATURE, "signature", &where_type->where_type.signature->file_loc))
-        return make_error_type(context->type_table);
+static Type infer_where_type(TypingContext* context, AstNode* where_type) {
+    Type source_signature = infer_type(context, where_type->where_type.signature);
+    if (!is_signature_type(source_signature)) {
+        return where_type->type = report_type_mismatch(context, "signature", source_signature, true,
+            &where_type->where_type.signature->file_loc);
+    }
 
     // Create a new signature type to hold the modified signature with new bindings from the clauses
-    Type* signature = copy_signature_type(context->type_table, source_signature);
+    Type signature = copy_signature_type(source_signature);
     for (AstNode* where_clause = where_type->where_type.clauses; where_clause; where_clause = where_clause->next)
         check_where_clause(context, where_clause, signature);
-    return signature;
+    return where_type->type =signature;
 }
 
-static const Type* infer_type_param(TypingContext* context, AstNode* type_param) {
-    const Type* kind = type_param->type_param.kind
+static Type infer_type_param_kind(TypingContext* context, AstNode* type_param) {
+    return type_param->type_param.kind
         ? infer_kind(context, type_param->type_param.kind)
         : make_star_kind(context->type_table);
-    return type_param->type = make_var_type_with_kind(
-        context->type_table, type_param->type_param.name, kind);
 }
 
-static const Kind* infer_type_params(
+static Type infer_type_params(
     TypingContext* context,
     AstNode* type_params,
-    DynArray* type_vars,
-    const Kind* body)
+    DynArray* type_vars)
 {
     for (; type_params; type_params = type_params->next) {
-        infer_type_param(context, type_params);
-        push_on_dyn_array(type_vars, &type_params->type);
+        Type kind = infer_type_param_kind(context, type_params);
+        push_on_dyn_array(type_vars, &kind);
     }
-    if (!body)
-        return NULL;
-    return make_type_ctor_kind(context->type_table, type_vars->elems, type_vars->size, body);
 }
 
-static const Type* infer_type_with_noret(TypingContext* context, AstNode* type, bool accept_noret) {
+static Type infer_type_with_noret(TypingContext* context, AstNode* type, bool accept_noret) {
     switch (type->tag) {
 #define f(name, ...) case AST_TYPE_##name: return type->type = make_prim_type(context->type_table, TYPE_##name);
         PRIM_TYPE_LIST(f)
@@ -677,7 +621,7 @@ static const Type* infer_type_with_noret(TypingContext* context, AstNode* type, 
             return infer_tuple(context, type, infer_type);
         case AST_FUN_TYPE: {
             DynArray type_params = new_dyn_array(sizeof(Type*));
-            infer_type_params(context, type->fun_type.type_params, &type_params, NULL);
+            infer_type_params(context, type->fun_type.type_params, &type_params);
             type->type = make_poly_fun_type(context->type_table,
                 type_params.elems,
                 type_params.size,
@@ -691,8 +635,8 @@ static const Type* infer_type_with_noret(TypingContext* context, AstNode* type, 
                 context->type_table, infer_type(context, type->array_type.elem_type));
         case AST_PTR_TYPE:
             return make_ptr_type(context->type_table,
-                type->ptr_type.is_const,
-                infer_type(context, type->ptr_type.pointed_type));
+                infer_type(context, type->ptr_type.pointed_type),
+                type->ptr_type.is_const);
         case AST_WHERE_TYPE:
             return infer_where_type(context, type);
         case AST_SIG_DECL:
@@ -703,20 +647,20 @@ static const Type* infer_type_with_noret(TypingContext* context, AstNode* type, 
     }
 }
 
-const Type* infer_type(TypingContext* context, AstNode* type) {
+Type infer_type(TypingContext* context, AstNode* type) {
     return infer_type_with_noret(context, type, false);
 }
 
-static const Type* check_cond(TypingContext* context, AstNode* cond) {
+static Type check_cond(TypingContext* context, AstNode* cond) {
     return check_expr(context, cond, make_prim_type(context->type_table, TYPE_BOOL));
 }
 
-static const Type* check_if_expr(TypingContext* context, AstNode* if_expr, const Type* expected_type) {
+static Type check_if_expr(TypingContext* context, AstNode* if_expr, Type expected_type) {
     check_cond(context, if_expr->if_expr.cond);
-    const Type* then_type = check_expr(context, if_expr->if_expr.then_expr, expected_type);
+    Type then_type = check_expr(context, if_expr->if_expr.then_expr, expected_type);
     if (if_expr->if_expr.else_expr) {
-        const Type* else_type = check_expr(context, if_expr->if_expr.else_expr, expected_type);
-        if (is_sub_type(context->type_table, then_type, else_type))
+        Type else_type = check_expr(context, if_expr->if_expr.else_expr, expected_type);
+        if (is_sub_type(then_type, else_type))
             return if_expr->type = else_type;
         return if_expr->type = expect_type(
             context, else_type, then_type, true, &if_expr->if_expr.else_expr->file_loc);
@@ -724,11 +668,11 @@ static const Type* check_if_expr(TypingContext* context, AstNode* if_expr, const
     return if_expr->type = then_type;
 }
 
-static const Type* check_fun_expr(
+static Type check_fun_expr(
     TypingContext* context,
     AstNode* fun_expr,
-    const Type* dom_type,
-    const Type* codom_type)
+    Type dom_type,
+    Type codom_type)
 {
     dom_type = check_pattern(context, fun_expr->fun_expr.param, dom_type);
     if (fun_expr->fun_expr.ret_type) {
@@ -736,62 +680,62 @@ static const Type* check_fun_expr(
             infer_type(context, fun_expr->fun_expr.ret_type),
             codom_type, true, &fun_expr->fun_expr.ret_type->file_loc);
     }
-    const Type* body_type = check_expr(context, fun_expr->fun_expr.body, codom_type);
+    Type body_type = check_expr(context, fun_expr->fun_expr.body, codom_type);
     if (!fun_expr->fun_expr.ret_type)
         codom_type = body_type;
     return fun_expr->type = make_fun_type(context->type_table, dom_type, codom_type);
 }
 
-static const Type* check_call(
+static Type check_call(
     TypingContext* context,
     AstNode* call_or_op,
     AstNode* arg,
-    const Type* callee_type,
-    const Type* expected_type)
+    Type callee_type,
+    Type expected_type)
 {
     const FileLoc* callee_loc =
         call_or_op->tag == AST_CALL_EXPR ? &call_or_op->call_expr.callee->file_loc : &call_or_op->file_loc;
-    if (!expect_type_with_tag(context, callee_type, TYPE_FUN, "function", callee_loc))
-        return make_error_type(context->type_table);
-    check_expr(context, arg, callee_type->fun.dom);
-    return expect_type(context,
-        callee_type->fun.codom, expected_type, true, &call_or_op->file_loc);
+    if (!is_fun_type(callee_type))
+        return call_or_op->type = report_type_mismatch(context, "function", callee_type, true, callee_loc);
+    check_expr(context, arg, get_fun_type_dom(callee_type));
+    return call_or_op->type = expect_type(context,
+        get_fun_type_codom(callee_type), expected_type, true, &call_or_op->file_loc);
 }
 
-static const Type* check_call_expr(TypingContext* context, AstNode* call_expr, const Type* expected_type) {
-    const Type* callee_type = call_expr->call_expr.callee->tag == AST_PATH
+static Type check_call_expr(TypingContext* context, AstNode* call_expr, Type expected_type) {
+    Type callee_type = call_expr->call_expr.callee->tag == AST_PATH
         ? infer_path(context, call_expr->call_expr.callee, call_expr->call_expr.arg, false)
         : infer_expr(context, call_expr->call_expr.callee);
     return call_expr->type = check_call(context, call_expr, call_expr->call_expr.arg, callee_type, expected_type);
 }
 
-static const Type* check_int_literal(TypingContext* context, AstNode* literal, const Type* expected_type) {
-    const Type* resolved_type = resolve_type(expected_type);
-    if (resolved_type->tag == TYPE_UNKNOWN)
+static Type check_int_literal(TypingContext* context, AstNode* literal, Type expected_type) {
+    Type resolved_type = resolve_type(expected_type);
+    if (is_unknown_type(resolved_type))
         return literal->type = make_prim_type(context->type_table, DEFAULT_INT_TYPE_TAG);
-    if (!is_int_or_float_type(resolved_type->tag))
-        return literal->type = report_type_mismatch(context, "integer literal", expected_type, &literal->file_loc);
-    if (is_int_type(resolved_type->tag) &&
-        ilog2(literal->int_literal.val) > get_prim_type_bitwidth(resolved_type->tag))
+    if (!is_int_or_float_type(resolved_type))
+        return literal->type = report_type_mismatch(context, "integer literal", expected_type, false, &literal->file_loc);
+    if (is_int_type(resolved_type) &&
+        ilog2(literal->int_literal.val) > get_prim_type_bitwidth(resolved_type))
     {
         log_error(context->log, &literal->file_loc,
             "integer literal does not fit in type '{t}'",
-            (FormatArg[]) { { .t = resolved_type } });
+            (FormatArg[]) { { .p = resolved_type } });
         return literal->type = make_error_type(context->type_table);
     }
     return literal->type = expected_type;
 }
 
-static const Type* check_float_literal(TypingContext* context, AstNode* literal, const Type* expected_type) {
-    const Type* resolved_type = resolve_type(expected_type);
-    if (resolved_type->tag == TYPE_UNKNOWN)
+static Type check_float_literal(TypingContext* context, AstNode* literal, Type expected_type) {
+    Type resolved_type = resolve_type(expected_type);
+    if (is_unknown_type(resolved_type))
         return literal->type = make_prim_type(context->type_table, DEFAULT_FLOAT_TYPE_TAG);
-    if (!is_float_type(resolved_type->tag))
-        return literal->type = report_type_mismatch(context, "floating-point literal", expected_type, &literal->file_loc);
+    if (!is_float_type(resolved_type))
+        return literal->type = report_type_mismatch(context, "floating-point literal", expected_type, false, &literal->file_loc);
     return literal->type = expected_type;
 }
 
-static const Type* check_binary_expr(TypingContext* context, AstNode* binary_expr, const Type* expected_type) {
+static Type check_binary_expr(TypingContext* context, AstNode* binary_expr, Type expected_type) {
     infer_expr(context, binary_expr->binary_expr.left);
     infer_expr(context, binary_expr->binary_expr.right);
     if (is_assign_expr_tag(binary_expr->tag))
@@ -800,53 +744,53 @@ static const Type* check_binary_expr(TypingContext* context, AstNode* binary_exp
     return NULL;
 }
 
-static const Type* infer_logic_expr(TypingContext* context, AstNode* logic_expr) {
-    const Type* bool_type = make_prim_type(context->type_table, TYPE_BOOL);
+static Type infer_logic_expr(TypingContext* context, AstNode* logic_expr) {
+    Type bool_type = make_prim_type(context->type_table, TYPE_BOOL);
     check_expr(context, logic_expr->binary_expr.left, bool_type);
     check_expr(context, logic_expr->binary_expr.right, bool_type);
     return bool_type;
 }
 
-static const Type* check_struct_expr(TypingContext* context, AstNode* struct_expr, const Type* expected_type) {
-    const Type* type = infer_type(context, struct_expr->struct_expr.left);
-    const Type* struct_type = get_applied_type(type);
-    if (!expect_type_with_tag(context, struct_type, TYPE_STRUCT, "structure", &struct_expr->file_loc))
-        return struct_expr->type = make_error_type(context->type_table);
+static Type check_struct_expr(TypingContext* context, AstNode* struct_expr, Type expected_type) {
+    Type type = infer_type(context, struct_expr->struct_expr.left);
+    Type struct_type = get_applied_type(type);
+    if (!is_struct_type(struct_type))
+        return struct_expr->type = report_type_mismatch(context, "structure", struct_type, true, &struct_expr->file_loc);
 
-    bool* seen = calloc_or_die(struct_type->struct_.field_count, sizeof(bool));
+    size_t field_count = get_struct_type_field_count(struct_type);
+    bool* seen = calloc_or_die(field_count, sizeof(bool));
     for (AstNode* field_expr = struct_expr->struct_expr.fields; field_expr; field_expr = field_expr->next) {
-        const StructField* field = find_struct_field(struct_type, field_expr->field_expr.name);
-        if (!field) {
+        size_t index = find_struct_field(struct_type, field_expr->field_expr.name);
+        if (index == SIZE_MAX) {
             report_missing_member(context, field_expr->field_expr.name, struct_type, &field_expr->file_loc);
             goto fail;
         }
 
         // Check that this field is not initialized twice
-        size_t field_index = field - struct_type->struct_.fields;
-        if (seen[field_index]) {
+        if (seen[index]) {
             log_error(context->log, &field_expr->file_loc,
                 "field '{s}' is specified more than once",
                 (FormatArg[]) { { .s = field_expr->field_expr.name } });
             goto fail;
         }
-        seen[field_index] = true;
-        field_expr->field_expr.index = field_index;
+        seen[index] = true;
+        field_expr->field_expr.index = index;
 
         // Check that the value of the field matches its type
-        const Type* field_type = get_struct_field_type(context->type_table, type, field_index);
+        Type field_type = get_struct_field_type(type, index);
         check_expr(context, field_expr->field_expr.val, field_type);
     }
 
     // Check that all fields have an initializer
-    for (size_t i = 0; i < struct_type->struct_.field_count; ++i) {
-        if (!seen[i] && !struct_type->struct_.fields[i].has_default) {
+    for (size_t i = 0; i < field_count; ++i) {
+        if (!seen[i] && has_default_struct_field_value(struct_type, i)) {
             log_error(context->log, &struct_expr->file_loc,
                 "missing initializer for field '{s}'",
-                (FormatArg[]) { { .s = struct_type->struct_.fields[i].name } });
+                (FormatArg[]) { { .s = get_struct_field_name(struct_type, i) } });
         }
     }
 
-    const Type* result_type = type;
+    Type result_type = type;
     if (struct_type->struct_.parent_enum) {
         // If the struct expression constructs an enumeration type,
         // return that instead of the structure type.
@@ -869,19 +813,21 @@ cleanup:
     return struct_expr->type;
 }
 
-static const Type* check_member_expr(TypingContext* context, AstNode* member_expr, const Type* expected_type) {
+static Type check_member_expr(TypingContext* context, AstNode* member_expr, Type expected_type) {
     const FileLoc* left_loc = &member_expr->member_expr.left->file_loc;
-    const Type* left_type = infer_expr(context, member_expr->member_expr.left);
-    const Type* applied_type = get_applied_type(left_type);
+    Type left_type = infer_expr(context, member_expr->member_expr.left);
+    Type applied_type = get_applied_type(left_type);
 
-    const Type* member_type = NULL;
+    Type member_type = NULL;
     if (member_expr->member_expr.elems_or_index->tag == AST_INT_LITERAL) {
         size_t index = member_expr->member_expr.elems_or_index->int_literal.val;
-        if (is_tuple_like_struct_type(applied_type)) {
-            member_type = get_struct_field_type(context->type_table, left_type, index);
-        } else if (expect_type_with_tag(context, left_type, TYPE_TUPLE, "tuple or tuple-like structure", left_loc))
-            member_type = applied_type->tuple.args[index];
-    } else if (expect_type_with_tag(context, applied_type, TYPE_STRUCT, "structure", left_loc)) {
+        if (is_tuple_like_struct_type(applied_type))
+            member_type = get_struct_field_type(left_type, index);
+        else if (is_tuple_type(left_type))
+            member_type = get_tuple_type_arg(applied_type, index);
+        else
+            report_type_mismatch(context, "tuple", left_type, true, left_loc);
+    } else if (is_struct_type(applied_type)) {
         assert(member_expr->member_expr.elems_or_index->tag == AST_PATH_ELEM);
         AstNode first_elem = {
             .tag = AST_PATH_ELEM,
@@ -890,7 +836,8 @@ static const Type* check_member_expr(TypingContext* context, AstNode* member_exp
             .path_elem.is_type = false
         };
         member_type = infer_path_elems(context, &first_elem, NULL, false);
-    }
+    } else
+        report_type_mismatch(context, "tuple or structure", applied_type, true, left_loc);
 
     if (!member_type)
         return member_expr->type = make_error_type(context->type_table); // Error was already reported above
@@ -899,7 +846,7 @@ static const Type* check_member_expr(TypingContext* context, AstNode* member_exp
         context, member_type, expected_type, true, &member_expr->file_loc);
 }
 
-const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expected_type) {
+Type check_expr(TypingContext* context, AstNode* expr, Type expected_type) {
     switch (expr->tag) {
         case AST_PATH:
             return expr->type = expect_type(context,
@@ -924,11 +871,11 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
                 check_expr(context, expr->typed_expr.left, infer_type(context, expr->typed_expr.type)),
                 expected_type, true, &expr->file_loc);
         case AST_TUPLE_EXPR: {
-            if (expected_type->tag == TYPE_UNKNOWN)
+            if (is_unknown_type(expected_type))
                 return infer_tuple(context, expr, infer_expr);
-            const Type* resolved_type = resolve_type(expected_type);
-            if (!expect_type_with_tag(context, resolved_type, TYPE_TUPLE, "tuple", &expr->file_loc))
-                return expr->type = make_error_type(context->type_table);
+            Type resolved_type = resolve_type(expected_type);
+            if (!is_tuple_type(resolved_type))
+                return expr->type = report_type_mismatch(context, "tuple", resolved_type, true, &expr->file_loc);
             return check_tuple(context, expr, resolved_type, check_expr);
         }
         case AST_IF_EXPR:
@@ -936,7 +883,7 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
         case AST_CALL_EXPR:
             return check_call_expr(context, expr, expected_type);
         case AST_BLOCK_EXPR: {
-            const Type* last_type = NULL;
+            Type last_type = NULL;
             for (AstNode* stmt = expr->block_expr.stmts; stmt; stmt = stmt->next) {
                 last_type = stmt->next || expr->block_expr.ends_with_semicolon
                     ? infer_stmt(context, stmt) : check_stmt(context, stmt, expected_type);
@@ -946,17 +893,17 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
             return expr->type = expect_type(context, last_type, expected_type, true, &expr->file_loc);
         }
         case AST_FUN_EXPR: {
-            if (expected_type->tag == TYPE_UNKNOWN)
+            if (is_unknown_type(expected_type))
                 return check_fun_expr(context, expr,
                     make_unknown_type(context->type_table),
                     make_unknown_type(context->type_table));
-            if (!expect_type_with_tag(context, expected_type, TYPE_FUN, "function", &expr->file_loc))
-                return expr->type = make_error_type(context->type_table);
-            return check_fun_expr(context, expr, expected_type->fun.dom, expected_type->fun.codom);
+            if (!is_fun_type(expected_type))
+                return expr->type = report_type_mismatch(context, "function", expected_type, true, &expr->file_loc);
+            return check_fun_expr(context, expr, get_fun_type_dom(expected_type), get_fun_type_codom(expected_type));
         }
         case AST_BREAK_EXPR:
         case AST_CONTINUE_EXPR: {
-            const Type* type = make_fun_type(context->type_table,
+            Type type = make_fun_type(context->type_table,
                 make_unit_type(context->type_table),
                 make_noret_type(context->type_table));
             return expr->type = expect_type(context, type, expected_type, true, &expr->file_loc);
@@ -985,11 +932,11 @@ const Type* check_expr(TypingContext* context, AstNode* expr, const Type* expect
     }
 }
 
-const Type* infer_expr(TypingContext* context, AstNode* expr) {
+Type infer_expr(TypingContext* context, AstNode* expr) {
     return check_expr(context, expr, make_unknown_type(context->type_table));
 }
 
-const Type* check_pattern(TypingContext* context, AstNode* pattern, const Type* expected_type) {
+Type check_pattern(TypingContext* context, AstNode* pattern, Type expected_type) {
     switch (pattern->tag) {
         case AST_INT_LITERAL:
             return check_int_literal(context, pattern, expected_type);
@@ -1006,18 +953,18 @@ const Type* check_pattern(TypingContext* context, AstNode* pattern, const Type* 
                 make_unsized_array_type(context->type_table, make_prim_type(context->type_table, TYPE_U8)),
                 expected_type, false, &pattern->file_loc);
         case AST_TUPLE_PATTERN: {
-            if (expected_type->tag == TYPE_UNKNOWN)
+            if (is_unknown_type(expected_type))
                 return pattern->type = infer_tuple(context, pattern, infer_pattern);
-            const Type* resolved_type = resolve_type(expected_type);
-            if (!expect_type_with_tag(context, resolved_type, TYPE_TUPLE, "tuple", &pattern->file_loc))
-                return pattern->type = make_error_type(context->type_table);
+            Type resolved_type = resolve_type(expected_type);
+            if (!is_tuple_type(resolved_type))
+                return pattern->type = report_type_mismatch(context, "tuple", resolved_type, true, &pattern->file_loc);
             return check_tuple(context, pattern, resolved_type, check_pattern);
         }
         case AST_TYPED_PATTERN:
             pattern->type = check_pattern(context, pattern->typed_pattern.left, infer_type(context, pattern->typed_pattern.type));
             return pattern->type = expect_type(context, pattern->type, expected_type, false, &pattern->file_loc);
         case AST_IDENT_PATTERN:
-            if (expected_type->contains_unknown)
+            if (is_unknown_type(expected_type))
                 return pattern->type = report_cannot_infer(context, "pattern", &pattern->file_loc);
             return pattern->type = expected_type;
         case AST_PATH:
@@ -1028,11 +975,11 @@ const Type* check_pattern(TypingContext* context, AstNode* pattern, const Type* 
     }
 }
 
-const Type* infer_pattern(TypingContext* context, AstNode* pattern) {
+Type infer_pattern(TypingContext* context, AstNode* pattern) {
     return check_pattern(context, pattern, make_unknown_type(context->type_table));
 }
 
-const Type* check_stmt(TypingContext* context, AstNode* stmt, const Type* expected_type) {
+Type check_stmt(TypingContext* context, AstNode* stmt, Type expected_type) {
     switch (stmt->tag) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
@@ -1051,35 +998,35 @@ const Type* check_stmt(TypingContext* context, AstNode* stmt, const Type* expect
     }
 }
 
-const Type* infer_stmt(TypingContext* context, AstNode* stmt) {
+Type infer_stmt(TypingContext* context, AstNode* stmt) {
     return check_stmt(context, stmt, make_unknown_type(context->type_table));
 }
 
-static const Type* check_pattern_and_expr(
+static Type check_pattern_and_expr(
     TypingContext* context,
     AstNode* pattern,
     AstNode* expr,
-    const Type* expected_type)
+    Type expected_type)
 {
     if (pattern->tag == AST_TUPLE_PATTERN && expr->tag == AST_TUPLE_EXPR &&
-        (expected_type->tag == TYPE_UNKNOWN || expected_type->tag == TYPE_TUPLE))
+        (is_unknown_type(expected_type) || is_tuple_type(expected_type)))
     {
         size_t arg_count = count_ast_nodes(pattern->tuple_pattern.args);
         if (arg_count == count_ast_nodes(expr->tuple_expr.args) &&
-            (expected_type->tag != TYPE_TUPLE || expected_type->tuple.arg_count == arg_count))
+            (is_tuple_type(expected_type) || get_tuple_type_arg_count(expected_type) == arg_count))
         {
             AstNode* expr_arg = expr->tuple_expr.args;
             AstNode* pattern_arg = pattern->tuple_pattern.args;
-            const Type** arg_types = malloc_or_die(sizeof(Type*) * arg_count);
+            Type* arg_types = malloc_or_die(sizeof(Type) * arg_count);
             for (size_t i = 0; i < arg_count;
                 ++i, expr_arg = expr_arg->next, pattern_arg = pattern_arg->next)
             {
-                const Type* arg_type = expected_type->tag == TYPE_TUPLE
-                    ? expected_type->tuple.args[i]
+                Type arg_type = is_tuple_type(expected_type)
+                    ? get_tuple_type_arg(expected_type, i)
                     : make_unknown_type(context->type_table);
                 arg_types[i] = check_pattern_and_expr(context, pattern_arg, expr_arg, arg_type);
             }
-            const Type* result = make_tuple_type(context->type_table, arg_types, arg_count);
+            Type result = make_tuple_type(context->type_table, arg_types, arg_count);
             free(arg_types);
             return result;
         }
@@ -1089,18 +1036,16 @@ static const Type* check_pattern_and_expr(
     return check_pattern(context, pattern, check_expr(context, expr, expected_type));
 }
 
-static const Type* infer_const_or_var_decl(TypingContext* context, AstNode* decl) {
-    const Type* type =  check_pattern_and_expr(context,
+static Type infer_const_or_var_decl(TypingContext* context, AstNode* decl) {
+    Type type = check_pattern_and_expr(context,
         decl->var_decl.pattern,
         decl->var_decl.init,
         make_unknown_type(context->type_table));
-    if (should_add_to_parent_sig_or_mod(decl))
-        add_idents_to_parent_mod(context->type_table, decl->var_decl.pattern);
     return type;
 }
 
 static StructField infer_field_decl(TypingContext* context, AstNode* field_decl) {
-    const Type* field_type = infer_type(context, field_decl->field_decl.type);
+    Type field_type = infer_type(context, field_decl->field_decl.type);
     if (field_decl->field_decl.val)
         check_expr(context, field_decl->field_decl.val, field_type);
     return (StructField) {
@@ -1110,7 +1055,7 @@ static StructField infer_field_decl(TypingContext* context, AstNode* field_decl)
     };
 }
 
-static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_decl) {
+static Type infer_struct_decl(TypingContext* context, AstNode* struct_decl) {
     Type* struct_type = make_struct_type(context->type_table, struct_decl->struct_decl.name);
     DynArray type_params = new_dyn_array(sizeof(Type*));
     DynArray struct_fields = new_dyn_array(sizeof(StructField));
@@ -1124,9 +1069,9 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
     struct_type->struct_.type_param_count = type_params.size;
 
     // Add inherited fields to the structure
-    const Type* super_struct = NULL;
+    Type super_struct = NULL;
     if (struct_decl->struct_decl.super_type) {
-        const Type* super_type = infer_type(context, struct_decl->struct_decl.super_type);
+        Type super_type = infer_type(context, struct_decl->struct_decl.super_type);
         super_struct = get_applied_type(super_type);
         if (expect_type_with_tag(
             context, super_struct, TYPE_STRUCT, "structure", &struct_decl->struct_decl.super_type->file_loc))
@@ -1172,7 +1117,7 @@ static const Type* infer_struct_decl(TypingContext* context, AstNode* struct_dec
     return struct_decl->type;
 }
 
-static const Type* infer_option_decl(
+static Type infer_option_decl(
     TypingContext* context,
     AstNode* option_decl,
     Type* enum_type)
@@ -1199,7 +1144,7 @@ static const Type* infer_option_decl(
     struct_type->struct_.type_param_count = enum_type->enum_.type_param_count;
     struct_type->struct_.fields = struct_fields.elems;
     struct_type->struct_.field_count = struct_fields.size;
-    const Type* option_type = seal_struct_type(context->type_table, struct_type);
+    Type option_type = seal_struct_type(context->type_table, struct_type);
     free_dyn_array(&struct_fields);
 
     // We may need to wrap the structure type into a type application if the enumeration is polymorphic
@@ -1209,7 +1154,7 @@ static const Type* infer_option_decl(
     return option_decl->type = option_type;
 }
 
-static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
+static Type infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
     Type* enum_type = make_enum_type(context->type_table, enum_decl->enum_decl.name);
     DynArray type_params = new_dyn_array(sizeof(Type*));
     DynArray enum_options = new_dyn_array(sizeof(EnumOption));
@@ -1221,9 +1166,9 @@ static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
     enum_type->enum_.type_param_count = type_params.size;
 
     // Add inherited options to the enumeration
-    const Type* sub_enum = NULL;
+    Type sub_enum = NULL;
     if (enum_decl->enum_decl.sub_type) {
-        const Type* sub_type = infer_type(context, enum_decl->enum_decl.sub_type);
+        Type sub_type = infer_type(context, enum_decl->enum_decl.sub_type);
         sub_enum = get_applied_type(sub_type);
         if (expect_type_with_tag(
             context, sub_enum, TYPE_ENUM, "enumeration", &enum_decl->enum_decl.sub_type->file_loc))
@@ -1266,7 +1211,7 @@ static const Type* infer_enum_decl(TypingContext* context, AstNode* enum_decl) {
     return enum_decl->type;
 }
 
-static const Type* infer_type_decl(TypingContext* context, AstNode* type_decl) {
+static Type infer_type_decl(TypingContext* context, AstNode* type_decl) {
     DynArray type_params = new_dyn_array(sizeof(Type*));
     const Kind* type_kind = infer_type_params(context,
         type_decl->type_decl.type_params, &type_params, make_star_kind(context->type_table));
@@ -1277,8 +1222,8 @@ static const Type* infer_type_decl(TypingContext* context, AstNode* type_decl) {
         type_decl->type = add_to_parent_sig_or_mod(
             context->type_table, type_decl, type_kind, type_decl->type_decl.name, true);
     } else {
-        const Type* aliased_type = infer_type(context, type_decl->type_decl.aliased_type);
-        const Type* alias_type = make_alias_type(
+        Type aliased_type = infer_type(context, type_decl->type_decl.aliased_type);
+        Type alias_type = make_alias_type(
             context->type_table,
             type_decl->type_decl.name,
             type_params.elems,
@@ -1293,12 +1238,12 @@ static const Type* infer_type_decl(TypingContext* context, AstNode* type_decl) {
     return type_decl->type;
 }
 
-static const Type* infer_fun_decl(TypingContext* context, AstNode* fun_decl) {
+static Type infer_fun_decl(TypingContext* context, AstNode* fun_decl) {
     DynArray type_params = new_dyn_array(sizeof(Type*));
     infer_type_params(context, fun_decl->fun_decl.type_params, &type_params, NULL);
-    const Type* dom_type = infer_pattern(context, fun_decl->fun_decl.param);
+    Type dom_type = infer_pattern(context, fun_decl->fun_decl.param);
     if (fun_decl->fun_decl.ret_type) {
-        const Type* codom_type = infer_type(context, fun_decl->fun_decl.ret_type);
+        Type codom_type = infer_type(context, fun_decl->fun_decl.ret_type);
         // Set the function type before checking the body in case
         // the function is recursive (or uses `return`).
         fun_decl->type = make_poly_fun_type(context->type_table,
@@ -1306,7 +1251,7 @@ static const Type* infer_fun_decl(TypingContext* context, AstNode* fun_decl) {
         if (fun_decl->fun_decl.body)
             check_expr(context, fun_decl->fun_decl.body, codom_type);
     } else if (fun_decl->fun_decl.body) {
-        const Type* codom_type = infer_expr(context, fun_decl->fun_decl.body);
+        Type codom_type = infer_expr(context, fun_decl->fun_decl.body);
         fun_decl->type = make_poly_fun_type(context->type_table,
             type_params.elems, type_params.size, dom_type, codom_type);
     } else
@@ -1328,14 +1273,14 @@ static const Type* infer_fun_decl(TypingContext* context, AstNode* fun_decl) {
     return fun_decl->type;
 }
 
-static const Type* infer_val_decl(TypingContext* context, AstNode* val_decl) {
+static Type infer_val_decl(TypingContext* context, AstNode* val_decl) {
     val_decl->type = infer_type(context, val_decl->val_decl.type);
     if (should_add_to_parent_sig_or_mod(val_decl))
         add_decl_to_parent_sig_or_mod(context->type_table, val_decl, val_decl->type);
     return val_decl->type;
 }
 
-static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
+static Type infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
     Type* signature = make_signature_type(context->type_table);
     DynArray type_params = new_dyn_array(sizeof(Type*));
 
@@ -1365,7 +1310,7 @@ static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
     free_dyn_array(&vars.vars);
 
     if (mod_decl->mod_decl.signature) {
-        const Type* assigned_signature = infer_type(context, mod_decl->mod_decl.signature);
+        Type assigned_signature = infer_type(context, mod_decl->mod_decl.signature);
         if (expect_type_with_tag(context,
             assigned_signature, TYPE_SIGNATURE, "signature", &mod_decl->mod_decl.signature->file_loc))
         {
@@ -1383,7 +1328,7 @@ static const Type* infer_mod_decl(TypingContext* context, AstNode* mod_decl) {
     return mod_decl->type;
 }
 
-const Type* infer_sig_decl(TypingContext* context, AstNode* sig_decl) {
+Type infer_sig_decl(TypingContext* context, AstNode* sig_decl) {
     Type* signature = make_signature_type(context->type_table);
     DynArray type_params = new_dyn_array(sizeof(Type*));
 
@@ -1410,7 +1355,7 @@ const Type* infer_sig_decl(TypingContext* context, AstNode* sig_decl) {
         : signature;
 }
 
-const Type* infer_decl(TypingContext* context, AstNode* decl) {
+Type infer_decl(TypingContext* context, AstNode* decl) {
     switch (decl->tag) {
         case AST_FUN_DECL:
             return infer_fun_decl(context, decl);

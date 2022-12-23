@@ -12,26 +12,28 @@
 
 typedef struct MemPool MemPool;
 typedef struct Log Log;
+typedef struct TypeTable TypeTable;
 
 typedef struct TypingContext {
     Log* log;
     TypeTable* type_table;
     MemPool* mem_pool;
     HashTable visited_decls;
+    TypeMap fun_type_variance;
 } TypingContext;
 
 TypingContext new_typing_context(TypeTable*, MemPool* mem_pool, Log*);
 void free_typing_context(TypingContext*);
 
-const Type* infer_kind(TypingContext*, AstNode*);
-const Type* infer_type(TypingContext*, AstNode*);
-const Type* infer_pattern(TypingContext*, AstNode*);
-const Type* check_pattern(TypingContext*, AstNode*, const Type*);
-const Type* infer_expr(TypingContext*, AstNode*);
-const Type* check_expr(TypingContext*, AstNode*, const Type*);
-const Type* infer_stmt(TypingContext*, AstNode*);
-const Type* check_stmt(TypingContext*, AstNode*, const Type*);
-const Type* infer_decl(TypingContext*, AstNode*);
+Type infer_kind(TypingContext*, AstNode*);
+Type infer_type(TypingContext*, AstNode*);
+Type infer_pattern(TypingContext*, AstNode*);
+Type check_pattern(TypingContext*, AstNode*, Type);
+Type infer_expr(TypingContext*, AstNode*);
+Type check_expr(TypingContext*, AstNode*, Type);
+Type infer_stmt(TypingContext*, AstNode*);
+Type check_stmt(TypingContext*, AstNode*, Type);
+Type infer_decl(TypingContext*, AstNode*);
 void infer_program(TypingContext*, AstNode*);
 
 #endif

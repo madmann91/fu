@@ -1,6 +1,5 @@
 #include "fu/core/alloc.h"
 #include "fu/core/format.h"
-#include "fu/lang/types.h"
 
 #include <assert.h>
 #include <stddef.h>
@@ -9,9 +8,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <limits.h>
 
 #define MAX_FORMAT_CHARS 64
 #define DEFAULT_BUF_CAPACITY 1024
+
+static FormatFn format_fns[UCHAR_MAX + 1];
 
 static FormatBuf* alloc_buf(size_t capacity) {
     FormatBuf* buf = malloc_or_die(sizeof(FormatBuf) + capacity);
@@ -98,11 +100,9 @@ static const char* format_arg(FormatState* state, const char* ptr, size_t* index
         case 'p':
             n = snprintf(buf_ptr, MAX_FORMAT_CHARS, "%p", arg->p);
             break;
-        case 't':
-            print_type(state, arg->t);
-            break;
         default:
-            assert(false && "unknown formatting command");
+            assert(format_fns[(unsigned char)c] && "unknown formatting command");
+            format_fns[(unsigned char)c](state, arg->p);
             break;
     }
     assert(n < MAX_FORMAT_CHARS);
@@ -231,4 +231,8 @@ void print_keyword(FormatState* state, const char* keyword) {
 void write_format_state(FormatState* state, FILE* file) {
     for (FormatBuf* buf = state->first_buf; buf; buf = buf->next)
         fwrite(buf->data, 1, buf->size, file);
+}
+
+void register_format_fn(char c, FormatFn format_fn) {
+    format_fns[(unsigned char)c] = format_fn;
 }

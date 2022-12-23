@@ -5,6 +5,30 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+/*
+ * Custom formatting library that allows pretty-printing custom types.
+ *
+ * Format strings are not based on `printf()` strings, but instead represent arguments with braces.
+ * Inside braces, either a type (e.g. `{i32}`) or an integer followed by a colon and a type is given
+ * (e.g. `{0:i32}`). When the integer is present, it refers to the index of the argument in the
+ * argument list. When the integer is not present, the formatting routine used an internal index
+ * that is incremented every time an argument is encountered.
+ *
+ * Terminal colors and styles are supported by using the `$` sign as a type for an argument, and can
+ * be turned on/off by changing the value of `ignore_style` in the `FormatState` structure. When
+ * that member is set to `true`, style arguments are ignored.
+ *
+ * Finally, indentation is also supported, and can be changed from the formatting string by using
+ * `{>}` and `{<}`, or by changing the value of `indent` in the `FormatState` structure directly.
+ * Each indentation level is printed as `indent` times the string in `tab`.
+ *
+ * Custom formatting functions can be registered via `register_format_fn()`, and use the `p` member
+ * of the `FormatArg` union.
+ */
+
+typedef struct FormatState FormatState;
+typedef void (*FormatFn)(FormatState*, const void*);
+
 typedef struct FormatBuf {
     size_t size;
     size_t capacity;
@@ -32,11 +56,8 @@ typedef struct {
     } color;
 } FormatStyle;
 
-typedef struct Type Type;
-
 typedef union {
     FormatStyle style;
-    const Type* t;
     bool b;
     const void* p;
     const char* s;
@@ -55,13 +76,13 @@ typedef union {
     size_t len;
 } FormatArg;
 
-typedef struct {
+struct FormatState {
     FormatBuf* cur_buf;
     FormatBuf* first_buf;
     bool ignore_style;
     size_t indent;
     const char* tab;
-} FormatState;
+};
 
 static const FormatStyle reset_style    = { STYLE_NORMAL, COLOR_NORMAL };
 static const FormatStyle error_style    = { STYLE_BOLD,   COLOR_RED };
@@ -72,6 +93,7 @@ static const FormatStyle ellipsis_style = { STYLE_NORMAL, COLOR_WHITE };
 static const FormatStyle loc_style      = { STYLE_BOLD,   COLOR_WHITE };
 
 FormatState new_format_state(const char* tab, bool ignore_style);
+
 void reset_format_state(FormatState*);
 void free_format_state(FormatState*);
 
@@ -81,5 +103,7 @@ void print_with_style(FormatState*, const char*, FormatStyle);
 void print_keyword(FormatState*, const char*);
 
 void write_format_state(FormatState*, FILE*);
+
+void register_format_fn(char c, FormatFn);
 
 #endif

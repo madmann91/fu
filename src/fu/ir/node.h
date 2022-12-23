@@ -13,6 +13,9 @@
     f(UNIVERSE,     0, "universe") \
     f(STAR,         0, "star") \
     f(SINGLETON,    1, "singleton") \
+    f(NORET,        0, "noret") \
+    f(TOP,          0, "top") \
+    f(BOTTOM,       0, "bottom") \
     f(NAT,          0, "nat") \
     f(INT,          1, "int") \
     f(FLOAT,        1, "float") \
@@ -105,6 +108,7 @@ bool is_nat_const(const Node*);
 bool is_int_or_nat_const(const Node*);
 bool is_float_const(const Node*);
 bool has_node_data(const Node*);
+size_t get_int_or_float_type_bitwidth(const Node*);
 FloatVal get_float_const_value(const Node*);
 IntVal get_int_or_nat_const_value(const Node*);
 const char* get_label_name(const Node*);
